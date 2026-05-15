@@ -13,8 +13,19 @@ import { errorHandler } from './middleware/errorHandler';
 
 export function createApp() {
   const app = express();
+  const allowedOrigins = process.env.CORS_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean) ?? [];
+
   app.use(helmet());
-  app.use(cors());
+  app.use(cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error('Origem não permitida pelo CORS.'));
+    },
+  }));
   app.use(express.json());
   app.use('/api', authMiddleware);
 

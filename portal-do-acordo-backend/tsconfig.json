@@ -12,5 +12,5 @@
     "sourceMap": true,
     "types": ["node", "express"]
   },
-  "include": ["src", "prisma"]
+  "include": ["src", "api", "prisma"]
 }
