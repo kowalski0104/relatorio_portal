@@ -1,0 +1,46 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL_401")
+}
+
+model Baixa {
+  id                     Int     @id @default(autoincrement())
+  data                   DateTime
+  idempresa              Int
+  credor                 String
+  capital_pago           Float
+  juros_pago             Float
+  multa_pago             Float
+  honorarios_pago_portal Float
+  total_pago_portal      Float
+  negociador             String
+
+  @@index([data])
+  @@index([credor])
+}
+
+model Acordo {
+  id            Int     @id @default(autoincrement())
+  data          DateTime
+  idempresa     Int
+  credor        String
+  tot_sub_total Float
+
+  @@index([data])
+  @@index([credor])
+}
+
+model Acesso {
+  id        Int     @id @default(autoincrement())
+  data      DateTime
+  idempresa Int
+  credor    String?
+  situacao  String
+
+  @@index([data])
+  @@index([credor])
+}
