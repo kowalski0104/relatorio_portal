@@ -35,13 +35,13 @@ export async function fetchCommunication(periodo: string, sistema: SystemFilter,
   return payload.data ?? null;
 }
 
-export async function fetchActiveBase(sistema: SystemFilter, credores: Set<string>, limit = 100): Promise<ActiveBaseReport> {
-  const params = new URLSearchParams({ sistema, limit: String(limit) });
+export async function fetchActiveBase(sistema: SystemFilter, credores: Set<string>): Promise<ActiveBaseReport> {
+  const params = new URLSearchParams({ sistema });
   if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
   const response = await fetch(apiUrl(`/api/base-ativa?${params.toString()}`));
   if (!response.ok) throw new Error(`Falha ao carregar /api/base-ativa: ${response.status}`);
   const payload = await response.json();
-  return payload.data ?? { total_processos: 0, total_credores: 0, limit, by_credor: [], rows: [] };
+  return payload.data ?? { total_processos: 0, total_credores: 0, aging_complete: false, by_credor: [], aging: [] };
 }
 
 function apiUrl(path: string) {

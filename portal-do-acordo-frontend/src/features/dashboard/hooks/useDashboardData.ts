@@ -7,9 +7,9 @@ const EMPTY_DASHBOARD_DATA: DashboardData = { baixas: [], acordos: [], acessos: 
 const EMPTY_ACTIVE_BASE_REPORT: ActiveBaseReport = {
   total_processos: 0,
   total_credores: 0,
-  limit: 100,
+  aging_complete: false,
   by_credor: [],
-  rows: [],
+  aging: [],
 };
 
 export function useDashboardData() {

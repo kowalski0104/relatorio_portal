@@ -405,18 +405,22 @@ function DashboardPage() {
       .sort((a, b) => a.mes.localeCompare(b.mes));
   }, [comunicacaoView.envios.emails, comunicacaoView.mensal, data.acessos, data.acordos, system, whatsappCampaignEnabled, whatsappCampaignTotals.clicked, whatsappCampaignTotals.envios]);
   const selectedLabel = selectedCredores.size === 0 || selectedCredores.size === allCredores.length ? 'Todos' : `${selectedCredores.size}/${allCredores.length}`;
-  const activeBase = activeBaseReport.rows;
   const activeBaseCredorRows = useMemo(
     () => activeBaseReport.by_credor.map((row) => ({ name: row.credor, value: row.processos })),
     [activeBaseReport.by_credor]
   );
-  const activeBaseWithDueDates = useMemo(() => activeBase.filter((row) => row.vencimento_min).length, [activeBase]);
-  const activeBaseNearestDueDate = useMemo(() => {
-    return activeBase
-      .map((row) => row.vencimento_min)
-      .filter((date): date is string => Boolean(date))
-      .sort()[0] ?? null;
-  }, [activeBase]);
+  const activeBaseAgingRows = useMemo(() => {
+    const order = ['0-90', '91-180', '181-360', '361+', 'SEM VENCIMENTO'];
+    const labels: Record<string, string> = {
+      '0-90': '0 a 90 dias',
+      '91-180': '91 a 180 dias',
+      '181-360': '181 a 360 dias',
+      '361+': '361+ dias',
+      'SEM VENCIMENTO': 'Sem vencimento',
+    };
+    const byRange = new Map(activeBaseReport.aging.map((row) => [row.faixa, row.processos]));
+    return order.map((range) => ({ name: labels[range] ?? range, value: byRange.get(range) ?? 0 }));
+  }, [activeBaseReport.aging]);
 
   function toggleCredor(credor: string) {
     setSelectedCredores((current) => {
@@ -808,15 +812,15 @@ function DashboardPage() {
               <div className="hero-meta">
                 <strong>{number(activeBaseReport.total_processos)} processos</strong>
                 <span>{selectedCredores.size === 0 ? 'Todos os credores' : `${number(selectedCredores.size)} credores selecionados`}</span>
-                <span>{number(activeBaseWithDueDates)} com vencimento</span>
+                <span>{activeBaseReport.aging_complete ? 'Vencimentos carregados' : 'Vencimentos em otimização'}</span>
                 <em>Somente elegíveis</em>
               </div>
             </div>
             <div className="kpi-row">
               <MetricCard tone="teal" label="Processos ativos" value={number(activeBaseReport.total_processos)} current={activeBaseReport.total_processos} small="Credor ativo + processo elegível" summary="Processos com credor ATIVO e status diferente de devolução, baixado ou quitado." />
               <MetricCard tone="gold" label="Credores" value={number(activeBaseReport.total_credores)} current={activeBaseReport.total_credores} small="Grupos distintos" summary="Quantidade de grupos de credores na base ativa filtrada." />
-              <MetricCard tone="sky" label="Com vencimento" value={number(activeBaseWithDueDates)} current={activeBaseWithDueDates} small={`Amostra de ${number(activeBase.length)}`} summary="Processos carregados com ao menos um vencimento localizado." />
-              <MetricCard tone="rust" label="Menor vencimento" value={activeBaseNearestDueDate ? dayLabel(activeBaseNearestDueDate) : '--'} current={activeBaseWithDueDates} small={activeBaseNearestDueDate?.slice(0, 4) ?? 'Sem data'} summary="Menor vencimento encontrado entre os títulos da base ativa." />
+              <MetricCard tone="sky" label="Vencimentos" value={activeBaseReport.aging_complete ? 'OK' : 'Pendente'} current={activeBaseReport.aging_complete ? 1 : 0} small="Menor vencimento por processo" summary="Processos agrupados pela idade do menor vencimento." />
+              <MetricCard tone="rust" label="Faixa crítica" value={number(activeBaseAgingRows.find((row) => row.name === '361+ dias')?.value ?? 0)} current={activeBaseAgingRows.find((row) => row.name === '361+ dias')?.value ?? 0} small="361+ dias" summary="Processos com menor vencimento acima de 360 dias." />
             </div>
           </header>
 
@@ -825,50 +829,18 @@ function DashboardPage() {
             {activeBaseError ? <div className="error-state">{activeBaseError}</div> : null}
             {!activeBaseLoading && !activeBaseError ? (
               <>
-                {activeBaseReport.total_processos > activeBase.length ? (
-                  <div className="notice">
-                    <strong>Detalhamento limitado:</strong> a distribuição por credor considera a base completa, mas a tabela carrega os primeiros {number(activeBase.length)} processos para manter a consulta rápida.
-                  </div>
-                ) : null}
                 <Section num="01" title="Base Ativa por Credor">
                   <Panel title="Distribuição de processos" meta={`Top ${Math.min(activeBaseCredorRows.length, 10)}`}>
                     {(expanded) => <BarRows rows={expanded ? activeBaseCredorRows : activeBaseCredorRows.slice(0, 10)} color={color} valueLabel="Processos" />}
                   </Panel>
                 </Section>
 
-                <Section num="02" title="Processos da Base Ativa">
-                  <Panel title="Base ativa com vencimentos" meta={`${number(activeBase.length)} de ${number(activeBaseReport.total_processos)} registros`}>
-                    {(expanded) => (
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Processo</th>
-                            <th>CNPJ</th>
-                            <th>Razão social</th>
-                            <th>Credor</th>
-                            <th>Status credor</th>
-                            <th>Status processo</th>
-                            <th className="right">Venc. mínimo</th>
-                            <th className="right">Venc. médio</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {activeBase.length === 0 ? <tr><td colSpan={8} className="muted">Sem processos elegíveis para os filtros selecionados.</td></tr> : null}
-                          {(expanded ? activeBase : activeBase.slice(0, 20)).map((row) => (
-                            <tr key={`${row.credor}-${row.processo}`}>
-                              <td className="bold">{row.processo}</td>
-                              <td>{row.cnpj || '-'}</td>
-                              <td>{row.razaosocial || '-'}</td>
-                              <td>{row.credor}</td>
-                              <td>{row.credor_status || '-'}</td>
-                              <td>{row.processo_status_desc || 'ATIVO'}</td>
-                              <td className="right">{row.vencimento_min ? dayLabel(row.vencimento_min) : '-'}</td>
-                              <td className="right">{row.vencimento_medio ? dayLabel(row.vencimento_medio) : '-'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
+                <Section num="02" title="Vencimentos da Base">
+                  <Panel title="Processos por faixa de vencimento" meta="Menor vencimento por processo">
+                    {!activeBaseReport.aging_complete ? (
+                      <div className="empty-state">A base por vencimento precisa de índice ou pré-processamento no banco para carregar sem timeout.</div>
+                    ) : null}
+                    <BarRows rows={activeBaseAgingRows} color={color} valueLabel="Processos" showPercent />
                   </Panel>
                 </Section>
               </>

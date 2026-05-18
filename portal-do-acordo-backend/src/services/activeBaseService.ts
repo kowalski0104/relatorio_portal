@@ -1,29 +1,24 @@
 import { PrismaClient } from '@prisma/client';
 import { getLiveClients } from '../db/prismaClients';
 import type { ActiveBaseQuery } from '../routes/schemas';
-import { addSqlParam, buildSqlInFilter } from '../utils/reportFilters';
-
-type ActiveBaseRow = {
-  processo: number | string;
-  cnpj: string | null;
-  razaosocial: string | null;
-  credor: string;
-  credor_status: string | null;
-  processo_status_desc: string | null;
-  processo_elegivel: number | string;
-  vencimento_min: Date | string | null;
-  vencimento_medio: Date | string | null;
-};
+import { buildSqlInFilter } from '../utils/reportFilters';
 
 type ActiveBaseCreditorRow = {
   credor: string;
   processos: number | string;
 };
 
-function formatDate(value: Date | string | null) {
-  if (!value) return null;
-  return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
-}
+type ActiveBaseAgingRow = {
+  faixa: '0-90' | '91-180' | '181-360' | '361+' | 'SEM VENCIMENTO';
+  processos: number | string;
+};
+
+type ActiveBaseSummaryRow = {
+  total_processos: number | string;
+  total_credores: number | string;
+};
+
+const AGING_TIMEOUT_MS = Number(process.env.ACTIVE_BASE_AGING_TIMEOUT_MS ?? 20000);
 
 function activeBaseWhereClause(empresaId: number, filter: ActiveBaseQuery, params: unknown[]) {
   const sisthCredorFilter = empresaId === 1007 ? 'AND c.id != 31084' : '';
@@ -44,6 +39,26 @@ async function queryActiveBaseSummary(prisma: PrismaClient, empresaId: number, f
   const params: unknown[] = [empresaId];
   const whereClause = activeBaseWhereClause(empresaId, filter, params);
 
+  const rows = await prisma.$queryRawUnsafe<ActiveBaseSummaryRow[]>(
+    `
+      SELECT
+          COUNT(*)::bigint AS total_processos,
+          COUNT(DISTINCT TRIM(c.grupo))::bigint AS total_credores
+      FROM tb_devedor d
+      JOIN tb_credor c ON c.id = d.idcredor
+      LEFT JOIN tb_processo p ON p.processo = d.processo
+      WHERE ${whereClause}
+    `,
+    ...params
+  );
+
+  return rows[0] ?? { total_processos: 0, total_credores: 0 };
+}
+
+async function queryActiveBaseByCreditor(prisma: PrismaClient, empresaId: number, filter: ActiveBaseQuery) {
+  const params: unknown[] = [empresaId];
+  const whereClause = activeBaseWhereClause(empresaId, filter, params);
+
   return prisma.$queryRawUnsafe<ActiveBaseCreditorRow[]>(
     `
       SELECT
@@ -60,96 +75,108 @@ async function queryActiveBaseSummary(prisma: PrismaClient, empresaId: number, f
   );
 }
 
-async function queryActiveBaseRows(prisma: PrismaClient, empresaId: number, filter: ActiveBaseQuery) {
+async function queryActiveBaseAging(prisma: PrismaClient, empresaId: number, filter: ActiveBaseQuery) {
   const params: unknown[] = [empresaId];
   const whereClause = activeBaseWhereClause(empresaId, filter, params);
-  const limitParam = addSqlParam(params, filter.limit);
 
-  return prisma.$queryRawUnsafe<ActiveBaseRow[]>(
+  return prisma.$queryRawUnsafe<ActiveBaseAgingRow[]>(
     `
       WITH active_processes AS (
-        SELECT
-            d.processo,
-            TRIM(d.cnpj) AS cnpj,
-            TRIM(d.razaosocial) AS razaosocial,
-            TRIM(c.grupo) AS credor,
-            c.status AS credor_status,
-            p.status_desc AS processo_status_desc
+        SELECT d.processo
         FROM tb_devedor d
         JOIN tb_credor c ON c.id = d.idcredor
         LEFT JOIN tb_processo p ON p.processo = d.processo
         WHERE ${whereClause}
-        ORDER BY TRIM(c.grupo), d.processo
-        LIMIT ${limitParam}
+      ),
+      process_due_dates AS (
+        SELECT
+            ap.processo,
+            MIN(t.vencimento)::date AS vencimento_min
+        FROM active_processes ap
+        JOIN tb_titulos t ON t.processo = ap.processo
+        WHERE t.vencimento IS NOT NULL
+        GROUP BY ap.processo
       )
       SELECT
-          b.processo,
-          b.cnpj,
-          b.razaosocial,
-          b.credor,
-          b.credor_status,
-          b.processo_status_desc,
-          1 AS processo_elegivel,
-          v.vencimento_min,
-          v.vencimento_medio
-      FROM active_processes b
-      LEFT JOIN LATERAL (
-        SELECT
-            MIN(t.vencimento)::date AS vencimento_min,
-            (DATE '1970-01-01' + ROUND(AVG(t.vencimento::date - DATE '1970-01-01'))::int)::date AS vencimento_medio
-        FROM tb_titulos t
-        WHERE t.processo = b.processo
-          AND t.vencimento IS NOT NULL
-      ) v ON true
-      ORDER BY b.credor, b.processo
+          CASE
+            WHEN CURRENT_DATE - vencimento_min <= 90 THEN '0-90'
+            WHEN CURRENT_DATE - vencimento_min <= 180 THEN '91-180'
+            WHEN CURRENT_DATE - vencimento_min <= 360 THEN '181-360'
+            ELSE '361+'
+          END AS faixa,
+          COUNT(*)::bigint AS processos
+      FROM process_due_dates
+      GROUP BY faixa
     `,
     ...params
   );
 }
 
+async function withTimeout<T>(promise: Promise<T>, fallback: T, timeoutMs: number) {
+  let timer: NodeJS.Timeout | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(fallback), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export async function getActiveBase(filter: ActiveBaseQuery) {
   const results = await Promise.all(
     getLiveClients(filter.sistema).map(async ({ empresaId, prisma }) => {
-      const [summary, rows] = await Promise.all([
+      const [summary, byCreditor] = await Promise.all([
         queryActiveBaseSummary(prisma, empresaId, filter),
-        queryActiveBaseRows(prisma, empresaId, filter),
+        queryActiveBaseByCreditor(prisma, empresaId, filter),
       ]);
+      const aging = await withTimeout(queryActiveBaseAging(prisma, empresaId, filter), [], AGING_TIMEOUT_MS);
 
-      return { summary, rows };
+      return { summary, byCreditor, aging };
     })
   );
 
   const byCreditor = new Map<string, number>();
+  const aging = new Map<string, number>([
+    ['0-90', 0],
+    ['91-180', 0],
+    ['181-360', 0],
+    ['361+', 0],
+  ]);
+
+  let totalProcessos = 0;
+  let totalCredores = 0;
+  let agingComplete = true;
+
   for (const result of results) {
-    for (const row of result.summary) {
+    totalProcessos += Number(result.summary.total_processos ?? 0);
+    totalCredores += Number(result.summary.total_credores ?? 0);
+    if (result.aging.length === 0) agingComplete = false;
+
+    for (const row of result.byCreditor) {
       const creditor = String(row.credor);
       byCreditor.set(creditor, (byCreditor.get(creditor) ?? 0) + Number(row.processos ?? 0));
     }
+
+    for (const row of result.aging) {
+      const range = String(row.faixa);
+      aging.set(range, (aging.get(range) ?? 0) + Number(row.processos ?? 0));
+    }
   }
-
-  const rows = results.flatMap((result) => result.rows).map((row) => ({
-    processo: String(row.processo),
-    cnpj: row.cnpj ? String(row.cnpj) : '',
-    razaosocial: row.razaosocial ? String(row.razaosocial) : '',
-    credor: String(row.credor),
-    credor_status: row.credor_status ? String(row.credor_status) : '',
-    processo_status_desc: row.processo_status_desc ? String(row.processo_status_desc) : '',
-    processo_elegivel: Number(row.processo_elegivel),
-    vencimento_min: formatDate(row.vencimento_min),
-    vencimento_medio: formatDate(row.vencimento_medio),
-  }));
-
-  const byCredor = Array.from(byCreditor.entries())
-    .map(([credor, processos]) => ({ credor, processos }))
-    .sort((a, b) => b.processos - a.processos || a.credor.localeCompare(b.credor, 'pt-BR'));
 
   return {
     data: {
-      total_processos: byCredor.reduce((sum, row) => sum + row.processos, 0),
-      total_credores: byCredor.length,
-      limit: filter.limit,
-      by_credor: byCredor,
-      rows,
+      total_processos: totalProcessos,
+      total_credores: totalCredores,
+      aging_complete: agingComplete,
+      by_credor: Array.from(byCreditor.entries())
+        .map(([credor, processos]) => ({ credor, processos }))
+        .sort((a, b) => b.processos - a.processos || a.credor.localeCompare(b.credor, 'pt-BR')),
+      aging: Array.from(aging.entries()).map(([faixa, processos]) => ({ faixa, processos })),
     },
   };
 }

@@ -50,27 +50,18 @@ export type DashboardData = {
   acessos: Access[];
 };
 
-export type ActiveBase = {
-  processo: string;
-  cnpj: string;
-  razaosocial: string;
-  credor: string;
-  credor_status: string;
-  processo_status_desc: string;
-  processo_elegivel: number;
-  vencimento_min: string | null;
-  vencimento_medio: string | null;
-};
-
 export type ActiveBaseReport = {
   total_processos: number;
   total_credores: number;
-  limit: number;
+  aging_complete: boolean;
   by_credor: Array<{
     credor: string;
     processos: number;
   }>;
-  rows: ActiveBase[];
+  aging: Array<{
+    faixa: string;
+    processos: number;
+  }>;
 };
 
 export type CostsData = {
