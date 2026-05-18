@@ -78,10 +78,11 @@ async function readCache(): Promise<ActiveBaseCache> {
     };
 
     if (cache.status === 'refreshing' && cache.updated_at && Date.now() - new Date(cache.updated_at).getTime() > REFRESHING_STALE_MS) {
+      const hasCreditorData = cache.by_credor.length > 0;
       return {
         ...cache,
-        status: cache.by_credor.length > 0 ? 'partial' : 'error',
-        error: cache.error ?? 'Atualização anterior interrompida antes de concluir vencimentos.',
+        status: cache.aging.length > 0 ? 'ready' : hasCreditorData ? 'partial' : 'error',
+        error: cache.aging.length > 0 || hasCreditorData ? undefined : cache.error ?? 'Não foi possível atualizar as Bases.',
       };
     }
 
@@ -243,7 +244,7 @@ export async function refreshActiveBaseCache() {
       const cache: ActiveBaseCache = {
         ...current,
         status: current.by_credor.length > 0 ? 'partial' : 'error',
-        error: errors.join(' | ') || 'Não foi possível atualizar a Base Ativa.',
+        error: errors.join(' | ') || 'Não foi possível atualizar as Bases.',
       };
       await writeCache(cache);
       refreshPromise = null;
@@ -322,7 +323,7 @@ export async function getActiveBase(filter: ActiveBaseQuery) {
       error: cache.error,
       total_processos: creditorRows.reduce((sum, row) => sum + row.processos, 0),
       total_credores: byCreditor.size,
-      aging_complete: cache.status === 'ready',
+      aging_complete: cache.status === 'ready' || agingRows.length > 0,
       by_credor: Array.from(byCreditor.entries())
         .map(([credor, processos]) => ({ credor, processos }))
         .sort((a, b) => b.processos - a.processos || a.credor.localeCompare(b.credor, 'pt-BR')),

@@ -422,7 +422,7 @@ function DashboardPage() {
     return order.map((range) => ({ name: labels[range] ?? range, value: byRange.get(range) ?? 0 }));
   }, [activeBaseReport.aging]);
   const activeBaseStatusLabel =
-    activeBaseReport.status === 'ready'
+    activeBaseReport.aging_complete || activeBaseReport.status === 'ready'
       ? 'Cache atualizado'
       : activeBaseReport.status === 'refreshing'
         ? 'Cache atualizando'
@@ -503,7 +503,7 @@ function DashboardPage() {
         <button className={tab === 'relatorio' ? 'active' : ''} type="button" onClick={() => setTab('relatorio')}>Resultados</button>
         <button className={tab === 'custos' ? 'active' : ''} type="button" onClick={() => setTab('custos')}>Custos</button>
         <button className={tab === 'performance' ? 'active' : ''} type="button" onClick={() => setTab('performance')}>Performance</button>
-        <button className={tab === 'base-ativa' ? 'active' : ''} type="button" onClick={() => setTab('base-ativa')}>Base Ativa</button>
+        <button className={tab === 'base-ativa' ? 'active' : ''} type="button" onClick={() => setTab('base-ativa')}>Bases</button>
       </div>
 
       {loading ? <div className="loading-state">Carregando dados do portal...</div> : null}
@@ -529,8 +529,8 @@ function DashboardPage() {
             </div>
 
             <div className="kpi-row">
-              <MetricCard tone="teal" label="Total Pago" value={compactMoney(metrics.totalPago)} current={metrics.totalPago} previous={previousMetrics?.totalPago} small="Soma dos componentes" summary="Total recuperado no período selecionado." />
-              <MetricCard tone="gold" label="Capital Recuperado" value={compactMoney(metrics.capital)} current={metrics.capital} previous={previousMetrics?.capital} small="Valor principal" summary="Capital recuperado sem juros, multa e honorários." />
+              <MetricCard tone="teal" label="Total Pago" value={compactMoney(metrics.totalPago)} current={metrics.totalPago} previous={previousMetrics?.totalPago} small="Capital + Taxas" summary="Total recuperado no período selecionado." />
+              <MetricCard tone="gold" label="Capital Recuperado" value={compactMoney(metrics.capital)} current={metrics.capital} previous={previousMetrics?.capital} small="Valor capital" summary="Capital recuperado sem juros, multa e honorários." />
               <MetricCard tone="rust" label="Acordos" value={number(metrics.acordos)} current={metrics.acordos} previous={previousMetrics?.acordos} small="Formalizados" summary="Quantidade de acordos formalizados no período." />
               <MetricCard tone="sky" label="Credores Atendidos" value={number(metrics.credores)} current={metrics.credores} previous={previousMetrics?.credores} small="Grupos distintos" summary="Quantidade de credores com movimentação no relatório." />
               <MetricCard tone="teal" label="Acessos" value={number(metrics.acessos)} current={metrics.acessos} previous={previousMetrics?.acessos} small="Visitantes únicos" summary="Acessos registrados no Portal do Acordo." />
@@ -816,7 +816,7 @@ function DashboardPage() {
                 <div className="logos">
                   <img src={logoUrl} alt="Portal do Acordo" />
                 </div>
-                <p>Base Ativa</p>
+                <p>Bases</p>
                 <h1><span>{systemLabel(system)}</span></h1>
               </div>
               <div className="hero-meta">
@@ -827,7 +827,7 @@ function DashboardPage() {
               </div>
             </div>
             <div className="kpi-row">
-              <MetricCard tone="teal" label="Processos ativos" value={number(activeBaseReport.total_processos)} current={activeBaseReport.total_processos} small="Credor ativo + processo elegível" summary="Processos com credor ATIVO e status diferente de devolução, baixado ou quitado." />
+              <MetricCard tone="teal" label="Processos ativos" value={number(activeBaseReport.total_processos)} current={activeBaseReport.total_processos} small="Ativos no portal" summary="Processos com credor ATIVO e status diferente de devolução, baixado ou quitado." />
               <MetricCard tone="gold" label="Credores" value={number(activeBaseReport.total_credores)} current={activeBaseReport.total_credores} small="Grupos distintos" summary="Quantidade de grupos de credores na base ativa filtrada." />
               <MetricCard tone="sky" label="Vencimentos" value={activeBaseReport.aging_complete ? 'OK' : 'Atualizando'} current={activeBaseReport.aging_complete ? 1 : 0} small="Menor vencimento por processo" summary="Processos agrupados pela idade do menor vencimento." />
               <MetricCard tone="rust" label="Faixa crítica" value={number(activeBaseAgingRows.find((row) => row.name === '361+ dias')?.value ?? 0)} current={activeBaseAgingRows.find((row) => row.name === '361+ dias')?.value ?? 0} small="361+ dias" summary="Processos com menor vencimento acima de 360 dias." />
@@ -835,26 +835,26 @@ function DashboardPage() {
           </header>
 
           <main className="main-content">
-            {activeBaseLoading ? <div className="loading-state">Carregando base ativa...</div> : null}
+            {activeBaseLoading ? <div className="loading-state">Carregando bases...</div> : null}
             {activeBaseError ? <div className="error-state">{activeBaseError}</div> : null}
             {!activeBaseLoading && !activeBaseError ? (
               <>
-                {activeBaseReport.status !== 'ready' ? (
+                {!activeBaseReport.aging_complete && activeBaseReport.status !== 'ready' ? (
                   <div className={activeBaseReport.status === 'error' ? 'error-state' : 'loading-state'}>
                     {activeBaseReport.error ??
                       (activeBaseReport.status === 'partial'
                         ? 'Os processos por credor já foram carregados. Os vencimentos ainda não terminaram dentro do tempo limite.'
-                        : 'A Base Ativa está sendo atualizada em segundo plano. Quando terminar, a tela passa a usar o cache local.')}
+                        : 'As Bases estão sendo atualizadas em segundo plano. Quando terminar, a tela passa a usar o cache local.')}
                   </div>
                 ) : null}
 
-                <Section num="01" title="Base Ativa por Credor">
+                <Section num="01" title="Bases por Credor">
                   <Panel title="Distribuição de processos" meta={`Top ${Math.min(activeBaseCredorRows.length, 10)}`}>
                     {(expanded) => <BarRows rows={expanded ? activeBaseCredorRows : activeBaseCredorRows.slice(0, 10)} color={color} valueLabel="Processos" />}
                   </Panel>
                 </Section>
 
-                <Section num="02" title="Vencimentos da Base">
+                <Section num="02" title="Vencimentos das Bases">
                   <Panel title="Processos por faixa de vencimento" meta="Menor vencimento por processo">
                     <BarRows rows={activeBaseAgingRows} color={color} valueLabel="Processos" showPercent />
                   </Panel>
@@ -885,8 +885,8 @@ function DashboardPage() {
             </div>
             <div className="kpi-row">
               <MetricCard tone="teal" label="Envios" value={number(totalEnviosCanal)} current={totalEnviosCanal} small={`${number(comunicacaoView.envios.emails)} e-mails - ${number(whatsappEnvios)} WhatsApp`} summary="Total de comunicações enviadas no período." />
-              <MetricCard tone="gold" label="Cliques" value={number(cliquesPortal)} current={cliquesPortal} small={whatsappCampaignEnabled ? 'CLICKED da campanha' : 'Eventos do portal'} summary="Cliques no link usados no funil de performance." />
-              <MetricCard tone="sky" label="Acessos" value={number(acessosPortal)} current={acessosPortal} previous={previousMetrics?.acessos} small="Chegadas ao portal" summary="Acessos registrados no Portal do Acordo." />
+              <MetricCard tone="gold" label="Cliques" value={number(cliquesPortal)} current={cliquesPortal} small={whatsappCampaignEnabled ? 'Cliques pelo WhatsApp' : 'Eventos do portal'} summary="Cliques no link usados no funil de performance." />
+              <MetricCard tone="sky" label="Acessos" value={number(acessosPortal)} current={acessosPortal} previous={previousMetrics?.acessos} small="Acessos no site" summary="Acessos registrados no Portal do Acordo." />
               <MetricCard tone="rust" label="Conversão" value={`${metrics.conversao.toFixed(1)}%`} current={metrics.conversao} small={`${number(metrics.acordos)} acordos`} summary="Conversão de acessos em acordos no período." />
             </div>
           </header>
