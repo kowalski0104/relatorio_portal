@@ -25,7 +25,7 @@ import { CHART_PALETTE, COLORS, FIXED_EMAIL_COST } from './config/constants';
 import { WHATSAPP_CAMPAIGN_DATA, type WhatsappCampaignCredor } from './data/whatsappCampaigns';
 import { useActiveBaseData, useDashboardData, useDashboardSupplementalData, usePortfolioData } from './hooks/useDashboardData';
 import type { Access, Agreement, CostsData, DashboardTab, PortfolioEntry, SystemFilter, ThemeMode } from './types';
-import { groupBy, normalizeCreditorGroup } from './utils/creditors';
+import { groupBy, isNoCreditorSelection, NO_CREDITOR_SELECTION, normalizeCreditorGroup } from './utils/creditors';
 import { businessDayIndexMap, businessDaysInPeriod, dayLabel, isBusinessDay, monthKey, periodLabel, periodRangeLabel, previousPeriod } from './utils/dates';
 import { countBusinessDaysWithData, filterDashboardData, filterPreviousPeriodData, getAvailableCreditors, matchesSystem, summarizeDashboardMetrics } from './utils/dashboardMetrics';
 import { compactMoney, dateTime, money, number, percent, safeNumber, systemLabel } from './utils/formatters';
@@ -64,6 +64,7 @@ function DashboardPage() {
   }, [theme]);
 
   const allCredores = useMemo(() => getAvailableCreditors(data), [data]);
+  const noCreditorSelected = isNoCreditorSelection(selectedCredores);
 
   const color = COLORS[system];
   const chartAccent = theme === 'night' && color === COLORS.consulth ? COLORS.sky : color;
@@ -241,9 +242,9 @@ function DashboardPage() {
   const whatsappCampaignEnabled = Boolean(whatsappCampaignData);
   const whatsappCampaignRows = useMemo(
     () => whatsappCampaignEnabled
-      ? whatsappCampaignData.rows.filter((row: WhatsappCampaignCredor) => selectedCredores.size === 0 || selectedCredores.has(row.credor))
+      ? whatsappCampaignData.rows.filter((row: WhatsappCampaignCredor) => !noCreditorSelected && (selectedCredores.size === 0 || selectedCredores.has(row.credor)))
       : [],
-    [selectedCredores, whatsappCampaignData, whatsappCampaignEnabled]
+    [noCreditorSelected, selectedCredores, whatsappCampaignData, whatsappCampaignEnabled]
   );
   const whatsappCampaignTotals = useMemo(
     () => whatsappCampaignRows.reduce(
@@ -420,7 +421,7 @@ function DashboardPage() {
       .map((row) => ({ ...row, label: periodLabel(row.mes), conversao: row.acessos > 0 ? (row.acordos / row.acessos) * 100 : 0 }))
       .sort((a, b) => a.mes.localeCompare(b.mes));
   }, [comunicacaoView.envios.emails, comunicacaoView.mensal, data.acessos, data.acordos, primaryPeriod, system, whatsappCampaignEnabled, whatsappCampaignTotals.clicked, whatsappCampaignTotals.envios]);
-  const selectedLabel = selectedCredores.size === 0 || selectedCredores.size === allCredores.length ? 'Todos' : `${selectedCredores.size}/${allCredores.length}`;
+  const selectedLabel = noCreditorSelected ? 'Nenhum' : selectedCredores.size === 0 || selectedCredores.size === allCredores.length ? 'Todos' : `${selectedCredores.size}/${allCredores.length}`;
   const selectedPeriodLabel = selectedPeriodList.length === 1 ? periodLabel(primaryPeriod) : `${selectedPeriodList.length} meses`;
   const selectedPeriodTitle = selectedPeriodList.length === 1 ? periodLabel(primaryPeriod, true) : `${selectedPeriodList.length} meses selecionados`;
   const selectedPeriodRange = selectedPeriodList.length === 1 ? periodRangeLabel(primaryPeriod) : `${periodLabel([...selectedPeriodList].sort()[0] ?? primaryPeriod)} a ${periodLabel(selectedPeriodList[0] ?? primaryPeriod)}`;
@@ -507,10 +508,11 @@ function DashboardPage() {
 
   function toggleCredor(credor: string) {
     setSelectedCredores((current) => {
-      const next = new Set(current.size === 0 ? allCredores : current);
+      const next = new Set(current.has(NO_CREDITOR_SELECTION) ? [] : current.size === 0 ? allCredores : current);
       if (next.has(credor)) next.delete(credor);
       else next.add(credor);
       if (next.size === allCredores.length) return new Set();
+      if (next.size === 0) return new Set([NO_CREDITOR_SELECTION]);
       return next;
     });
   }
@@ -549,14 +551,14 @@ function DashboardPage() {
             {filterOpen ? (
               <div className="credor-menu">
                 <div className="credor-menu-actions">
-                  <button type="button" onClick={() => setSelectedCredores(new Set())}>Limpar</button>
+                  <button type="button" onClick={() => setSelectedCredores(new Set([NO_CREDITOR_SELECTION]))}>Nenhum</button>
                   <button type="button" onClick={() => setSelectedCredores(new Set())}>Todos</button>
                 </div>
                 {allCredores.map((credor) => (
                   <label key={credor}>
-                    <input type="checkbox" checked={selectedCredores.size === 0 || selectedCredores.has(credor)} onChange={() => toggleCredor(credor)} />
+                    <input type="checkbox" checked={!noCreditorSelected && (selectedCredores.size === 0 || selectedCredores.has(credor))} onChange={() => toggleCredor(credor)} />
                     <span>{credor}</span>
-                    {selectedCredores.size === 0 || selectedCredores.has(credor) ? <Check size={14} /> : null}
+                    {!noCreditorSelected && (selectedCredores.size === 0 || selectedCredores.has(credor)) ? <Check size={14} /> : null}
                   </label>
                 ))}
               </div>
@@ -924,7 +926,7 @@ function DashboardPage() {
               </div>
               <div className="hero-meta">
                 <strong>{number(activeBaseReport.total_processos)} processos</strong>
-                <span>{selectedCredores.size === 0 ? 'Todos os credores' : `${number(selectedCredores.size)} credores selecionados`}</span>
+                <span>{noCreditorSelected ? 'Nenhum credor selecionado' : selectedCredores.size === 0 ? 'Todos os credores' : `${number(selectedCredores.size)} credores selecionados`}</span>
                 <span>{activeBaseStatusLabel}</span>
                 <em>{activeBaseReport.aging_complete ? dateTime(activeBaseReport.aging_updated_at ?? activeBaseReport.updated_at) : dateTime(activeBaseReport.updated_at)}</em>
               </div>
@@ -999,6 +1001,12 @@ function DashboardPage() {
             {portfolioError ? <div className="error-state">{portfolioError}</div> : null}
             {!portfolioLoading && !portfolioError ? (
               <>
+                {portfolioData.length === 0 ? (
+                  <div className="notice">
+                    <strong>Sem importações no período selecionado.</strong> Selecione mais meses, outro sistema ou outros credores para ver o acumulado da carteira.
+                  </div>
+                ) : null}
+
                 <Section num="01" title="Performance por Carteira">
                   <Panel title="Entrada x recuperado" meta={`Top ${Math.min(portfolioView.byCreditor.length, 8)}`}>
                     {(expanded) => (

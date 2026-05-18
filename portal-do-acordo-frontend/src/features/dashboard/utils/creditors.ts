@@ -1,3 +1,9 @@
+export const NO_CREDITOR_SELECTION = '__NO_CREDITOR_SELECTION__';
+
+export function isNoCreditorSelection(selectedCreditors: Set<string>) {
+  return selectedCreditors.has(NO_CREDITOR_SELECTION);
+}
+
 export function normalizeCreditorGroup(value: string) {
   const upper = value.trim().toUpperCase();
   if (upper.includes('JT INTERNATIONAL') || upper.includes('JT INTERNACIONAL') || upper.includes('GRUPO JTI')) return 'GRUPO JTI';
