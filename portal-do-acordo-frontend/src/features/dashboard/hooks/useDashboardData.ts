@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { fetchActiveBase, fetchCommunication, fetchCosts, fetchDashboardData } from '../services/dashboardApi';
-import type { ActiveBaseReport, CommunicationData, CostsData, DashboardData, SystemFilter } from '../types';
+import { fetchActiveBase, fetchCommunication, fetchCosts, fetchDashboardData, fetchPortfolio } from '../services/dashboardApi';
+import type { ActiveBaseReport, CommunicationData, CostsData, DashboardData, PortfolioEntry, SystemFilter } from '../types';
 import { monthKey } from '../utils/dates';
 
 const EMPTY_DASHBOARD_DATA: DashboardData = { baixas: [], acordos: [], acessos: [] };
@@ -133,6 +133,40 @@ export function useActiveBaseData(system: SystemFilter, selectedCreditors: Set<s
   }, [enabled, selectedCreditors, system]);
 
   return { activeBaseReport: data, activeBaseLoading: loading, activeBaseError: error };
+}
+
+export function usePortfolioData(system: SystemFilter, selectedPeriods: Set<string>, selectedCreditors: Set<string>, enabled: boolean) {
+  const [data, setData] = useState<PortfolioEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    let active = true;
+    setLoading(true);
+
+    fetchPortfolio(system, selectedPeriods, selectedCreditors)
+      .then((result) => {
+        if (!active) return;
+        setData(result);
+        setError('');
+      })
+      .catch((err) => {
+        if (!active) return;
+        setData([]);
+        setError(err instanceof Error ? err.message : 'Erro ao carregar carteiras.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [enabled, selectedCreditors, selectedPeriods, system]);
+
+  return { portfolioData: data, portfolioLoading: loading, portfolioError: error };
 }
 
 function getAvailablePeriods(data: DashboardData) {

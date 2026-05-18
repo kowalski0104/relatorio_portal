@@ -1,4 +1,4 @@
-import type { Access, ActiveBaseReport, Agreement, CommunicationData, CostsData, DashboardData, Payment, SystemFilter } from '../types';
+import type { Access, ActiveBaseReport, Agreement, CommunicationData, CostsData, DashboardData, Payment, PortfolioEntry, SystemFilter } from '../types';
 
 export async function fetchDataset<T>(url: string): Promise<T[]> {
   const response = await fetch(apiUrl(url));
@@ -42,6 +42,16 @@ export async function fetchActiveBase(sistema: SystemFilter, credores: Set<strin
   if (!response.ok) throw new Error(`Falha ao carregar /api/base-ativa: ${response.status}`);
   const payload = await response.json();
   return payload.data ?? { updated_at: null, aging_updated_at: null, status: 'empty', total_processos: 0, total_credores: 0, aging_complete: false, by_credor: [], aging: [] };
+}
+
+export async function fetchPortfolio(sistema: SystemFilter, periodos: Set<string>, credores: Set<string>): Promise<PortfolioEntry[]> {
+  const params = new URLSearchParams({ sistema });
+  if (periodos.size > 0) params.set('periodos', Array.from(periodos).join(','));
+  if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
+  const response = await fetch(apiUrl(`/api/carteiras?${params.toString()}`));
+  if (!response.ok) throw new Error(`Falha ao carregar /api/carteiras: ${response.status}`);
+  const payload = await response.json();
+  return Array.isArray(payload.data) ? payload.data : [];
 }
 
 function apiUrl(path: string) {

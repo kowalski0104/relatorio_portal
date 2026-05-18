@@ -19,10 +19,21 @@ export const custosQuerySchema = z.object({
 });
 
 export const activeBaseQuerySchema = baseQuerySchema;
+export const portfolioQuerySchema = baseQuerySchema.extend({
+  periodos: z.string().optional().transform((value) =>
+    value
+      ? value
+          .split(',')
+          .map((item) => item.trim())
+          .filter((item) => /^\d{4}-(0[1-9]|1[0-2])$/.test(item))
+      : []
+  ),
+});
 
 export type BaseQuery = z.infer<typeof baseQuerySchema>;
 export type CustosQuery = z.infer<typeof custosQuerySchema>;
 export type ActiveBaseQuery = z.infer<typeof activeBaseQuerySchema>;
+export type PortfolioQuery = z.infer<typeof portfolioQuerySchema>;
 
 
 

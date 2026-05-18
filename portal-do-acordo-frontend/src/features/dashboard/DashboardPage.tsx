@@ -23,8 +23,8 @@ import { Panel } from './components/Panel';
 import { Section } from './components/Section';
 import { CHART_PALETTE, COLORS, FIXED_EMAIL_COST } from './config/constants';
 import { WHATSAPP_CAMPAIGN_DATA, type WhatsappCampaignCredor } from './data/whatsappCampaigns';
-import { useActiveBaseData, useDashboardData, useDashboardSupplementalData } from './hooks/useDashboardData';
-import type { Access, Agreement, CostsData, DashboardTab, SystemFilter, ThemeMode } from './types';
+import { useActiveBaseData, useDashboardData, useDashboardSupplementalData, usePortfolioData } from './hooks/useDashboardData';
+import type { Access, Agreement, CostsData, DashboardTab, PortfolioEntry, SystemFilter, ThemeMode } from './types';
 import { groupBy, normalizeCreditorGroup } from './utils/creditors';
 import { businessDayIndexMap, businessDaysInPeriod, dayLabel, isBusinessDay, monthKey, periodLabel, periodRangeLabel, previousPeriod } from './utils/dates';
 import { countBusinessDaysWithData, filterDashboardData, filterPreviousPeriodData, getAvailableCreditors, matchesSystem, summarizeDashboardMetrics } from './utils/dashboardMetrics';
@@ -43,10 +43,16 @@ function DashboardPage() {
   });
   const [tab, setTab] = useState<DashboardTab>('relatorio');
   const [selectedCredores, setSelectedCredores] = useState<Set<string>>(new Set());
+  const [selectedPeriods, setSelectedPeriods] = useState<Set<string>>(new Set());
   const [businessDayLimit, setBusinessDayLimit] = useState('all');
   const [filterOpen, setFilterOpen] = useState(false);
-  const { costs: custos, communication: comunicacao } = useDashboardSupplementalData(period, system, selectedCredores);
+  const [periodFilterOpen, setPeriodFilterOpen] = useState(false);
+  const effectivePeriods = useMemo(() => (selectedPeriods.size > 0 ? selectedPeriods : period ? new Set([period]) : new Set<string>()), [period, selectedPeriods]);
+  const selectedPeriodList = useMemo(() => Array.from(effectivePeriods).sort().reverse(), [effectivePeriods]);
+  const primaryPeriod = selectedPeriodList[0] ?? period;
+  const { costs: custos, communication: comunicacao } = useDashboardSupplementalData(primaryPeriod, system, selectedCredores);
   const { activeBaseReport, activeBaseLoading, activeBaseError } = useActiveBaseData(system, selectedCredores, tab === 'base-ativa');
+  const { portfolioData, portfolioLoading, portfolioError } = usePortfolioData(system, effectivePeriods, selectedCredores, tab === 'carteiras');
 
   useEffect(() => {
     window.localStorage.setItem('portal-theme', theme);
@@ -56,13 +62,13 @@ function DashboardPage() {
 
   const color = COLORS[system];
   const chartAccent = theme === 'night' && color === COLORS.consulth ? COLORS.sky : color;
-  const businessDays = useMemo(() => businessDaysInPeriod(period), [period]);
-  const businessDayMap = useMemo(() => businessDayIndexMap(period), [period]);
-  const selectedBusinessDayLimit = businessDayLimit === 'all' ? null : Math.min(Number(businessDayLimit), businessDays);
+  const businessDays = useMemo(() => selectedPeriodList.reduce((sum, item) => sum + businessDaysInPeriod(item), 0), [selectedPeriodList]);
+  const businessDayMap = useMemo(() => (selectedPeriodList.length === 1 ? businessDayIndexMap(primaryPeriod) : new Map<string, number>()), [primaryPeriod, selectedPeriodList.length]);
+  const selectedBusinessDayLimit = selectedPeriodList.length === 1 && businessDayLimit !== 'all' ? Math.min(Number(businessDayLimit), businessDays) : null;
 
   const filtered = useMemo(
-    () => filterDashboardData({ data, system, period, selectedCreditors: selectedCredores, businessDayMap, selectedBusinessDayLimit }),
-    [businessDayMap, data, period, selectedBusinessDayLimit, selectedCredores, system]
+    () => filterDashboardData({ data, system, period: primaryPeriod, periods: effectivePeriods, selectedCreditors: selectedCredores, businessDayMap, selectedBusinessDayLimit }),
+    [businessDayMap, data, effectivePeriods, primaryPeriod, selectedBusinessDayLimit, selectedCredores, system]
   );
 
   const metrics = useMemo(() => {
@@ -84,10 +90,11 @@ function DashboardPage() {
   const projectionBaseDays = selectedBusinessDayLimit ?? Math.max(countBusinessDaysWithData(filtered, businessDayMap), 1);
 
   const previousMetrics = useMemo(() => {
-    const prev = previousPeriod(period);
+    if (selectedPeriodList.length !== 1) return null;
+    const prev = previousPeriod(primaryPeriod);
     if (!prev) return null;
     return summarizeDashboardMetrics(filterPreviousPeriodData(data, system, prev, selectedCredores));
-  }, [data, period, selectedCredores, system]);
+  }, [data, primaryPeriod, selectedCredores, selectedPeriodList.length, system]);
 
   const componentRows = useMemo(() => {
     const rows = [
@@ -201,7 +208,7 @@ function DashboardPage() {
   const fallbackCustos = useMemo<CostsData>(() => {
     const categories = componentRows.map((row) => ({ name: row.name, value: row.value }));
     return {
-      periodo: period,
+      periodo: primaryPeriod,
       categories,
       evolution: receitaDiaria.map((row) => ({ mes: row.label, receita: row.receita, acordos: acordosDiarios.find((item) => item.date === row.date)?.acordos ?? 0 })),
       comparativo: {
@@ -213,7 +220,7 @@ function DashboardPage() {
         custo_por_acordo: metrics.acordos > 0 ? metrics.totalPago / metrics.acordos : 0,
       },
     };
-  }, [acordosDiarios, componentRows, metrics, period, receitaDiaria]);
+  }, [acordosDiarios, componentRows, metrics, primaryPeriod, receitaDiaria]);
 
   const custosView = custos ?? fallbackCustos;
   const comunicacaoView = comunicacao ?? {
@@ -221,7 +228,7 @@ function DashboardPage() {
     por_credor: [],
     mensal: [],
   };
-  const whatsappCampaignData = WHATSAPP_CAMPAIGN_DATA[period];
+  const whatsappCampaignData = WHATSAPP_CAMPAIGN_DATA[primaryPeriod];
   const whatsappCampaignEnabled = Boolean(whatsappCampaignData);
   const whatsappCampaignRows = useMemo(
     () => whatsappCampaignEnabled
@@ -383,8 +390,8 @@ function DashboardPage() {
       });
 
     if (whatsappCampaignEnabled) {
-      const current = byMonth.get(period) ?? {
-        mes: period,
+      const current = byMonth.get(primaryPeriod) ?? {
+        mes: primaryPeriod,
         envios: 0,
         emails: 0,
         whatsapp: 0,
@@ -397,14 +404,17 @@ function DashboardPage() {
       current.envios = comunicacaoView.envios.emails + whatsappCampaignTotals.envios;
       current.whatsapp = whatsappCampaignTotals.envios;
       current.cliques = whatsappCampaignTotals.clicked;
-      byMonth.set(period, current);
+      byMonth.set(primaryPeriod, current);
     }
 
     return Array.from(byMonth.values())
       .map((row) => ({ ...row, label: periodLabel(row.mes), conversao: row.acessos > 0 ? (row.acordos / row.acessos) * 100 : 0 }))
       .sort((a, b) => a.mes.localeCompare(b.mes));
-  }, [comunicacaoView.envios.emails, comunicacaoView.mensal, data.acessos, data.acordos, system, whatsappCampaignEnabled, whatsappCampaignTotals.clicked, whatsappCampaignTotals.envios]);
+  }, [comunicacaoView.envios.emails, comunicacaoView.mensal, data.acessos, data.acordos, primaryPeriod, system, whatsappCampaignEnabled, whatsappCampaignTotals.clicked, whatsappCampaignTotals.envios]);
   const selectedLabel = selectedCredores.size === 0 || selectedCredores.size === allCredores.length ? 'Todos' : `${selectedCredores.size}/${allCredores.length}`;
+  const selectedPeriodLabel = selectedPeriodList.length === 1 ? periodLabel(primaryPeriod) : `${selectedPeriodList.length} meses`;
+  const selectedPeriodTitle = selectedPeriodList.length === 1 ? periodLabel(primaryPeriod, true) : `${selectedPeriodList.length} meses selecionados`;
+  const selectedPeriodRange = selectedPeriodList.length === 1 ? periodRangeLabel(primaryPeriod) : `${periodLabel([...selectedPeriodList].sort()[0] ?? primaryPeriod)} a ${periodLabel(selectedPeriodList[0] ?? primaryPeriod)}`;
   const activeBaseCredorRows = useMemo(
     () => activeBaseReport.by_credor.map((row) => ({ name: row.credor, value: row.processos })),
     [activeBaseReport.by_credor]
@@ -430,13 +440,73 @@ function DashboardPage() {
           ? 'Vencimentos pendentes'
           : activeBaseReport.status === 'error'
             ? 'Falha ao atualizar'
-            : 'Cache ainda não gerado';
+          : 'Cache ainda não gerado';
+  const portfolioView = useMemo(() => {
+    const recoveredByCreditor = groupBy(filtered.baixas, (row) => row.credor || 'OUTROS');
+    const agreementsByCreditor = groupBy(filtered.acordos, (row) => row.credor || 'OUTROS');
+    const byCreditor = Object.entries(groupBy(portfolioData, (row: PortfolioEntry) => row.credor))
+      .map(([credor, rows]) => {
+        const valorEntrada = rows.reduce((sum, row) => sum + safe(row.tottit || row.valor_imp), 0);
+        const recuperado = (recoveredByCreditor[credor] ?? []).reduce((sum, row) => sum + safe(row.total_pago_portal), 0);
+        const processos = rows.reduce((sum, row) => sum + safe(row.qtdeproc), 0);
+        const titulos = rows.reduce((sum, row) => sum + safe(row.qtdetit), 0);
+        const importados = rows.reduce((sum, row) => sum + safe(row.qtdeimp), 0);
+        const duplicados = rows.reduce((sum, row) => sum + safe(row.qtdedup), 0);
+        const acordos = (agreementsByCreditor[credor] ?? []).length;
+        return {
+          credor,
+          borderos: rows.length,
+          valorEntrada,
+          recuperado,
+          processos,
+          titulos,
+          importados,
+          duplicados,
+          acordos,
+          percentualRecuperado: valorEntrada > 0 ? (recuperado / valorEntrada) * 100 : 0,
+          conversaoCarteira: processos > 0 ? (acordos / processos) * 100 : 0,
+        };
+      })
+      .sort((a, b) => b.valorEntrada - a.valorEntrada);
+
+    const monthly = Object.entries(groupBy(portfolioData, (row: PortfolioEntry) => row.mes))
+      .map(([mes, rows]) => ({
+        mes,
+        label: periodLabel(mes),
+        valorEntrada: rows.reduce((sum, row) => sum + safe(row.tottit || row.valor_imp), 0),
+        processos: rows.reduce((sum, row) => sum + safe(row.qtdeproc), 0),
+        borderos: rows.length,
+      }))
+      .sort((a, b) => a.mes.localeCompare(b.mes));
+
+    return {
+      byCreditor,
+      monthly,
+      totalValorEntrada: byCreditor.reduce((sum, row) => sum + row.valorEntrada, 0),
+      totalRecuperado: byCreditor.reduce((sum, row) => sum + row.recuperado, 0),
+      totalProcessos: byCreditor.reduce((sum, row) => sum + row.processos, 0),
+      totalTitulos: byCreditor.reduce((sum, row) => sum + row.titulos, 0),
+      totalBorderos: byCreditor.reduce((sum, row) => sum + row.borderos, 0),
+      totalAcordos: byCreditor.reduce((sum, row) => sum + row.acordos, 0),
+    };
+  }, [filtered.acordos, filtered.baixas, portfolioData]);
 
   function toggleCredor(credor: string) {
     setSelectedCredores((current) => {
       const next = new Set(current);
       if (next.has(credor)) next.delete(credor);
       else next.add(credor);
+      return next;
+    });
+  }
+
+  function togglePeriodFilter(item: string) {
+    setSelectedPeriods((current) => {
+      const next = new Set(current.size > 0 ? current : period ? [period] : []);
+      if (next.has(item)) next.delete(item);
+      else next.add(item);
+      if (next.size === 0 && period) next.add(period);
+      setPeriod(item);
       return next;
     });
   }
@@ -478,16 +548,33 @@ function DashboardPage() {
             ) : null}
           </div>
 
-          <select value={period} onChange={(event) => setPeriod(event.target.value)} aria-label="Período">
-            {periods.map((item) => (
-              <option key={item} value={item}>{periodLabel(item)}</option>
-            ))}
-          </select>
+          <div className="credor-filter">
+            <button type="button" className="control-btn" onClick={() => setPeriodFilterOpen((current) => !current)}>
+              Meses
+              <strong>{selectedPeriodLabel}</strong>
+              <ChevronDown size={14} />
+            </button>
+            {periodFilterOpen ? (
+              <div className="credor-menu">
+                <div className="credor-menu-actions">
+                  <button type="button" onClick={() => setSelectedPeriods(period ? new Set([period]) : new Set())}>Mês atual</button>
+                  <button type="button" onClick={() => setSelectedPeriods(new Set(periods))}>Todos</button>
+                </div>
+                {periods.map((item) => (
+                  <label key={item}>
+                    <input type="checkbox" checked={effectivePeriods.has(item)} onChange={() => togglePeriodFilter(item)} />
+                    <span>{periodLabel(item)}</span>
+                    {effectivePeriods.has(item) ? <Check size={14} /> : null}
+                  </label>
+                ))}
+              </div>
+            ) : null}
+          </div>
           <select value={businessDayLimit} onChange={(event) => setBusinessDayLimit(event.target.value)} aria-label="Dias úteis">
             <option value="all">Todos os dias úteis</option>
-            {Array.from({ length: businessDays }, (_, index) => index + 1).map((day) => (
+            {selectedPeriodList.length === 1 ? Array.from({ length: businessDays }, (_, index) => index + 1).map((day) => (
               <option key={day} value={day}>{day} dias úteis</option>
-            ))}
+            )) : null}
           </select>
           <button type="button" className="control-btn" onClick={() => setTheme(theme === 'sisth' ? 'night' : 'sisth')}>
             Tema {theme === 'sisth' ? 'Escuro' : 'Claro'}
@@ -503,6 +590,7 @@ function DashboardPage() {
         <button className={tab === 'relatorio' ? 'active' : ''} type="button" onClick={() => setTab('relatorio')}>Resultados</button>
         <button className={tab === 'custos' ? 'active' : ''} type="button" onClick={() => setTab('custos')}>Custos</button>
         <button className={tab === 'performance' ? 'active' : ''} type="button" onClick={() => setTab('performance')}>Performance</button>
+        <button className={tab === 'carteiras' ? 'active' : ''} type="button" onClick={() => setTab('carteiras')}>Carteiras</button>
         <button className={tab === 'base-ativa' ? 'active' : ''} type="button" onClick={() => setTab('base-ativa')}>Bases</button>
       </div>
 
@@ -518,11 +606,11 @@ function DashboardPage() {
                   <img src={logoUrl} alt="Portal do Acordo" />
                 </div>
                 <p>Resultados</p>
-                <h1><span>{period ? periodLabel(period, true) : ''}</span></h1>
+                <h1><span>{selectedPeriodTitle}</span></h1>
               </div>
               <div className="hero-meta">
-                <strong>{period ? period.slice(5) + ' / ' + period.slice(0, 4) : '--'}</strong>
-                <span>{period ? periodRangeLabel(period) : ''}</span>
+                <strong>{selectedPeriodLabel}</strong>
+                <span>{selectedPeriodRange}</span>
                 <span>{number(businessDays)} dias úteis</span>
                 <em>{systemLabel(system)}</em>
               </div>
@@ -755,11 +843,11 @@ function DashboardPage() {
                   <img src={logoUrl} alt="Portal do Acordo" />
                 </div>
                 <p>Custos</p>
-                <h1><span>{period ? periodLabel(period, true) : ''}</span></h1>
+                <h1><span>{selectedPeriodTitle}</span></h1>
               </div>
               <div className="hero-meta">
-                <strong>{period ? period.slice(5) + ' / ' + period.slice(0, 4) : '--'}</strong>
-                <span>{period ? periodRangeLabel(period) : ''}</span>
+                <strong>{selectedPeriodLabel}</strong>
+                <span>{selectedPeriodRange}</span>
                 <span>{number(businessDays)} dias úteis</span>
                 <em>{systemLabel(system)}</em>
               </div>
@@ -865,6 +953,112 @@ function DashboardPage() {
         </>
       ) : null}
 
+      {!loading && !error && tab === 'carteiras' ? (
+        <>
+          <header className="hero">
+            <div className="hero-top">
+              <div>
+                <div className="logos">
+                  <img src={logoUrl} alt="Portal do Acordo" />
+                </div>
+                <p>Carteiras</p>
+                <h1><span>{selectedPeriodTitle}</span></h1>
+              </div>
+              <div className="hero-meta">
+                <strong>{selectedPeriodLabel}</strong>
+                <span>{selectedPeriodRange}</span>
+                <span>{number(businessDays)} dias úteis</span>
+                <em>{systemLabel(system)}</em>
+              </div>
+            </div>
+            <div className="kpi-row">
+              <MetricCard tone="teal" label="Valor de entrada" value={compactMoney(portfolioView.totalValorEntrada)} current={portfolioView.totalValorEntrada} small={`${number(portfolioView.totalBorderos)} borderôs`} summary="Soma do valor informado nas importações válidas da carteira." />
+              <MetricCard tone="gold" label="Processos importados" value={number(portfolioView.totalProcessos)} current={portfolioView.totalProcessos} small={`${number(portfolioView.totalTitulos)} títulos`} summary="Quantidade de processos importados nas carteiras selecionadas." />
+              <MetricCard tone="sky" label="Recuperado" value={compactMoney(portfolioView.totalRecuperado)} current={portfolioView.totalRecuperado} small={`${portfolioView.totalValorEntrada > 0 ? ((portfolioView.totalRecuperado / portfolioView.totalValorEntrada) * 100).toFixed(2) : '0.00'}% da entrada`} summary="Total pago no período para os credores das carteiras." />
+              <MetricCard tone="rust" label="Conversão carteira" value={`${portfolioView.totalProcessos > 0 ? ((portfolioView.totalAcordos / portfolioView.totalProcessos) * 100).toFixed(2) : '0.00'}%`} current={portfolioView.totalAcordos} small={`${number(portfolioView.totalAcordos)} acordos`} summary="Acordos formalizados sobre processos importados." />
+            </div>
+          </header>
+
+          <main className="main-content">
+            {portfolioLoading ? <div className="loading-state">Carregando carteiras...</div> : null}
+            {portfolioError ? <div className="error-state">{portfolioError}</div> : null}
+            {!portfolioLoading && !portfolioError ? (
+              <>
+                <Section num="01" title="Performance por Carteira">
+                  <Panel title="Entrada x recuperado" meta={`Top ${Math.min(portfolioView.byCreditor.length, 8)}`}>
+                    {(expanded) => (
+                      <table>
+                        <thead>
+                          <tr><th>Carteira</th><th className="right">Entrada</th><th className="right">Recuperado</th><th className="right">% Rec.</th><th className="right">Proc.</th><th className="right">Acordos</th></tr>
+                        </thead>
+                        <tbody>
+                          {portfolioView.byCreditor.length === 0 ? <tr><td colSpan={6} className="muted">Sem carteiras no período selecionado.</td></tr> : null}
+                          {(expanded ? portfolioView.byCreditor : portfolioView.byCreditor.slice(0, 8)).map((row) => (
+                            <tr key={row.credor}>
+                              <td className="bold">{row.credor}</td>
+                              <td className="right">{money(row.valorEntrada)}</td>
+                              <td className="right">{money(row.recuperado)}</td>
+                              <td className="right">{row.percentualRecuperado.toFixed(2)}%</td>
+                              <td className="right muted">{number(row.processos)}</td>
+                              <td className="right muted">{number(row.acordos)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </Panel>
+                </Section>
+
+                <Section num="02" title="Evolução das Entradas">
+                  <div className="grid-2">
+                    <Panel title="Valor de entrada por mês">
+                      <div className="chart-wrap small">
+                        <ResponsiveContainer>
+                          <BarChart data={portfolioView.monthly}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                            <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                            <YAxis tickFormatter={(value) => `R$${Math.round(Number(value) / 1000)}k`} tick={{ fontSize: 10 }} />
+                            <Tooltip formatter={(value: number) => money(value)} />
+                            <Bar dataKey="valorEntrada" name="Valor de entrada" fill={chartAccent} radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </Panel>
+                    <Panel title="Processos importados por mês">
+                      <BarRows rows={portfolioView.monthly.map((row) => ({ name: row.label, value: row.processos }))} color={color} valueLabel="Processos" />
+                    </Panel>
+                  </div>
+                </Section>
+
+                <Section num="03" title="Importações">
+                  <Panel title="Últimos borderôs válidos" meta="Regras por usuário e idcredor">
+                    {(expanded) => (
+                      <table>
+                        <thead>
+                          <tr><th>Data</th><th>Carteira</th><th>Arquivo</th><th className="right">Títulos</th><th className="right">Processos</th><th className="right">Valor</th></tr>
+                        </thead>
+                        <tbody>
+                          {(expanded ? portfolioData : portfolioData.slice(0, 12)).map((row) => (
+                            <tr key={row.id}>
+                              <td>{dayLabel(row.data)}</td>
+                              <td className="bold">{row.credor}</td>
+                              <td className="muted">{row.nomearquivo}</td>
+                              <td className="right">{number(row.qtdetit)}</td>
+                              <td className="right">{number(row.qtdeproc)}</td>
+                              <td className="right">{money(row.tottit || row.valor_imp)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </Panel>
+                </Section>
+              </>
+            ) : null}
+          </main>
+        </>
+      ) : null}
+
       {!loading && !error && tab === 'performance' ? (
         <>
           <header className="hero">
@@ -874,11 +1068,11 @@ function DashboardPage() {
                   <img src={logoUrl} alt="Portal do Acordo" />
                 </div>
                 <p>Performance</p>
-                <h1><span>{period ? periodLabel(period, true) : ''}</span></h1>
+                <h1><span>{selectedPeriodTitle}</span></h1>
               </div>
               <div className="hero-meta">
-                <strong>{period ? period.slice(5) + ' / ' + period.slice(0, 4) : '--'}</strong>
-                <span>{period ? periodRangeLabel(period) : ''}</span>
+                <strong>{selectedPeriodLabel}</strong>
+                <span>{selectedPeriodRange}</span>
                 <span>{number(businessDays)} dias úteis</span>
                 <em>{systemLabel(system)}</em>
               </div>

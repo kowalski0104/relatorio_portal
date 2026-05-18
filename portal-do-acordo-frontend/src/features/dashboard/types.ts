@@ -1,5 +1,5 @@
 export type SystemFilter = 'consulth' | 'sisth' | 'total';
-export type DashboardTab = 'relatorio' | 'custos' | 'performance' | 'base-ativa';
+export type DashboardTab = 'relatorio' | 'custos' | 'performance' | 'carteiras' | 'base-ativa';
 export type ThemeMode = 'sisth' | 'night';
 
 export type Payment = {
@@ -48,6 +48,25 @@ export type DashboardData = {
   baixas: Payment[];
   acordos: Agreement[];
   acessos: Access[];
+};
+
+export type PortfolioEntry = {
+  id: string;
+  sistema: Exclude<SystemFilter, 'total'>;
+  idempresa: number;
+  codimp: string;
+  data: string;
+  mes: string;
+  usuario_cad: string;
+  nomearquivo: string;
+  idcredor: number;
+  credor: string;
+  qtdetit: number;
+  tottit: number;
+  qtdeimp: number;
+  qtdeproc: number;
+  qtdedup: number;
+  valor_imp: number;
 };
 
 export type ActiveBaseReport = {

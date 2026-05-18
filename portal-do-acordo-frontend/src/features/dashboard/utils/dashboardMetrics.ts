@@ -32,13 +32,17 @@ export function filterDashboardData(params: {
   data: DashboardData;
   system: SystemFilter;
   period: string;
+  periods?: Set<string>;
   selectedCreditors: Set<string>;
   businessDayMap: Map<string, number>;
   selectedBusinessDayLimit: number | null;
 }) {
-  const { data, system, period, selectedCreditors, businessDayMap, selectedBusinessDayLimit } = params;
+  const { data, system, period, periods, selectedCreditors, businessDayMap, selectedBusinessDayLimit } = params;
 
-  const matchesPeriod = (row: RowWithDate) => !period || monthKey(row.data) === period;
+  const matchesPeriod = (row: RowWithDate) => {
+    const key = monthKey(row.data);
+    return periods && periods.size > 0 ? periods.has(key) : !period || key === period;
+  };
   const matchesCreditor = (creditor?: string | null) => selectedCreditors.size === 0 || (creditor ? selectedCreditors.has(creditor) : false);
   const matchesBusinessDay = (row: RowWithDate) => {
     if (!selectedBusinessDayLimit) return true;

@@ -9,6 +9,7 @@ import creditorRouter from './routes/creditorRoutes';
 import costRouter from './routes/costRoutes';
 import communicationRouter from './routes/communicationRoutes';
 import activeBaseRouter from './routes/activeBaseRoutes';
+import portfolioRouter from './routes/portfolioRoutes';
 import { authMiddleware } from './middleware/auth';
 import { errorHandler } from './middleware/errorHandler';
 
@@ -37,6 +38,7 @@ export function createApp() {
   app.use('/api/custos', costRouter);
   app.use('/api/comunicacao', communicationRouter);
   app.use('/api/base-ativa', activeBaseRouter);
+  app.use('/api/carteiras', portfolioRouter);
 
   app.use(errorHandler);
 
