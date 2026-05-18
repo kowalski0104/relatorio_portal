@@ -1,4 +1,4 @@
-import type { Access, Agreement, CommunicationData, CostsData, DashboardData, Payment, SystemFilter } from '../types';
+import type { Access, ActiveBase, Agreement, CommunicationData, CostsData, DashboardData, Payment, SystemFilter } from '../types';
 
 export async function fetchDataset<T>(url: string): Promise<T[]> {
   const response = await fetch(apiUrl(url));
@@ -33,6 +33,12 @@ export async function fetchCommunication(periodo: string, sistema: SystemFilter,
   if (!response.ok) return null;
   const payload = await response.json();
   return payload.data ?? null;
+}
+
+export async function fetchActiveBase(sistema: SystemFilter, credores: Set<string>): Promise<ActiveBase[]> {
+  const params = new URLSearchParams({ sistema });
+  if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
+  return fetchDataset<ActiveBase>(`/api/base-ativa?${params.toString()}`);
 }
 
 function apiUrl(path: string) {

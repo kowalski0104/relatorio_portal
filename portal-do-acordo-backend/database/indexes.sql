@@ -19,3 +19,15 @@ ON tb_acordo (processo, idempresa, status);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_portal_acessos_empresa_data
 ON tb_portal_neg_acessos (idempresa, data_cad);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_devedor_empresa_credor_processo
+ON tb_devedor (idempresa, idcredor, processo);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_titulos_processo_vencimento
+ON tb_titulos (processo, vencimento);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_processo_processo_status
+ON tb_processo (processo, status_desc);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_credor_id_status_grupo
+ON tb_credor (id, status, grupo);

@@ -23,7 +23,7 @@ import { Panel } from './components/Panel';
 import { Section } from './components/Section';
 import { CHART_PALETTE, COLORS, FIXED_EMAIL_COST } from './config/constants';
 import { WHATSAPP_CAMPAIGN_DATA, type WhatsappCampaignCredor } from './data/whatsappCampaigns';
-import { useDashboardData, useDashboardSupplementalData } from './hooks/useDashboardData';
+import { useActiveBaseData, useDashboardData, useDashboardSupplementalData } from './hooks/useDashboardData';
 import type { Access, Agreement, CostsData, DashboardTab, SystemFilter, ThemeMode } from './types';
 import { groupBy, normalizeCreditorGroup } from './utils/creditors';
 import { businessDayIndexMap, businessDaysInPeriod, dayLabel, isBusinessDay, monthKey, periodLabel, periodRangeLabel, previousPeriod } from './utils/dates';
@@ -46,6 +46,7 @@ function DashboardPage() {
   const [businessDayLimit, setBusinessDayLimit] = useState('all');
   const [filterOpen, setFilterOpen] = useState(false);
   const { costs: custos, communication: comunicacao } = useDashboardSupplementalData(period, system, selectedCredores);
+  const { activeBase, activeBaseLoading, activeBaseError } = useActiveBaseData(system, selectedCredores, tab === 'base-ativa');
 
   useEffect(() => {
     window.localStorage.setItem('portal-theme', theme);
@@ -404,6 +405,19 @@ function DashboardPage() {
       .sort((a, b) => a.mes.localeCompare(b.mes));
   }, [comunicacaoView.envios.emails, comunicacaoView.mensal, data.acessos, data.acordos, system, whatsappCampaignEnabled, whatsappCampaignTotals.clicked, whatsappCampaignTotals.envios]);
   const selectedLabel = selectedCredores.size === 0 || selectedCredores.size === allCredores.length ? 'Todos' : `${selectedCredores.size}/${allCredores.length}`;
+  const activeBaseCredorRows = useMemo(() => {
+    const groups = groupBy(activeBase, (row) => row.credor || 'OUTROS');
+    return Object.entries(groups)
+      .map(([name, rows]) => ({ name, value: rows.length }))
+      .sort((a, b) => b.value - a.value);
+  }, [activeBase]);
+  const activeBaseWithDueDates = useMemo(() => activeBase.filter((row) => row.vencimento_min).length, [activeBase]);
+  const activeBaseNearestDueDate = useMemo(() => {
+    return activeBase
+      .map((row) => row.vencimento_min)
+      .filter((date): date is string => Boolean(date))
+      .sort()[0] ?? null;
+  }, [activeBase]);
 
   function toggleCredor(credor: string) {
     setSelectedCredores((current) => {
@@ -476,6 +490,7 @@ function DashboardPage() {
         <button className={tab === 'relatorio' ? 'active' : ''} type="button" onClick={() => setTab('relatorio')}>Resultados</button>
         <button className={tab === 'custos' ? 'active' : ''} type="button" onClick={() => setTab('custos')}>Custos</button>
         <button className={tab === 'performance' ? 'active' : ''} type="button" onClick={() => setTab('performance')}>Performance</button>
+        <button className={tab === 'base-ativa' ? 'active' : ''} type="button" onClick={() => setTab('base-ativa')}>Base Ativa</button>
       </div>
 
       {loading ? <div className="loading-state">Carregando dados do portal...</div> : null}
@@ -776,6 +791,84 @@ function DashboardPage() {
               )}
             </Panel>
           </Section>
+          </main>
+        </>
+      ) : null}
+
+      {!loading && !error && tab === 'base-ativa' ? (
+        <>
+          <header className="hero">
+            <div className="hero-top">
+              <div>
+                <div className="logos">
+                  <img src={logoUrl} alt="Portal do Acordo" />
+                </div>
+                <p>Base Ativa</p>
+                <h1><span>{systemLabel(system)}</span></h1>
+              </div>
+              <div className="hero-meta">
+                <strong>{number(activeBase.length)} processos</strong>
+                <span>{selectedCredores.size === 0 ? 'Todos os credores' : `${number(selectedCredores.size)} credores selecionados`}</span>
+                <span>{number(activeBaseWithDueDates)} com vencimento</span>
+                <em>Somente elegíveis</em>
+              </div>
+            </div>
+            <div className="kpi-row">
+              <MetricCard tone="teal" label="Processos ativos" value={number(activeBase.length)} current={activeBase.length} small="Credor ativo + processo elegível" summary="Processos com credor ATIVO e status diferente de devolução, baixado ou quitado." />
+              <MetricCard tone="gold" label="Credores" value={number(activeBaseCredorRows.length)} current={activeBaseCredorRows.length} small="Grupos distintos" summary="Quantidade de grupos de credores na base ativa filtrada." />
+              <MetricCard tone="sky" label="Com vencimento" value={number(activeBaseWithDueDates)} current={activeBaseWithDueDates} small="tb_titulos" summary="Processos ativos com ao menos um vencimento localizado." />
+              <MetricCard tone="rust" label="Menor vencimento" value={activeBaseNearestDueDate ? dayLabel(activeBaseNearestDueDate) : '--'} current={activeBaseWithDueDates} small={activeBaseNearestDueDate?.slice(0, 4) ?? 'Sem data'} summary="Menor vencimento encontrado entre os títulos da base ativa." />
+            </div>
+          </header>
+
+          <main className="main-content">
+            {activeBaseLoading ? <div className="loading-state">Carregando base ativa...</div> : null}
+            {activeBaseError ? <div className="error-state">{activeBaseError}</div> : null}
+            {!activeBaseLoading && !activeBaseError ? (
+              <>
+                <Section num="01" title="Base Ativa por Credor">
+                  <Panel title="Distribuição de processos" meta={`Top ${Math.min(activeBaseCredorRows.length, 10)}`}>
+                    {(expanded) => <BarRows rows={expanded ? activeBaseCredorRows : activeBaseCredorRows.slice(0, 10)} color={color} valueLabel="Processos" />}
+                  </Panel>
+                </Section>
+
+                <Section num="02" title="Processos da Base Ativa">
+                  <Panel title="Base ativa com vencimentos" meta={`${number(activeBase.length)} registros`}>
+                    {(expanded) => (
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Processo</th>
+                            <th>CNPJ</th>
+                            <th>Razão social</th>
+                            <th>Credor</th>
+                            <th>Status credor</th>
+                            <th>Status processo</th>
+                            <th className="right">Venc. mínimo</th>
+                            <th className="right">Venc. médio</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activeBase.length === 0 ? <tr><td colSpan={8} className="muted">Sem processos elegíveis para os filtros selecionados.</td></tr> : null}
+                          {(expanded ? activeBase : activeBase.slice(0, 20)).map((row) => (
+                            <tr key={`${row.credor}-${row.processo}`}>
+                              <td className="bold">{row.processo}</td>
+                              <td>{row.cnpj || '-'}</td>
+                              <td>{row.razaosocial || '-'}</td>
+                              <td>{row.credor}</td>
+                              <td>{row.credor_status || '-'}</td>
+                              <td>{row.processo_status_desc || 'ATIVO'}</td>
+                              <td className="right">{row.vencimento_min ? dayLabel(row.vencimento_min) : '-'}</td>
+                              <td className="right">{row.vencimento_medio ? dayLabel(row.vencimento_medio) : '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </Panel>
+                </Section>
+              </>
+            ) : null}
           </main>
         </>
       ) : null}

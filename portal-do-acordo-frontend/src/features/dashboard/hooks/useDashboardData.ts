@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { fetchCommunication, fetchCosts, fetchDashboardData } from '../services/dashboardApi';
-import type { CommunicationData, CostsData, DashboardData, SystemFilter } from '../types';
+import { fetchActiveBase, fetchCommunication, fetchCosts, fetchDashboardData } from '../services/dashboardApi';
+import type { ActiveBase, CommunicationData, CostsData, DashboardData, SystemFilter } from '../types';
 import { monthKey } from '../utils/dates';
 
 const EMPTY_DASHBOARD_DATA: DashboardData = { baixas: [], acordos: [], acessos: [] };
@@ -82,6 +82,40 @@ export function useDashboardSupplementalData(period: string, system: SystemFilte
   }, [period, selectedCreditors, system]);
 
   return { costs, communication };
+}
+
+export function useActiveBaseData(system: SystemFilter, selectedCreditors: Set<string>, enabled: boolean) {
+  const [data, setData] = useState<ActiveBase[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    let active = true;
+    setLoading(true);
+
+    fetchActiveBase(system, selectedCreditors)
+      .then((result) => {
+        if (!active) return;
+        setData(result);
+        setError('');
+      })
+      .catch((err) => {
+        if (!active) return;
+        setData([]);
+        setError(err instanceof Error ? err.message : 'Erro ao carregar base ativa.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [enabled, selectedCreditors, system]);
+
+  return { activeBase: data, activeBaseLoading: loading, activeBaseError: error };
 }
 
 function getAvailablePeriods(data: DashboardData) {
