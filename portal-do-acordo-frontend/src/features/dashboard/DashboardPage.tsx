@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -47,6 +47,8 @@ function DashboardPage() {
   const [businessDayLimit, setBusinessDayLimit] = useState('all');
   const [filterOpen, setFilterOpen] = useState(false);
   const [periodFilterOpen, setPeriodFilterOpen] = useState(false);
+  const creditorFilterRef = useRef<HTMLDivElement>(null);
+  const periodFilterRef = useRef<HTMLDivElement>(null);
   const effectivePeriods = useMemo(() => (selectedPeriods.size > 0 ? selectedPeriods : period ? new Set([period]) : new Set<string>()), [period, selectedPeriods]);
   const portfolioPeriods = effectivePeriods;
   const dateFilterIgnored = tab === 'base-ativa';
@@ -63,14 +65,39 @@ function DashboardPage() {
     window.localStorage.setItem('portal-theme', theme);
   }, [theme]);
 
+  useEffect(() => {
+    function closeFiltersOnOutsideClick(event: MouseEvent) {
+      const target = event.target as Node;
+      const clickedInsideCreditorFilter = creditorFilterRef.current?.contains(target);
+      const clickedInsidePeriodFilter = periodFilterRef.current?.contains(target);
+      if (!clickedInsideCreditorFilter && !clickedInsidePeriodFilter) {
+        setFilterOpen(false);
+        setPeriodFilterOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', closeFiltersOnOutsideClick);
+    return () => document.removeEventListener('mousedown', closeFiltersOnOutsideClick);
+  }, []);
+
   const allCredores = useMemo(() => getAvailableCreditors(data), [data]);
   const noCreditorSelected = isNoCreditorSelection(selectedCredores);
 
   const color = COLORS[system];
   const chartAccent = theme === 'night' && color === COLORS.consulth ? COLORS.sky : color;
   const businessDays = useMemo(() => selectedPeriodList.reduce((sum, item) => sum + businessDaysInPeriod(item), 0), [selectedPeriodList]);
-  const businessDayMap = useMemo(() => (selectedPeriodList.length === 1 ? businessDayIndexMap(primaryPeriod) : new Map<string, number>()), [primaryPeriod, selectedPeriodList.length]);
-  const selectedBusinessDayLimit = selectedPeriodList.length === 1 && businessDayLimit !== 'all' ? Math.min(Number(businessDayLimit), businessDays) : null;
+  const maxBusinessDaysInSelectedPeriods = useMemo(() => selectedPeriodList.reduce((max, item) => Math.max(max, businessDaysInPeriod(item)), 0), [selectedPeriodList]);
+  const businessDayMap = useMemo(() => {
+    const map = new Map<string, number>();
+    selectedPeriodList.forEach((item) => {
+      businessDayIndexMap(item).forEach((index, date) => map.set(date, index));
+    });
+    return map;
+  }, [selectedPeriodList]);
+  const selectedBusinessDayLimit = !dateFilterIgnored && businessDayLimit !== 'all' ? Math.min(Number(businessDayLimit), maxBusinessDaysInSelectedPeriods) : null;
+  const businessDaySelectValue = dateFilterIgnored || businessDayLimit === 'all' || maxBusinessDaysInSelectedPeriods === 0
+    ? 'all'
+    : String(Math.min(Number(businessDayLimit), maxBusinessDaysInSelectedPeriods));
 
   const filtered = useMemo(
     () => filterDashboardData({ data, system, period: primaryPeriod, periods: effectivePeriods, selectedCreditors: selectedCredores, businessDayMap, selectedBusinessDayLimit }),
@@ -80,14 +107,16 @@ function DashboardPage() {
     () => filterDashboardData({ data, system, period: primaryPortfolioPeriod, periods: portfolioPeriods, selectedCreditors: selectedCredores, businessDayMap: new Map(), selectedBusinessDayLimit: null }),
     [data, portfolioPeriods, primaryPortfolioPeriod, selectedCredores, system]
   );
+  const consideredBusinessDays = selectedBusinessDayLimit
+    ? selectedPeriodList.reduce((sum, item) => sum + Math.min(selectedBusinessDayLimit, businessDaysInPeriod(item)), 0)
+    : Math.max(countBusinessDaysWithData(filtered, businessDayMap), 1);
 
   const metrics = useMemo(() => {
     return summarizeDashboardMetrics(filtered);
   }, [filtered]);
 
   const projectionRows = useMemo(() => {
-    const consideredDays = selectedBusinessDayLimit ?? Math.max(countBusinessDaysWithData(filtered, businessDayMap), 1);
-    const factor = businessDays > 0 && consideredDays > 0 ? businessDays / consideredDays : 0;
+    const factor = businessDays > 0 && consideredBusinessDays > 0 ? businessDays / consideredBusinessDays : 0;
 
     return [
       { name: 'Total Pago', atual: metrics.totalPago, projetado: metrics.totalPago * factor },
@@ -95,9 +124,9 @@ function DashboardPage() {
       { name: 'Honorários', atual: metrics.honorarios, projetado: metrics.honorarios * factor },
       { name: 'Valor negociado', atual: metrics.totalAcordos, projetado: metrics.totalAcordos * factor },
     ];
-  }, [businessDayMap, businessDays, filtered, metrics, selectedBusinessDayLimit]);
+  }, [businessDays, consideredBusinessDays, metrics]);
 
-  const projectionBaseDays = selectedBusinessDayLimit ?? Math.max(countBusinessDaysWithData(filtered, businessDayMap), 1);
+  const projectionBaseDays = consideredBusinessDays;
 
   const previousMetrics = useMemo(() => {
     if (selectedPeriodList.length !== 1) return null;
@@ -541,8 +570,11 @@ function DashboardPage() {
         </div>
 
         <div className="system-actions">
-          <div className="credor-filter">
-            <button type="button" className="control-btn" onClick={() => setFilterOpen((current) => !current)}>
+          <div className="credor-filter" ref={creditorFilterRef}>
+            <button type="button" className="control-btn" onClick={() => {
+              setFilterOpen((current) => !current);
+              setPeriodFilterOpen(false);
+            }}>
               <Building2 size={16} />
               Credores
               <strong>{selectedLabel}</strong>
@@ -565,8 +597,11 @@ function DashboardPage() {
             ) : null}
           </div>
 
-          <div className="credor-filter">
-            <button type="button" className="control-btn" disabled={dateFilterIgnored} onClick={() => setPeriodFilterOpen((current) => !current)}>
+          <div className="credor-filter" ref={periodFilterRef}>
+            <button type="button" className="control-btn" disabled={dateFilterIgnored} onClick={() => {
+              setPeriodFilterOpen((current) => !current);
+              setFilterOpen(false);
+            }}>
               Meses
               <strong>{visiblePeriodLabel}</strong>
               <ChevronDown size={14} />
@@ -587,11 +622,11 @@ function DashboardPage() {
               </div>
             ) : null}
           </div>
-          <select value={dateFilterIgnored ? 'all' : businessDayLimit} disabled={dateFilterIgnored} onChange={(event) => setBusinessDayLimit(event.target.value)} aria-label="Dias úteis">
+          <select value={businessDaySelectValue} disabled={dateFilterIgnored} onChange={(event) => setBusinessDayLimit(event.target.value)} aria-label="Dias úteis">
             <option value="all">Todos os dias úteis</option>
-            {selectedPeriodList.length === 1 ? Array.from({ length: businessDays }, (_, index) => index + 1).map((day) => (
+            {Array.from({ length: maxBusinessDaysInSelectedPeriods }, (_, index) => index + 1).map((day) => (
               <option key={day} value={day}>{day} dias úteis</option>
-            )) : null}
+            ))}
           </select>
           <button type="button" className="control-btn" onClick={() => setTheme(theme === 'sisth' ? 'night' : 'sisth')}>
             Tema {theme === 'sisth' ? 'Escuro' : 'Claro'}
