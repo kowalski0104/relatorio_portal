@@ -48,11 +48,15 @@ function DashboardPage() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [periodFilterOpen, setPeriodFilterOpen] = useState(false);
   const effectivePeriods = useMemo(() => (selectedPeriods.size > 0 ? selectedPeriods : period ? new Set([period]) : new Set<string>()), [period, selectedPeriods]);
+  const portfolioPeriods = useMemo(() => (selectedPeriods.size > 0 ? selectedPeriods : new Set(periods)), [periods, selectedPeriods]);
+  const visiblePeriods = tab === 'carteiras' && selectedPeriods.size === 0 ? portfolioPeriods : effectivePeriods;
   const selectedPeriodList = useMemo(() => Array.from(effectivePeriods).sort().reverse(), [effectivePeriods]);
+  const portfolioPeriodList = useMemo(() => Array.from(portfolioPeriods).sort().reverse(), [portfolioPeriods]);
   const primaryPeriod = selectedPeriodList[0] ?? period;
+  const primaryPortfolioPeriod = portfolioPeriodList[0] ?? primaryPeriod;
   const { costs: custos, communication: comunicacao } = useDashboardSupplementalData(primaryPeriod, system, selectedCredores);
   const { activeBaseReport, activeBaseLoading, activeBaseError } = useActiveBaseData(system, selectedCredores, tab === 'base-ativa');
-  const { portfolioData, portfolioLoading, portfolioError } = usePortfolioData(system, effectivePeriods, selectedCredores, tab === 'carteiras');
+  const { portfolioData, portfolioLoading, portfolioError } = usePortfolioData(system, portfolioPeriods, selectedCredores, tab === 'carteiras');
 
   useEffect(() => {
     window.localStorage.setItem('portal-theme', theme);
@@ -69,6 +73,10 @@ function DashboardPage() {
   const filtered = useMemo(
     () => filterDashboardData({ data, system, period: primaryPeriod, periods: effectivePeriods, selectedCreditors: selectedCredores, businessDayMap, selectedBusinessDayLimit }),
     [businessDayMap, data, effectivePeriods, primaryPeriod, selectedBusinessDayLimit, selectedCredores, system]
+  );
+  const portfolioFiltered = useMemo(
+    () => filterDashboardData({ data, system, period: primaryPortfolioPeriod, periods: portfolioPeriods, selectedCreditors: selectedCredores, businessDayMap: new Map(), selectedBusinessDayLimit: null }),
+    [data, portfolioPeriods, primaryPortfolioPeriod, selectedCredores, system]
   );
 
   const metrics = useMemo(() => {
@@ -415,6 +423,11 @@ function DashboardPage() {
   const selectedPeriodLabel = selectedPeriodList.length === 1 ? periodLabel(primaryPeriod) : `${selectedPeriodList.length} meses`;
   const selectedPeriodTitle = selectedPeriodList.length === 1 ? periodLabel(primaryPeriod, true) : `${selectedPeriodList.length} meses selecionados`;
   const selectedPeriodRange = selectedPeriodList.length === 1 ? periodRangeLabel(primaryPeriod) : `${periodLabel([...selectedPeriodList].sort()[0] ?? primaryPeriod)} a ${periodLabel(selectedPeriodList[0] ?? primaryPeriod)}`;
+  const visiblePeriodList = useMemo(() => Array.from(visiblePeriods).sort().reverse(), [visiblePeriods]);
+  const visiblePrimaryPeriod = visiblePeriodList[0] ?? primaryPeriod;
+  const visiblePeriodLabel = visiblePeriodList.length === 1 ? periodLabel(visiblePrimaryPeriod) : `${visiblePeriodList.length} meses`;
+  const portfolioPeriodTitle = portfolioPeriodList.length === 1 ? periodLabel(primaryPortfolioPeriod, true) : `${portfolioPeriodList.length} meses selecionados`;
+  const portfolioPeriodRange = portfolioPeriodList.length === 1 ? periodRangeLabel(primaryPortfolioPeriod) : `${periodLabel([...portfolioPeriodList].sort()[0] ?? primaryPortfolioPeriod)} a ${periodLabel(primaryPortfolioPeriod)}`;
   const activeBaseCredorRows = useMemo(
     () => activeBaseReport.by_credor.map((row) => ({ name: row.credor, value: row.processos })),
     [activeBaseReport.by_credor]
@@ -442,8 +455,8 @@ function DashboardPage() {
             ? 'Falha ao atualizar'
           : 'Cache ainda não gerado';
   const portfolioView = useMemo(() => {
-    const recoveredByCreditor = groupBy(filtered.baixas, (row) => row.credor || 'OUTROS');
-    const agreementsByCreditor = groupBy(filtered.acordos, (row) => row.credor || 'OUTROS');
+    const recoveredByCreditor = groupBy(portfolioFiltered.baixas, (row) => row.credor || 'OUTROS');
+    const agreementsByCreditor = groupBy(portfolioFiltered.acordos, (row) => row.credor || 'OUTROS');
     const byCreditor = Object.entries(groupBy(portfolioData, (row: PortfolioEntry) => row.credor))
       .map(([credor, rows]) => {
         const valorEntrada = rows.reduce((sum, row) => sum + safe(row.tottit || row.valor_imp), 0);
@@ -489,13 +502,14 @@ function DashboardPage() {
       totalBorderos: byCreditor.reduce((sum, row) => sum + row.borderos, 0),
       totalAcordos: byCreditor.reduce((sum, row) => sum + row.acordos, 0),
     };
-  }, [filtered.acordos, filtered.baixas, portfolioData]);
+  }, [portfolioData, portfolioFiltered.acordos, portfolioFiltered.baixas]);
 
   function toggleCredor(credor: string) {
     setSelectedCredores((current) => {
-      const next = new Set(current);
+      const next = new Set(current.size === 0 ? allCredores : current);
       if (next.has(credor)) next.delete(credor);
       else next.add(credor);
+      if (next.size === allCredores.length) return new Set();
       return next;
     });
   }
@@ -535,13 +549,13 @@ function DashboardPage() {
               <div className="credor-menu">
                 <div className="credor-menu-actions">
                   <button type="button" onClick={() => setSelectedCredores(new Set())}>Limpar</button>
-                  <button type="button" onClick={() => setSelectedCredores(new Set(allCredores))}>Todos</button>
+                  <button type="button" onClick={() => setSelectedCredores(new Set())}>Todos</button>
                 </div>
                 {allCredores.map((credor) => (
                   <label key={credor}>
-                    <input type="checkbox" checked={selectedCredores.has(credor)} onChange={() => toggleCredor(credor)} />
+                    <input type="checkbox" checked={selectedCredores.size === 0 || selectedCredores.has(credor)} onChange={() => toggleCredor(credor)} />
                     <span>{credor}</span>
-                    {selectedCredores.has(credor) ? <Check size={14} /> : null}
+                    {selectedCredores.size === 0 || selectedCredores.has(credor) ? <Check size={14} /> : null}
                   </label>
                 ))}
               </div>
@@ -551,7 +565,7 @@ function DashboardPage() {
           <div className="credor-filter">
             <button type="button" className="control-btn" onClick={() => setPeriodFilterOpen((current) => !current)}>
               Meses
-              <strong>{selectedPeriodLabel}</strong>
+              <strong>{visiblePeriodLabel}</strong>
               <ChevronDown size={14} />
             </button>
             {periodFilterOpen ? (
@@ -562,9 +576,9 @@ function DashboardPage() {
                 </div>
                 {periods.map((item) => (
                   <label key={item}>
-                    <input type="checkbox" checked={effectivePeriods.has(item)} onChange={() => togglePeriodFilter(item)} />
+                    <input type="checkbox" checked={visiblePeriods.has(item)} onChange={() => togglePeriodFilter(item)} />
                     <span>{periodLabel(item)}</span>
-                    {effectivePeriods.has(item) ? <Check size={14} /> : null}
+                    {visiblePeriods.has(item) ? <Check size={14} /> : null}
                   </label>
                 ))}
               </div>
@@ -606,11 +620,11 @@ function DashboardPage() {
                   <img src={logoUrl} alt="Portal do Acordo" />
                 </div>
                 <p>Resultados</p>
-                <h1><span>{selectedPeriodTitle}</span></h1>
+                <h1><span>{portfolioPeriodTitle}</span></h1>
               </div>
               <div className="hero-meta">
-                <strong>{selectedPeriodLabel}</strong>
-                <span>{selectedPeriodRange}</span>
+                <strong>{portfolioPeriodList.length === 1 ? periodLabel(primaryPortfolioPeriod) : `${portfolioPeriodList.length} meses`}</strong>
+                <span>{portfolioPeriodRange}</span>
                 <span>{number(businessDays)} dias úteis</span>
                 <em>{systemLabel(system)}</em>
               </div>
@@ -1028,30 +1042,6 @@ function DashboardPage() {
                       <BarRows rows={portfolioView.monthly.map((row) => ({ name: row.label, value: row.processos }))} color={color} valueLabel="Processos" />
                     </Panel>
                   </div>
-                </Section>
-
-                <Section num="03" title="Importações">
-                  <Panel title="Últimos borderôs válidos" meta="Regras por usuário e idcredor">
-                    {(expanded) => (
-                      <table>
-                        <thead>
-                          <tr><th>Data</th><th>Carteira</th><th>Arquivo</th><th className="right">Títulos</th><th className="right">Processos</th><th className="right">Valor</th></tr>
-                        </thead>
-                        <tbody>
-                          {(expanded ? portfolioData : portfolioData.slice(0, 12)).map((row) => (
-                            <tr key={row.id}>
-                              <td>{dayLabel(row.data)}</td>
-                              <td className="bold">{row.credor}</td>
-                              <td className="muted">{row.nomearquivo}</td>
-                              <td className="right">{number(row.qtdetit)}</td>
-                              <td className="right">{number(row.qtdeproc)}</td>
-                              <td className="right">{money(row.tottit || row.valor_imp)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </Panel>
                 </Section>
               </>
             ) : null}
