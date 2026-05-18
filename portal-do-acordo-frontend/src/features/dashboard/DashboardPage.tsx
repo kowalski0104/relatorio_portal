@@ -426,9 +426,11 @@ function DashboardPage() {
       ? 'Cache atualizado'
       : activeBaseReport.status === 'refreshing'
         ? 'Cache atualizando'
-        : activeBaseReport.status === 'error'
-          ? 'Falha ao atualizar'
-          : 'Cache ainda não gerado';
+        : activeBaseReport.status === 'partial'
+          ? 'Vencimentos pendentes'
+          : activeBaseReport.status === 'error'
+            ? 'Falha ao atualizar'
+            : 'Cache ainda não gerado';
 
   function toggleCredor(credor: string) {
     setSelectedCredores((current) => {
@@ -821,7 +823,7 @@ function DashboardPage() {
                 <strong>{number(activeBaseReport.total_processos)} processos</strong>
                 <span>{selectedCredores.size === 0 ? 'Todos os credores' : `${number(selectedCredores.size)} credores selecionados`}</span>
                 <span>{activeBaseStatusLabel}</span>
-                <em>{dateTime(activeBaseReport.updated_at)}</em>
+                <em>{activeBaseReport.aging_complete ? dateTime(activeBaseReport.aging_updated_at ?? activeBaseReport.updated_at) : dateTime(activeBaseReport.updated_at)}</em>
               </div>
             </div>
             <div className="kpi-row">
@@ -839,7 +841,10 @@ function DashboardPage() {
               <>
                 {activeBaseReport.status !== 'ready' ? (
                   <div className={activeBaseReport.status === 'error' ? 'error-state' : 'loading-state'}>
-                    {activeBaseReport.error ?? 'A Base Ativa está sendo atualizada em segundo plano. Quando terminar, a tela passa a usar o cache local.'}
+                    {activeBaseReport.error ??
+                      (activeBaseReport.status === 'partial'
+                        ? 'Os processos por credor já foram carregados. Os vencimentos ainda não terminaram dentro do tempo limite.'
+                        : 'A Base Ativa está sendo atualizada em segundo plano. Quando terminar, a tela passa a usar o cache local.')}
                   </div>
                 ) : null}
 

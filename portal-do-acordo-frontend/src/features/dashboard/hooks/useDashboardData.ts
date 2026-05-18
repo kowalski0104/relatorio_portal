@@ -6,6 +6,7 @@ import { monthKey } from '../utils/dates';
 const EMPTY_DASHBOARD_DATA: DashboardData = { baixas: [], acordos: [], acessos: [] };
 const EMPTY_ACTIVE_BASE_REPORT: ActiveBaseReport = {
   updated_at: null,
+  aging_updated_at: null,
   status: 'empty',
   total_processos: 0,
   total_credores: 0,
