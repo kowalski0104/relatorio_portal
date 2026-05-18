@@ -46,6 +46,7 @@ const CACHE_FILE = process.env.ACTIVE_BASE_CACHE_FILE ?? path.resolve(process.cw
 const REFRESH_HOUR = Number(process.env.ACTIVE_BASE_REFRESH_HOUR ?? 5);
 const SUMMARY_TIMEOUT_MS = Number(process.env.ACTIVE_BASE_SUMMARY_TIMEOUT_MS ?? 60000);
 const AGING_TIMEOUT_MS = Number(process.env.ACTIVE_BASE_AGING_TIMEOUT_MS ?? 180000);
+const AGING_CREDITOR_TIMEOUT_MS = Number(process.env.ACTIVE_BASE_AGING_CREDITOR_TIMEOUT_MS ?? 300000);
 const REFRESHING_STALE_MS = Number(process.env.ACTIVE_BASE_REFRESHING_STALE_MS ?? 5 * 60 * 1000);
 
 let refreshPromise: Promise<ActiveBaseCache> | null = null;
@@ -59,6 +60,21 @@ function emptyCache(): ActiveBaseCache {
     by_credor: [],
     aging: [],
   };
+}
+
+function creditorKey(row: Pick<ActiveBaseCreditorCacheRow, 'sistema' | 'credor'>) {
+  return `${row.sistema}::${row.credor}`;
+}
+
+function hasCompleteAging(creditors: ActiveBaseCreditorCacheRow[], aging: ActiveBaseAgingCacheRow[]) {
+  if (creditors.length === 0) return false;
+  const agingKeys = new Set(aging.map(creditorKey));
+  return creditors.every((row) => agingKeys.has(creditorKey(row)));
+}
+
+function pendingAgingCreditors(creditors: ActiveBaseCreditorCacheRow[], aging: ActiveBaseAgingCacheRow[]) {
+  const agingKeys = new Set(aging.map(creditorKey));
+  return creditors.filter((row) => !agingKeys.has(creditorKey(row)));
 }
 
 async function readCache(): Promise<ActiveBaseCache> {
@@ -79,10 +95,11 @@ async function readCache(): Promise<ActiveBaseCache> {
 
     if (cache.status === 'refreshing' && cache.updated_at && Date.now() - new Date(cache.updated_at).getTime() > REFRESHING_STALE_MS) {
       const hasCreditorData = cache.by_credor.length > 0;
+      const completeAging = hasCompleteAging(cache.by_credor, cache.aging);
       return {
         ...cache,
-        status: cache.aging.length > 0 ? 'ready' : hasCreditorData ? 'partial' : 'error',
-        error: cache.aging.length > 0 || hasCreditorData ? undefined : cache.error ?? 'Não foi possível atualizar as Bases.',
+        status: completeAging ? 'ready' : hasCreditorData ? 'partial' : 'error',
+        error: completeAging || hasCreditorData ? undefined : cache.error ?? 'Nao foi possivel atualizar as Bases.',
       };
     }
 
@@ -166,7 +183,7 @@ async function queryActiveBaseByCreditor(prisma: PrismaClient, empresaId: number
   }));
 }
 
-async function queryActiveBaseAging(prisma: PrismaClient, empresaId: number) {
+async function queryActiveBaseAgingForCreditor(prisma: PrismaClient, empresaId: number, credor: string) {
   const rows = await withStatementTimeout(prisma, AGING_TIMEOUT_MS, (tx) =>
     tx.$queryRawUnsafe<ActiveBaseAgingRawRow[]>(
       `
@@ -178,6 +195,7 @@ async function queryActiveBaseAging(prisma: PrismaClient, empresaId: number) {
           JOIN tb_credor c ON c.id = d.idcredor
           LEFT JOIN tb_processo p ON p.processo = d.processo
           WHERE d.idempresa = $1
+            AND TRIM(c.grupo) = $2
             ${companyFilter(empresaId)}
             AND c.status = 'ATIVO'
             AND (p.status_desc IS NULL OR p.status_desc NOT IN ('DEVOLUCAO','BAIXADO','QUITADO'))
@@ -188,10 +206,13 @@ async function queryActiveBaseAging(prisma: PrismaClient, empresaId: number) {
           SELECT
               ap.processo,
               ap.credor,
-              MIN(t.vencimento)::date AS vencimento_min
+              (
+                SELECT MIN(t.vencimento)::date
+                FROM tb_titulos t
+                WHERE t.processo = ap.processo
+                  AND t.vencimento IS NOT NULL
+              ) AS vencimento_min
           FROM active_processes ap
-          LEFT JOIN tb_titulos t ON t.processo = ap.processo AND t.vencimento IS NOT NULL
-          GROUP BY ap.processo, ap.credor
         )
         SELECT
             credor,
@@ -207,7 +228,8 @@ async function queryActiveBaseAging(prisma: PrismaClient, empresaId: number) {
         GROUP BY credor, faixa
         ORDER BY credor, faixa
       `,
-      empresaId
+      empresaId,
+      credor
     )
   );
 
@@ -218,6 +240,37 @@ async function queryActiveBaseAging(prisma: PrismaClient, empresaId: number) {
     faixa: row.faixa,
     processos: Number(row.processos ?? 0),
   }));
+}
+
+function mergeAgingRows(currentRows: ActiveBaseAgingCacheRow[], newRows: ActiveBaseAgingCacheRow[]) {
+  const newKeys = new Set(newRows.map(creditorKey));
+  return [...currentRows.filter((row) => !newKeys.has(creditorKey(row))), ...newRows];
+}
+
+async function queryActiveBaseAgingByCreditor(creditors: ActiveBaseCreditorCacheRow[], onProgress?: (rows: ActiveBaseAgingCacheRow[]) => Promise<void>) {
+  const clientBySystem = new Map(getLiveClients('total').map(({ empresaId, prisma }) => [systemName(empresaId), { empresaId, prisma }]));
+  const rows: ActiveBaseAgingCacheRow[] = [];
+  const errors: string[] = [];
+
+  for (const creditor of creditors) {
+    const client = clientBySystem.get(creditor.sistema);
+    if (!client) continue;
+
+    try {
+      rows.push(
+        ...(await withHardTimeout(
+          queryActiveBaseAgingForCreditor(client.prisma, client.empresaId, creditor.credor),
+          AGING_CREDITOR_TIMEOUT_MS + 15000,
+          `vencimentos ${creditor.sistema} ${creditor.credor}`
+        ))
+      );
+      if (onProgress) await onProgress(rows);
+    } catch (error) {
+      errors.push(`vencimentos ${creditor.sistema} ${creditor.credor}: ${formatError(error)}`);
+    }
+  }
+
+  return { rows, errors };
 }
 
 export async function refreshActiveBaseCache() {
@@ -244,7 +297,7 @@ export async function refreshActiveBaseCache() {
       const cache: ActiveBaseCache = {
         ...current,
         status: current.by_credor.length > 0 ? 'partial' : 'error',
-        error: errors.join(' | ') || 'Não foi possível atualizar as Bases.',
+        error: errors.join(' | ') || 'Nao foi possivel atualizar as Bases.',
       };
       await writeCache(cache);
       refreshPromise = null;
@@ -260,23 +313,30 @@ export async function refreshActiveBaseCache() {
     };
     await writeCache(partialCache);
 
-    const agingResults = await Promise.all(
-      getLiveClients('total').map(async ({ empresaId, prisma }) => {
-        try {
-          return { rows: await withHardTimeout(queryActiveBaseAging(prisma, empresaId), AGING_TIMEOUT_MS + 15000, `vencimentos ${systemName(empresaId)}`) };
-        } catch (error) {
-          return { rows: [], error: `vencimentos ${systemName(empresaId)}: ${formatError(error)}` };
-        }
-      })
-    );
-    const aging = agingResults.flatMap((result) => result.rows);
-    errors.push(...agingResults.flatMap((result) => (result.error ? [result.error] : [])));
+    const validCreditorKeys = new Set(byCreditor.map(creditorKey));
+    const existingAging = partialCache.aging.filter((row) => validCreditorKeys.has(creditorKey(row)));
+    const pendingBeforeRefresh = pendingAgingCreditors(byCreditor, existingAging).sort((a, b) => a.processos - b.processos);
+    const creditorsToRefresh = pendingBeforeRefresh.length > 0 ? pendingBeforeRefresh : [...byCreditor].sort((a, b) => a.processos - b.processos);
 
+    const agingResult = await queryActiveBaseAgingByCreditor(creditorsToRefresh, async (progressRows) => {
+      const progressAging = mergeAgingRows(existingAging, progressRows);
+      await writeCache({
+        ...partialCache,
+        status: hasCompleteAging(byCreditor, progressAging) ? 'ready' : 'partial',
+        aging_updated_at: new Date().toISOString(),
+        aging: progressAging,
+      });
+    });
+    const aging = mergeAgingRows(existingAging, agingResult.rows);
+    errors.push(...agingResult.errors);
+
+    const completeAging = hasCompleteAging(byCreditor, aging);
+    const pending = pendingAgingCreditors(byCreditor, aging);
     const cache: ActiveBaseCache = {
       ...partialCache,
       aging_updated_at: aging.length > 0 ? new Date().toISOString() : partialCache.aging_updated_at,
-      status: aging.length > 0 ? 'ready' : 'partial',
-      error: errors.length > 0 ? errors.join(' | ') : undefined,
+      status: completeAging ? 'ready' : 'partial',
+      error: errors.length > 0 ? errors.join(' | ') : pending.length > 0 ? `Vencimentos pendentes: ${pending.map((row) => `${row.sistema}/${row.credor}`).join(', ')}` : undefined,
       aging: aging.length > 0 ? aging : partialCache.aging,
     };
     await writeCache(cache);
@@ -297,6 +357,8 @@ export async function getActiveBase(filter: ActiveBaseQuery) {
   const selectedCreditors = new Set((filter.credores ?? []).map((creditor) => creditor.trim()).filter(Boolean));
   const creditorRows = cache.by_credor.filter((row) => selectedSystems.has(row.sistema) && (selectedCreditors.size === 0 || selectedCreditors.has(row.credor)));
   const agingRows = cache.aging.filter((row) => selectedSystems.has(row.sistema) && (selectedCreditors.size === 0 || selectedCreditors.has(row.credor)));
+  const agingComplete = hasCompleteAging(creditorRows, agingRows);
+  const pending = pendingAgingCreditors(creditorRows, agingRows);
 
   const byCreditor = new Map<string, number>();
   const aging = new Map<AgingRange, number>([
@@ -319,11 +381,11 @@ export async function getActiveBase(filter: ActiveBaseQuery) {
     data: {
       updated_at: cache.updated_at,
       aging_updated_at: cache.aging_updated_at,
-      status: cache.status,
-      error: cache.error,
+      status: agingComplete ? 'ready' : cache.status === 'ready' ? 'partial' : cache.status,
+      error: agingComplete ? undefined : pending.length > 0 ? `Vencimentos pendentes: ${pending.map((row) => `${row.sistema}/${row.credor}`).join(', ')}` : cache.error,
       total_processos: creditorRows.reduce((sum, row) => sum + row.processos, 0),
       total_credores: byCreditor.size,
-      aging_complete: cache.status === 'ready' || agingRows.length > 0,
+      aging_complete: agingComplete,
       by_credor: Array.from(byCreditor.entries())
         .map(([credor, processos]) => ({ credor, processos }))
         .sort((a, b) => b.processos - a.processos || a.credor.localeCompare(b.credor, 'pt-BR')),
