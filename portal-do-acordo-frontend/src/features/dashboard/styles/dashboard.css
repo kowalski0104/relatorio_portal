@@ -193,7 +193,7 @@
 }
 
 .hero {
-  background: var(--accent);
+  background: linear-gradient(135deg, #1c4f86 0%, #326fa9 100%);
   color: #fff;
   padding: 44px 48px 0;
   overflow: visible;
@@ -224,7 +224,7 @@
 
 .hero p {
   margin: 0 0 8px;
-  color: rgba(255, 255, 255, .88);
+  color: rgba(255, 255, 255, .9);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: .16em;
@@ -233,7 +233,7 @@
 
 .hero h1 {
   margin: 0;
-  color: #14223a;
+  color: #fff;
   font-size: 38px;
   line-height: 1.08;
   font-weight: 900;
@@ -280,7 +280,7 @@
 }
 
 .hero-meta strong {
-  color: #14223a;
+  color: #fff;
   font-size: 24px;
   line-height: 1;
 }
@@ -338,7 +338,7 @@
 .kpi-row span,
 .metric-card span {
   display: block;
-  color: rgba(20, 34, 58, .76);
+  color: rgba(255, 255, 255, .82);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: .14em;

@@ -46,7 +46,8 @@ const CACHE_FILE = process.env.ACTIVE_BASE_CACHE_FILE ?? path.resolve(process.cw
 const REFRESH_HOUR = Number(process.env.ACTIVE_BASE_REFRESH_HOUR ?? 5);
 const SUMMARY_TIMEOUT_MS = Number(process.env.ACTIVE_BASE_SUMMARY_TIMEOUT_MS ?? 60000);
 const AGING_TIMEOUT_MS = Number(process.env.ACTIVE_BASE_AGING_TIMEOUT_MS ?? 180000);
-const AGING_CREDITOR_TIMEOUT_MS = Number(process.env.ACTIVE_BASE_AGING_CREDITOR_TIMEOUT_MS ?? 300000);
+const AGING_CREDITOR_TIMEOUT_MS = Number(process.env.ACTIVE_BASE_AGING_CREDITOR_TIMEOUT_MS ?? 900000);
+const AGING_BATCH_SIZE = Number(process.env.ACTIVE_BASE_AGING_BATCH_SIZE ?? 1000);
 const REFRESHING_STALE_MS = Number(process.env.ACTIVE_BASE_REFRESHING_STALE_MS ?? 5 * 60 * 1000);
 
 let refreshPromise: Promise<ActiveBaseCache> | null = null;
@@ -184,13 +185,12 @@ async function queryActiveBaseByCreditor(prisma: PrismaClient, empresaId: number
 }
 
 async function queryActiveBaseAgingForCreditor(prisma: PrismaClient, empresaId: number, credor: string) {
-  const rows = await withStatementTimeout(prisma, AGING_TIMEOUT_MS, (tx) =>
-    tx.$queryRawUnsafe<ActiveBaseAgingRawRow[]>(
+  const countRows = await withStatementTimeout(prisma, SUMMARY_TIMEOUT_MS, (tx) =>
+    tx.$queryRawUnsafe<Array<{ total: number | string }>>(
       `
-        WITH active_processes AS (
-          SELECT DISTINCT
-              d.processo,
-              TRIM(c.grupo) AS credor
+        SELECT COUNT(*)::bigint AS total
+        FROM (
+          SELECT DISTINCT d.processo
           FROM tb_devedor d
           JOIN tb_credor c ON c.id = d.idcredor
           LEFT JOIN tb_processo p ON p.processo = d.processo
@@ -201,6 +201,55 @@ async function queryActiveBaseAgingForCreditor(prisma: PrismaClient, empresaId: 
             AND (p.status_desc IS NULL OR p.status_desc NOT IN ('DEVOLUCAO','BAIXADO','QUITADO'))
             AND c.grupo IS NOT NULL
             AND TRIM(c.grupo) <> ''
+        ) base
+      `,
+      empresaId,
+      credor
+    )
+  );
+
+  const sistema = systemName(empresaId);
+  const total = Number(countRows[0]?.total ?? 0);
+  const totals = new Map<AgingRange, number>();
+
+  for (let offset = 0; offset < total; offset += AGING_BATCH_SIZE) {
+    const batchRows = await queryActiveBaseAgingBatch(prisma, empresaId, credor, AGING_BATCH_SIZE, offset);
+    for (const row of batchRows) {
+      totals.set(row.faixa, (totals.get(row.faixa) ?? 0) + Number(row.processos ?? 0));
+    }
+  }
+
+  return Array.from(totals.entries()).map(([faixa, processos]) => ({
+    sistema,
+    credor,
+    faixa,
+    processos,
+  }));
+}
+
+async function queryActiveBaseAgingBatch(prisma: PrismaClient, empresaId: number, credor: string, limit: number, offset: number) {
+  return withStatementTimeout(prisma, AGING_TIMEOUT_MS, (tx) =>
+    tx.$queryRawUnsafe<ActiveBaseAgingRawRow[]>(
+      `
+        WITH active_processes AS (
+          SELECT processo, credor
+          FROM (
+            SELECT DISTINCT
+                d.processo,
+                TRIM(c.grupo) AS credor
+            FROM tb_devedor d
+            JOIN tb_credor c ON c.id = d.idcredor
+            LEFT JOIN tb_processo p ON p.processo = d.processo
+            WHERE d.idempresa = $1
+              AND TRIM(c.grupo) = $2
+              ${companyFilter(empresaId)}
+              AND c.status = 'ATIVO'
+              AND (p.status_desc IS NULL OR p.status_desc NOT IN ('DEVOLUCAO','BAIXADO','QUITADO'))
+              AND c.grupo IS NOT NULL
+              AND TRIM(c.grupo) <> ''
+            ORDER BY d.processo
+            LIMIT $3 OFFSET $4
+          ) base
         ),
         process_due_dates AS (
           SELECT
@@ -229,17 +278,11 @@ async function queryActiveBaseAgingForCreditor(prisma: PrismaClient, empresaId: 
         ORDER BY credor, faixa
       `,
       empresaId,
-      credor
+      credor,
+      limit,
+      offset
     )
   );
-
-  const sistema = systemName(empresaId);
-  return rows.map((row) => ({
-    sistema,
-    credor: String(row.credor),
-    faixa: row.faixa,
-    processos: Number(row.processos ?? 0),
-  }));
 }
 
 function mergeAgingRows(currentRows: ActiveBaseAgingCacheRow[], newRows: ActiveBaseAgingCacheRow[]) {
