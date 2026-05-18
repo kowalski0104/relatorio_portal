@@ -64,6 +64,22 @@ portal-do-acordo-backend/database/indexes.sql
 
 Execute esse script em cada banco do Portal do Acordo. Ele usa `CREATE INDEX CONCURRENTLY`, então não deve ser executado dentro de uma transação manual.
 
+## Cache local da Base Ativa
+
+A aba Base Ativa usa um cache local em JSON para não rodar a consulta pesada a cada acesso. Com o backend ligado, o cache é atualizado automaticamente uma vez por dia no horário configurado por `ACTIVE_BASE_REFRESH_HOUR`.
+
+Arquivo padrão:
+
+```text
+portal-do-acordo-backend/data/base_ativa_cache.json
+```
+
+Para disparar uma atualização manual sem travar a tela:
+
+```powershell
+Invoke-WebRequest -Method Post http://localhost:3001/api/base-ativa/refresh
+```
+
 ## Deploy na Vercel
 
 O projeto deve ser publicado como dois projetos separados na Vercel.

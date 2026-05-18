@@ -18,9 +18,7 @@ export const custosQuerySchema = z.object({
   sistema: z.enum(['consulth', 'sisth', 'total']).optional().default('total'),
 });
 
-export const activeBaseQuerySchema = baseQuerySchema.extend({
-  limit: z.coerce.number().int().min(50).max(5000).optional().default(1000),
-});
+export const activeBaseQuerySchema = baseQuerySchema;
 
 export type BaseQuery = z.infer<typeof baseQuerySchema>;
 export type CustosQuery = z.infer<typeof custosQuerySchema>;

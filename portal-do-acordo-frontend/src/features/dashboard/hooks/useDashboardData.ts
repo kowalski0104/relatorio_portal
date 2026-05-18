@@ -5,6 +5,8 @@ import { monthKey } from '../utils/dates';
 
 const EMPTY_DASHBOARD_DATA: DashboardData = { baixas: [], acordos: [], acessos: [] };
 const EMPTY_ACTIVE_BASE_REPORT: ActiveBaseReport = {
+  updated_at: null,
+  status: 'empty',
   total_processos: 0,
   total_credores: 0,
   aging_complete: false,
@@ -100,25 +102,32 @@ export function useActiveBaseData(system: SystemFilter, selectedCreditors: Set<s
     if (!enabled) return;
 
     let active = true;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
     setLoading(true);
 
-    fetchActiveBase(system, selectedCreditors)
-      .then((result) => {
+    async function load() {
+      try {
+        const result = await fetchActiveBase(system, selectedCreditors);
         if (!active) return;
         setData(result);
         setError('');
-      })
-      .catch((err) => {
+        if (result.status === 'empty' || result.status === 'refreshing') {
+          retryTimer = setTimeout(load, 30000);
+        }
+      } catch (err) {
         if (!active) return;
         setData(EMPTY_ACTIVE_BASE_REPORT);
         setError(err instanceof Error ? err.message : 'Erro ao carregar base ativa.');
-      })
-      .finally(() => {
+      } finally {
         if (active) setLoading(false);
-      });
+      }
+    }
+
+    void load();
 
     return () => {
       active = false;
+      if (retryTimer) clearTimeout(retryTimer);
     };
   }, [enabled, selectedCreditors, system]);
 

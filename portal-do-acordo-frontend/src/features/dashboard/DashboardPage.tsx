@@ -28,7 +28,7 @@ import type { Access, Agreement, CostsData, DashboardTab, SystemFilter, ThemeMod
 import { groupBy, normalizeCreditorGroup } from './utils/creditors';
 import { businessDayIndexMap, businessDaysInPeriod, dayLabel, isBusinessDay, monthKey, periodLabel, periodRangeLabel, previousPeriod } from './utils/dates';
 import { countBusinessDaysWithData, filterDashboardData, filterPreviousPeriodData, getAvailableCreditors, matchesSystem, summarizeDashboardMetrics } from './utils/dashboardMetrics';
-import { compactMoney, money, number, percent, safeNumber, systemLabel } from './utils/formatters';
+import { compactMoney, dateTime, money, number, percent, safeNumber, systemLabel } from './utils/formatters';
 import './styles/dashboard.css';
 
 const safe = safeNumber;
@@ -421,6 +421,14 @@ function DashboardPage() {
     const byRange = new Map(activeBaseReport.aging.map((row) => [row.faixa, row.processos]));
     return order.map((range) => ({ name: labels[range] ?? range, value: byRange.get(range) ?? 0 }));
   }, [activeBaseReport.aging]);
+  const activeBaseStatusLabel =
+    activeBaseReport.status === 'ready'
+      ? 'Cache atualizado'
+      : activeBaseReport.status === 'refreshing'
+        ? 'Cache atualizando'
+        : activeBaseReport.status === 'error'
+          ? 'Falha ao atualizar'
+          : 'Cache ainda não gerado';
 
   function toggleCredor(credor: string) {
     setSelectedCredores((current) => {
@@ -812,14 +820,14 @@ function DashboardPage() {
               <div className="hero-meta">
                 <strong>{number(activeBaseReport.total_processos)} processos</strong>
                 <span>{selectedCredores.size === 0 ? 'Todos os credores' : `${number(selectedCredores.size)} credores selecionados`}</span>
-                <span>{activeBaseReport.aging_complete ? 'Vencimentos carregados' : 'Vencimentos em otimização'}</span>
-                <em>Somente elegíveis</em>
+                <span>{activeBaseStatusLabel}</span>
+                <em>{dateTime(activeBaseReport.updated_at)}</em>
               </div>
             </div>
             <div className="kpi-row">
               <MetricCard tone="teal" label="Processos ativos" value={number(activeBaseReport.total_processos)} current={activeBaseReport.total_processos} small="Credor ativo + processo elegível" summary="Processos com credor ATIVO e status diferente de devolução, baixado ou quitado." />
               <MetricCard tone="gold" label="Credores" value={number(activeBaseReport.total_credores)} current={activeBaseReport.total_credores} small="Grupos distintos" summary="Quantidade de grupos de credores na base ativa filtrada." />
-              <MetricCard tone="sky" label="Vencimentos" value={activeBaseReport.aging_complete ? 'OK' : 'Pendente'} current={activeBaseReport.aging_complete ? 1 : 0} small="Menor vencimento por processo" summary="Processos agrupados pela idade do menor vencimento." />
+              <MetricCard tone="sky" label="Vencimentos" value={activeBaseReport.aging_complete ? 'OK' : 'Atualizando'} current={activeBaseReport.aging_complete ? 1 : 0} small="Menor vencimento por processo" summary="Processos agrupados pela idade do menor vencimento." />
               <MetricCard tone="rust" label="Faixa crítica" value={number(activeBaseAgingRows.find((row) => row.name === '361+ dias')?.value ?? 0)} current={activeBaseAgingRows.find((row) => row.name === '361+ dias')?.value ?? 0} small="361+ dias" summary="Processos com menor vencimento acima de 360 dias." />
             </div>
           </header>
@@ -829,6 +837,12 @@ function DashboardPage() {
             {activeBaseError ? <div className="error-state">{activeBaseError}</div> : null}
             {!activeBaseLoading && !activeBaseError ? (
               <>
+                {activeBaseReport.status !== 'ready' ? (
+                  <div className={activeBaseReport.status === 'error' ? 'error-state' : 'loading-state'}>
+                    {activeBaseReport.error ?? 'A Base Ativa está sendo atualizada em segundo plano. Quando terminar, a tela passa a usar o cache local.'}
+                  </div>
+                ) : null}
+
                 <Section num="01" title="Base Ativa por Credor">
                   <Panel title="Distribuição de processos" meta={`Top ${Math.min(activeBaseCredorRows.length, 10)}`}>
                     {(expanded) => <BarRows rows={expanded ? activeBaseCredorRows : activeBaseCredorRows.slice(0, 10)} color={color} valueLabel="Processos" />}
@@ -837,9 +851,6 @@ function DashboardPage() {
 
                 <Section num="02" title="Vencimentos da Base">
                   <Panel title="Processos por faixa de vencimento" meta="Menor vencimento por processo">
-                    {!activeBaseReport.aging_complete ? (
-                      <div className="empty-state">A base por vencimento precisa de índice ou pré-processamento no banco para carregar sem timeout.</div>
-                    ) : null}
                     <BarRows rows={activeBaseAgingRows} color={color} valueLabel="Processos" showPercent />
                   </Panel>
                 </Section>

@@ -51,6 +51,9 @@ export type DashboardData = {
 };
 
 export type ActiveBaseReport = {
+  updated_at: string | null;
+  status: 'empty' | 'refreshing' | 'ready' | 'error';
+  error?: string;
   total_processos: number;
   total_credores: number;
   aging_complete: boolean;
