@@ -26,7 +26,7 @@ import { WHATSAPP_CAMPAIGN_DATA, type WhatsappCampaignCredor } from './data/what
 import { useActiveBaseData, useDashboardData, useDashboardSupplementalData, usePortfolioData } from './hooks/useDashboardData';
 import type { Access, Agreement, CostsData, DashboardTab, PortfolioEntry, SystemFilter, ThemeMode } from './types';
 import { groupBy, isNoCreditorSelection, NO_CREDITOR_SELECTION, normalizeCreditorGroup } from './utils/creditors';
-import { businessDayIndexMap, businessDaysInPeriod, dayLabel, isBusinessDay, monthKey, periodLabel, periodRangeLabel, previousPeriod } from './utils/dates';
+import { businessDayIndexMap, businessDaysInPeriod, dayLabel, monthKey, periodLabel, periodRangeLabel, previousPeriod } from './utils/dates';
 import { countBusinessDaysWithData, filterDashboardData, filterPreviousPeriodData, getAvailableCreditors, matchesSystem, summarizeDashboardMetrics } from './utils/dashboardMetrics';
 import { compactMoney, dateTime, money, number, percent, safeNumber, systemLabel } from './utils/formatters';
 import './styles/dashboard.css';
@@ -57,6 +57,21 @@ function DashboardPage() {
   const portfolioPeriodList = useMemo(() => Array.from(portfolioPeriods).sort().reverse(), [portfolioPeriods]);
   const primaryPeriod = selectedPeriodList[0] ?? period;
   const primaryPortfolioPeriod = portfolioPeriodList[0] ?? primaryPeriod;
+  const isMultiPeriod = selectedPeriodList.length > 1;
+  const periodSeries = useMemo(
+    () => [...selectedPeriodList].sort().map((item, index) => ({
+      period: item,
+      key: `period_${item.replace('-', '_')}`,
+      label: periodLabel(item),
+      color: CHART_PALETTE[index % CHART_PALETTE.length],
+    })),
+    [selectedPeriodList]
+  );
+  const comparisonTooltipName = (name: string, item: { payload?: Record<string, string | number> }) => {
+    const series = periodSeries.find((current) => current.label === name);
+    const date = series ? item.payload?.[`${series.key}_date`] : null;
+    return date ? `${name} (${date})` : name;
+  };
   const { costs: custos, communication: comunicacao } = useDashboardSupplementalData(primaryPeriod, system, selectedCredores);
   const { activeBaseReport, activeBaseLoading, activeBaseError } = useActiveBaseData(system, selectedCredores, tab === 'base-ativa');
   const { portfolioData, portfolioLoading, portfolioError } = usePortfolioData(system, portfolioPeriods, selectedCredores, tab === 'carteiras');
@@ -168,17 +183,56 @@ function DashboardPage() {
   const receitaDiaria = useMemo(() => {
     const groups = groupBy(filtered.baixas, (row) => row.data);
     return Object.entries(groups)
-      .map(([date, rows]) => ({ date, label: dayLabel(date), receita: rows.reduce((sum, row) => sum + safe(row.total_pago_portal), 0) }))
-      .sort((a, b) => a.date.localeCompare(b.date));
-  }, [filtered.baixas]);
+      .map(([date, rows]) => ({ date, label: dayLabel(date), businessDay: businessDayMap.get(date) ?? 0, receita: rows.reduce((sum, row) => sum + safe(row.total_pago_portal), 0) }))
+      .filter((row) => row.businessDay > 0)
+      .sort((a, b) => a.businessDay - b.businessDay || a.date.localeCompare(b.date));
+  }, [businessDayMap, filtered.baixas]);
 
   const acordosDiarios = useMemo(() => {
     const groups = groupBy(filtered.acordos, (row) => row.data);
     return Object.entries(groups)
-      .map(([date, rows]) => ({ date, label: dayLabel(date), acordos: rows.length }))
-      .filter((row) => isBusinessDay(row.date))
-      .sort((a, b) => a.date.localeCompare(b.date));
-  }, [filtered.acordos]);
+      .map(([date, rows]) => ({ date, label: dayLabel(date), businessDay: businessDayMap.get(date) ?? 0, acordos: rows.length }))
+      .filter((row) => row.businessDay > 0)
+      .sort((a, b) => a.businessDay - b.businessDay || a.date.localeCompare(b.date));
+  }, [businessDayMap, filtered.acordos]);
+
+  const dailyRevenueComparisonRows = useMemo(() => {
+    const rowsByBusinessDay = new Map<number, Record<string, string | number>>();
+
+    filtered.baixas.forEach((row) => {
+      const businessDay = businessDayMap.get(row.data);
+      if (!businessDay) return;
+      const periodKey = monthKey(row.data);
+      const series = periodSeries.find((item) => item.period === periodKey);
+      if (!series) return;
+
+      const current = rowsByBusinessDay.get(businessDay) ?? { businessDay, label: `${businessDay}º dia útil` };
+      current[series.key] = safe(current[series.key] as number) + safe(row.total_pago_portal);
+      current[`${series.key}_date`] = dayLabel(row.data);
+      rowsByBusinessDay.set(businessDay, current);
+    });
+
+    return Array.from(rowsByBusinessDay.values()).sort((a, b) => Number(a.businessDay) - Number(b.businessDay));
+  }, [businessDayMap, filtered.baixas, periodSeries]);
+
+  const dailyAgreementComparisonRows = useMemo(() => {
+    const rowsByBusinessDay = new Map<number, Record<string, string | number>>();
+
+    filtered.acordos.forEach((row) => {
+      const businessDay = businessDayMap.get(row.data);
+      if (!businessDay) return;
+      const periodKey = monthKey(row.data);
+      const series = periodSeries.find((item) => item.period === periodKey);
+      if (!series) return;
+
+      const current = rowsByBusinessDay.get(businessDay) ?? { businessDay, label: `${businessDay}º dia útil` };
+      current[series.key] = safe(current[series.key] as number) + 1;
+      current[`${series.key}_date`] = dayLabel(row.data);
+      rowsByBusinessDay.set(businessDay, current);
+    });
+
+    return Array.from(rowsByBusinessDay.values()).sort((a, b) => Number(a.businessDay) - Number(b.businessDay));
+  }, [businessDayMap, filtered.acordos, periodSeries]);
 
   const topDays = useMemo(() => {
     const acessosByDay = groupBy(filtered.acessos, (row) => row.data);
@@ -821,29 +875,37 @@ function DashboardPage() {
                 <Panel title="Receita Diária" meta="Por data de baixa">
                   <div className="chart-wrap small">
                     <ResponsiveContainer>
-                      <LineChart data={receitaDiaria}>
+                      <LineChart data={isMultiPeriod ? dailyRevenueComparisonRows : receitaDiaria}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="label" tick={{ fontSize: 10 }} />
                         <YAxis tickFormatter={(value) => `R$${Math.round(Number(value) / 1000)}k`} tick={{ fontSize: 10 }} />
-                        <Tooltip formatter={(value: number) => money(value)} />
+                        <Tooltip formatter={(value: number, name: string, item) => [money(value), isMultiPeriod ? comparisonTooltipName(name, item) : name]} />
                         <Legend verticalAlign="top" height={28} />
-                        <Line type="monotone" dataKey="receita" name="Receita diária" stroke={chartAccent} strokeWidth={2.5} dot={{ r: 3 }} />
+                        {isMultiPeriod ? periodSeries.map((item) => (
+                          <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={item.color} strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
+                        )) : (
+                          <Line type="monotone" dataKey="receita" name="Receita diária" stroke={chartAccent} strokeWidth={2.5} dot={{ r: 3 }} />
+                        )}
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
                 </Panel>
-                <Panel title="Acordos por Dia">
+                <Panel title="Acordos por Dia Útil">
                   <div className="chart-wrap small">
                     <ResponsiveContainer>
-                      <BarChart data={acordosDiarios}>
+                      <BarChart data={isMultiPeriod ? dailyAgreementComparisonRows : acordosDiarios}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="label" tick={{ fontSize: 10 }} />
                         <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
-                        <Tooltip formatter={(value: number) => [`${value} acordos`, 'Quantidade']} />
+                        <Tooltip formatter={(value: number, name: string, item) => [`${value} acordos`, isMultiPeriod ? comparisonTooltipName(name, item) : name]} />
                         <Legend verticalAlign="top" height={28} />
-                        <Bar dataKey="acordos" name="Acordos por dia" fill={chartAccent} radius={[4, 4, 0, 0]}>
-                          {acordosDiarios.map((row, index) => <Cell key={row.date} fill={CHART_PALETTE[index % CHART_PALETTE.length]} />)}
-                        </Bar>
+                        {isMultiPeriod ? periodSeries.map((item) => (
+                          <Bar key={item.key} dataKey={item.key} name={item.label} fill={item.color} radius={[4, 4, 0, 0]} />
+                        )) : (
+                          <Bar dataKey="acordos" name="Acordos por dia útil" fill={chartAccent} radius={[4, 4, 0, 0]}>
+                            {acordosDiarios.map((row, index) => <Cell key={row.date} fill={CHART_PALETTE[index % CHART_PALETTE.length]} />)}
+                          </Bar>
+                        )}
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
