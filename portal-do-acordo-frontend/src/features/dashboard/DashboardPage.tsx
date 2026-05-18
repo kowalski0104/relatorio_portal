@@ -49,7 +49,8 @@ function DashboardPage() {
   const [periodFilterOpen, setPeriodFilterOpen] = useState(false);
   const effectivePeriods = useMemo(() => (selectedPeriods.size > 0 ? selectedPeriods : period ? new Set([period]) : new Set<string>()), [period, selectedPeriods]);
   const portfolioPeriods = useMemo(() => (selectedPeriods.size > 0 ? selectedPeriods : new Set(periods)), [periods, selectedPeriods]);
-  const visiblePeriods = tab === 'carteiras' && selectedPeriods.size === 0 ? portfolioPeriods : effectivePeriods;
+  const dateFilterIgnored = tab === 'base-ativa';
+  const visiblePeriods = (tab === 'carteiras' && selectedPeriods.size === 0) || dateFilterIgnored ? new Set(periods) : effectivePeriods;
   const selectedPeriodList = useMemo(() => Array.from(effectivePeriods).sort().reverse(), [effectivePeriods]);
   const portfolioPeriodList = useMemo(() => Array.from(portfolioPeriods).sort().reverse(), [portfolioPeriods]);
   const primaryPeriod = selectedPeriodList[0] ?? period;
@@ -425,7 +426,7 @@ function DashboardPage() {
   const selectedPeriodRange = selectedPeriodList.length === 1 ? periodRangeLabel(primaryPeriod) : `${periodLabel([...selectedPeriodList].sort()[0] ?? primaryPeriod)} a ${periodLabel(selectedPeriodList[0] ?? primaryPeriod)}`;
   const visiblePeriodList = useMemo(() => Array.from(visiblePeriods).sort().reverse(), [visiblePeriods]);
   const visiblePrimaryPeriod = visiblePeriodList[0] ?? primaryPeriod;
-  const visiblePeriodLabel = visiblePeriodList.length === 1 ? periodLabel(visiblePrimaryPeriod) : `${visiblePeriodList.length} meses`;
+  const visiblePeriodLabel = dateFilterIgnored ? 'Não aplicado' : visiblePeriodList.length === 1 ? periodLabel(visiblePrimaryPeriod) : `${visiblePeriodList.length} meses`;
   const portfolioPeriodTitle = portfolioPeriodList.length === 1 ? periodLabel(primaryPortfolioPeriod, true) : `${portfolioPeriodList.length} meses selecionados`;
   const portfolioPeriodRange = portfolioPeriodList.length === 1 ? periodRangeLabel(primaryPortfolioPeriod) : `${periodLabel([...portfolioPeriodList].sort()[0] ?? primaryPortfolioPeriod)} a ${periodLabel(primaryPortfolioPeriod)}`;
   const activeBaseCredorRows = useMemo(
@@ -563,7 +564,7 @@ function DashboardPage() {
           </div>
 
           <div className="credor-filter">
-            <button type="button" className="control-btn" onClick={() => setPeriodFilterOpen((current) => !current)}>
+            <button type="button" className="control-btn" disabled={dateFilterIgnored} onClick={() => setPeriodFilterOpen((current) => !current)}>
               Meses
               <strong>{visiblePeriodLabel}</strong>
               <ChevronDown size={14} />
@@ -584,7 +585,7 @@ function DashboardPage() {
               </div>
             ) : null}
           </div>
-          <select value={businessDayLimit} onChange={(event) => setBusinessDayLimit(event.target.value)} aria-label="Dias úteis">
+          <select value={dateFilterIgnored ? 'all' : businessDayLimit} disabled={dateFilterIgnored} onChange={(event) => setBusinessDayLimit(event.target.value)} aria-label="Dias úteis">
             <option value="all">Todos os dias úteis</option>
             {selectedPeriodList.length === 1 ? Array.from({ length: businessDays }, (_, index) => index + 1).map((day) => (
               <option key={day} value={day}>{day} dias úteis</option>
