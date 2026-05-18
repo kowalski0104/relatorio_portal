@@ -48,9 +48,9 @@ function DashboardPage() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [periodFilterOpen, setPeriodFilterOpen] = useState(false);
   const effectivePeriods = useMemo(() => (selectedPeriods.size > 0 ? selectedPeriods : period ? new Set([period]) : new Set<string>()), [period, selectedPeriods]);
-  const portfolioPeriods = useMemo(() => (selectedPeriods.size > 0 ? selectedPeriods : new Set(periods)), [periods, selectedPeriods]);
+  const portfolioPeriods = effectivePeriods;
   const dateFilterIgnored = tab === 'base-ativa';
-  const visiblePeriods = (tab === 'carteiras' && selectedPeriods.size === 0) || dateFilterIgnored ? new Set(periods) : effectivePeriods;
+  const visiblePeriods = dateFilterIgnored ? new Set(periods) : effectivePeriods;
   const selectedPeriodList = useMemo(() => Array.from(effectivePeriods).sort().reverse(), [effectivePeriods]);
   const portfolioPeriodList = useMemo(() => Array.from(portfolioPeriods).sort().reverse(), [portfolioPeriods]);
   const primaryPeriod = selectedPeriodList[0] ?? period;
