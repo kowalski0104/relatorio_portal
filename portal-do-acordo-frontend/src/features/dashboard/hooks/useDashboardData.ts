@@ -1,9 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchActiveBase, fetchCommunication, fetchCosts, fetchDashboardData } from '../services/dashboardApi';
-import type { ActiveBase, CommunicationData, CostsData, DashboardData, SystemFilter } from '../types';
+import type { ActiveBaseReport, CommunicationData, CostsData, DashboardData, SystemFilter } from '../types';
 import { monthKey } from '../utils/dates';
 
 const EMPTY_DASHBOARD_DATA: DashboardData = { baixas: [], acordos: [], acessos: [] };
+const EMPTY_ACTIVE_BASE_REPORT: ActiveBaseReport = {
+  total_processos: 0,
+  total_credores: 0,
+  limit: 100,
+  by_credor: [],
+  rows: [],
+};
 
 export function useDashboardData() {
   const [data, setData] = useState<DashboardData>(EMPTY_DASHBOARD_DATA);
@@ -85,7 +92,7 @@ export function useDashboardSupplementalData(period: string, system: SystemFilte
 }
 
 export function useActiveBaseData(system: SystemFilter, selectedCreditors: Set<string>, enabled: boolean) {
-  const [data, setData] = useState<ActiveBase[]>([]);
+  const [data, setData] = useState<ActiveBaseReport>(EMPTY_ACTIVE_BASE_REPORT);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -103,7 +110,7 @@ export function useActiveBaseData(system: SystemFilter, selectedCreditors: Set<s
       })
       .catch((err) => {
         if (!active) return;
-        setData([]);
+        setData(EMPTY_ACTIVE_BASE_REPORT);
         setError(err instanceof Error ? err.message : 'Erro ao carregar base ativa.');
       })
       .finally(() => {
@@ -115,7 +122,7 @@ export function useActiveBaseData(system: SystemFilter, selectedCreditors: Set<s
     };
   }, [enabled, selectedCreditors, system]);
 
-  return { activeBase: data, activeBaseLoading: loading, activeBaseError: error };
+  return { activeBaseReport: data, activeBaseLoading: loading, activeBaseError: error };
 }
 
 function getAvailablePeriods(data: DashboardData) {

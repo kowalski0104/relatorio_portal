@@ -46,7 +46,7 @@ function DashboardPage() {
   const [businessDayLimit, setBusinessDayLimit] = useState('all');
   const [filterOpen, setFilterOpen] = useState(false);
   const { costs: custos, communication: comunicacao } = useDashboardSupplementalData(period, system, selectedCredores);
-  const { activeBase, activeBaseLoading, activeBaseError } = useActiveBaseData(system, selectedCredores, tab === 'base-ativa');
+  const { activeBaseReport, activeBaseLoading, activeBaseError } = useActiveBaseData(system, selectedCredores, tab === 'base-ativa');
 
   useEffect(() => {
     window.localStorage.setItem('portal-theme', theme);
@@ -405,12 +405,11 @@ function DashboardPage() {
       .sort((a, b) => a.mes.localeCompare(b.mes));
   }, [comunicacaoView.envios.emails, comunicacaoView.mensal, data.acessos, data.acordos, system, whatsappCampaignEnabled, whatsappCampaignTotals.clicked, whatsappCampaignTotals.envios]);
   const selectedLabel = selectedCredores.size === 0 || selectedCredores.size === allCredores.length ? 'Todos' : `${selectedCredores.size}/${allCredores.length}`;
-  const activeBaseCredorRows = useMemo(() => {
-    const groups = groupBy(activeBase, (row) => row.credor || 'OUTROS');
-    return Object.entries(groups)
-      .map(([name, rows]) => ({ name, value: rows.length }))
-      .sort((a, b) => b.value - a.value);
-  }, [activeBase]);
+  const activeBase = activeBaseReport.rows;
+  const activeBaseCredorRows = useMemo(
+    () => activeBaseReport.by_credor.map((row) => ({ name: row.credor, value: row.processos })),
+    [activeBaseReport.by_credor]
+  );
   const activeBaseWithDueDates = useMemo(() => activeBase.filter((row) => row.vencimento_min).length, [activeBase]);
   const activeBaseNearestDueDate = useMemo(() => {
     return activeBase
@@ -807,16 +806,16 @@ function DashboardPage() {
                 <h1><span>{systemLabel(system)}</span></h1>
               </div>
               <div className="hero-meta">
-                <strong>{number(activeBase.length)} processos</strong>
+                <strong>{number(activeBaseReport.total_processos)} processos</strong>
                 <span>{selectedCredores.size === 0 ? 'Todos os credores' : `${number(selectedCredores.size)} credores selecionados`}</span>
                 <span>{number(activeBaseWithDueDates)} com vencimento</span>
                 <em>Somente elegíveis</em>
               </div>
             </div>
             <div className="kpi-row">
-              <MetricCard tone="teal" label="Processos ativos" value={number(activeBase.length)} current={activeBase.length} small="Credor ativo + processo elegível" summary="Processos com credor ATIVO e status diferente de devolução, baixado ou quitado." />
-              <MetricCard tone="gold" label="Credores" value={number(activeBaseCredorRows.length)} current={activeBaseCredorRows.length} small="Grupos distintos" summary="Quantidade de grupos de credores na base ativa filtrada." />
-              <MetricCard tone="sky" label="Com vencimento" value={number(activeBaseWithDueDates)} current={activeBaseWithDueDates} small="tb_titulos" summary="Processos ativos com ao menos um vencimento localizado." />
+              <MetricCard tone="teal" label="Processos ativos" value={number(activeBaseReport.total_processos)} current={activeBaseReport.total_processos} small="Credor ativo + processo elegível" summary="Processos com credor ATIVO e status diferente de devolução, baixado ou quitado." />
+              <MetricCard tone="gold" label="Credores" value={number(activeBaseReport.total_credores)} current={activeBaseReport.total_credores} small="Grupos distintos" summary="Quantidade de grupos de credores na base ativa filtrada." />
+              <MetricCard tone="sky" label="Com vencimento" value={number(activeBaseWithDueDates)} current={activeBaseWithDueDates} small={`Amostra de ${number(activeBase.length)}`} summary="Processos carregados com ao menos um vencimento localizado." />
               <MetricCard tone="rust" label="Menor vencimento" value={activeBaseNearestDueDate ? dayLabel(activeBaseNearestDueDate) : '--'} current={activeBaseWithDueDates} small={activeBaseNearestDueDate?.slice(0, 4) ?? 'Sem data'} summary="Menor vencimento encontrado entre os títulos da base ativa." />
             </div>
           </header>
@@ -826,6 +825,11 @@ function DashboardPage() {
             {activeBaseError ? <div className="error-state">{activeBaseError}</div> : null}
             {!activeBaseLoading && !activeBaseError ? (
               <>
+                {activeBaseReport.total_processos > activeBase.length ? (
+                  <div className="notice">
+                    <strong>Detalhamento limitado:</strong> a distribuição por credor considera a base completa, mas a tabela carrega os primeiros {number(activeBase.length)} processos para manter a consulta rápida.
+                  </div>
+                ) : null}
                 <Section num="01" title="Base Ativa por Credor">
                   <Panel title="Distribuição de processos" meta={`Top ${Math.min(activeBaseCredorRows.length, 10)}`}>
                     {(expanded) => <BarRows rows={expanded ? activeBaseCredorRows : activeBaseCredorRows.slice(0, 10)} color={color} valueLabel="Processos" />}
@@ -833,7 +837,7 @@ function DashboardPage() {
                 </Section>
 
                 <Section num="02" title="Processos da Base Ativa">
-                  <Panel title="Base ativa com vencimentos" meta={`${number(activeBase.length)} registros`}>
+                  <Panel title="Base ativa com vencimentos" meta={`${number(activeBase.length)} de ${number(activeBaseReport.total_processos)} registros`}>
                     {(expanded) => (
                       <table>
                         <thead>

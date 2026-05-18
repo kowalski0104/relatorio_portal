@@ -62,6 +62,17 @@ export type ActiveBase = {
   vencimento_medio: string | null;
 };
 
+export type ActiveBaseReport = {
+  total_processos: number;
+  total_credores: number;
+  limit: number;
+  by_credor: Array<{
+    credor: string;
+    processos: number;
+  }>;
+  rows: ActiveBase[];
+};
+
 export type CostsData = {
   periodo: string;
   categories: { name: string; value: number }[];

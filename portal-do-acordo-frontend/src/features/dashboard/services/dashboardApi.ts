@@ -1,4 +1,4 @@
-import type { Access, ActiveBase, Agreement, CommunicationData, CostsData, DashboardData, Payment, SystemFilter } from '../types';
+import type { Access, ActiveBaseReport, Agreement, CommunicationData, CostsData, DashboardData, Payment, SystemFilter } from '../types';
 
 export async function fetchDataset<T>(url: string): Promise<T[]> {
   const response = await fetch(apiUrl(url));
@@ -35,10 +35,13 @@ export async function fetchCommunication(periodo: string, sistema: SystemFilter,
   return payload.data ?? null;
 }
 
-export async function fetchActiveBase(sistema: SystemFilter, credores: Set<string>): Promise<ActiveBase[]> {
-  const params = new URLSearchParams({ sistema });
+export async function fetchActiveBase(sistema: SystemFilter, credores: Set<string>, limit = 100): Promise<ActiveBaseReport> {
+  const params = new URLSearchParams({ sistema, limit: String(limit) });
   if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
-  return fetchDataset<ActiveBase>(`/api/base-ativa?${params.toString()}`);
+  const response = await fetch(apiUrl(`/api/base-ativa?${params.toString()}`));
+  if (!response.ok) throw new Error(`Falha ao carregar /api/base-ativa: ${response.status}`);
+  const payload = await response.json();
+  return payload.data ?? { total_processos: 0, total_credores: 0, limit, by_credor: [], rows: [] };
 }
 
 function apiUrl(path: string) {
