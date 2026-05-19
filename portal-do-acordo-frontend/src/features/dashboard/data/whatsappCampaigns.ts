@@ -19,14 +19,22 @@ export type WhatsappCampaignSummary = {
   totalCost: number;
 };
 
+export type WhatsappCampaignDaily = {
+  data: string;
+  envios: number;
+  clicked: number;
+};
+
 export type WhatsappCampaignPeriodData = {
   summary: WhatsappCampaignSummary;
+  daily: WhatsappCampaignDaily[];
   rows: WhatsappCampaignCredor[];
 };
 
 export const WHATSAPP_CAMPAIGN_DATA: Record<string, WhatsappCampaignPeriodData> = {
   '2026-03': {
     summary: { campaignRows: 138412, contactRows: 97905, matched: 63334, unmatched: 75078, failed: 29357, billable: 109055, clicked: 7746, totalCost: 5452.75 },
+    daily: [{ data: '2026-03-02', envios: 5257, clicked: 570 }, { data: '2026-03-04', envios: 9412, clicked: 0 }, { data: '2026-03-06', envios: 608, clicked: 62 }, { data: '2026-03-09', envios: 3985, clicked: 0 }, { data: '2026-03-10', envios: 913, clicked: 158 }, { data: '2026-03-11', envios: 4380, clicked: 270 }, { data: '2026-03-12', envios: 1803, clicked: 220 }, { data: '2026-03-13', envios: 5731, clicked: 676 }, { data: '2026-03-16', envios: 19942, clicked: 2451 }, { data: '2026-03-17', envios: 1121, clicked: 92 }, { data: '2026-03-18', envios: 12792, clicked: 869 }, { data: '2026-03-19', envios: 4742, clicked: 118 }, { data: '2026-03-20', envios: 6027, clicked: 408 }, { data: '2026-03-23', envios: 9946, clicked: 444 }, { data: '2026-03-25', envios: 3700, clicked: 382 }, { data: '2026-03-27', envios: 4839, clicked: 251 }, { data: '2026-03-30', envios: 6445, clicked: 379 }, { data: '2026-03-31', envios: 7412, clicked: 396 }],
     rows: [
       { credor: 'SEM CREDOR', envios: 74780, delivered: 21544, read: 43392, failed: 298, clicked: 4751, custo: 3739 },
       { credor: 'GRUPO JTI', envios: 14155, delivered: 3925, read: 8346, failed: 2574, clicked: 846, custo: 707.75 },
@@ -60,6 +68,7 @@ export const WHATSAPP_CAMPAIGN_DATA: Record<string, WhatsappCampaignPeriodData> 
   },
   '2026-04': {
     summary: { campaignRows: 118340, contactRows: 97905, matched: 55295, unmatched: 63045, failed: 24410, billable: 93930, clicked: 6455, totalCost: 4696.5 },
+    daily: [{ data: '2026-04-01', envios: 3666, clicked: 351 }, { data: '2026-04-02', envios: 266, clicked: 12 }, { data: '2026-04-06', envios: 3893, clicked: 296 }, { data: '2026-04-07', envios: 3272, clicked: 642 }, { data: '2026-04-08', envios: 2836, clicked: 338 }, { data: '2026-04-09', envios: 6792, clicked: 375 }, { data: '2026-04-10', envios: 2485, clicked: 142 }, { data: '2026-04-13', envios: 3469, clicked: 224 }, { data: '2026-04-14', envios: 2537, clicked: 251 }, { data: '2026-04-15', envios: 5385, clicked: 275 }, { data: '2026-04-16', envios: 9426, clicked: 620 }, { data: '2026-04-17', envios: 1589, clicked: 66 }, { data: '2026-04-20', envios: 8282, clicked: 724 }, { data: '2026-04-22', envios: 6911, clicked: 292 }, { data: '2026-04-23', envios: 12882, clicked: 794 }, { data: '2026-04-24', envios: 654, clicked: 74 }, { data: '2026-04-27', envios: 3296, clicked: 204 }, { data: '2026-04-28', envios: 3896, clicked: 176 }, { data: '2026-04-29', envios: 12393, clicked: 599 }],
     rows: [
       { credor: 'SEM CREDOR', envios: 62838, delivered: 18903, read: 33673, failed: 207, clicked: 3568, custo: 3141.9 },
       { credor: 'GRUPO JTI', envios: 14953, delivered: 4097, read: 8541, failed: 4202, clicked: 992, custo: 747.65 },
@@ -85,6 +94,7 @@ export const WHATSAPP_CAMPAIGN_DATA: Record<string, WhatsappCampaignPeriodData> 
   },
   '2026-05': {
     summary: { campaignRows: 65919, contactRows: 97905, matched: 38642, unmatched: 27277, failed: 21805, billable: 44114, clicked: 2753, totalCost: 2205.7 },
+    daily: [{ data: '2026-05-04', envios: 10680, clicked: 510 }, { data: '2026-05-05', envios: 3117, clicked: 360 }, { data: '2026-05-06', envios: 10267, clicked: 399 }, { data: '2026-05-07', envios: 4854, clicked: 405 }, { data: '2026-05-08', envios: 107, clicked: 25 }, { data: '2026-05-11', envios: 6091, clicked: 340 }, { data: '2026-05-12', envios: 8998, clicked: 714 }, { data: '2026-05-13', envios: 0, clicked: 0 }, { data: '2026-05-14', envios: 0, clicked: 0 }],
     rows: [
       { credor: 'SEM CREDOR', envios: 27258, delivered: 9445, read: 12826, failed: 19, clicked: 1253, custo: 1362.9 },
       { credor: 'GRUPO JTI', envios: 7870, delivered: 2941, read: 3557, failed: 6016, clicked: 377, custo: 393.5 },

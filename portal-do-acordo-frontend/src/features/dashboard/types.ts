@@ -118,4 +118,9 @@ export type CommunicationData = {
     qtde_emails: number;
     mensagens_wati: number;
   }>;
+  diario?: Array<{
+    data: string;
+    qtde_emails: number;
+    mensagens_wati: number;
+  }>;
 };

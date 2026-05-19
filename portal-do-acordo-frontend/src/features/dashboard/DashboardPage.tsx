@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -113,14 +113,21 @@ function DashboardPage() {
   const businessDaySelectValue = dateFilterIgnored || businessDayLimit === 'all' || maxBusinessDaysInSelectedPeriods === 0
     ? 'all'
     : String(Math.min(Number(businessDayLimit), maxBusinessDaysInSelectedPeriods));
+  const matchesSelectedBusinessDays = useCallback((date: string, periodSet = effectivePeriods) => {
+    const datePeriod = monthKey(date);
+    if (periodSet.size > 0 && !periodSet.has(datePeriod)) return false;
+    if (!selectedBusinessDayLimit) return true;
+    const businessDay = businessDayMap.get(date);
+    return Boolean(businessDay && businessDay <= selectedBusinessDayLimit);
+  }, [businessDayMap, effectivePeriods, selectedBusinessDayLimit]);
 
   const filtered = useMemo(
     () => filterDashboardData({ data, system, period: primaryPeriod, periods: effectivePeriods, selectedCreditors: selectedCredores, businessDayMap, selectedBusinessDayLimit }),
     [businessDayMap, data, effectivePeriods, primaryPeriod, selectedBusinessDayLimit, selectedCredores, system]
   );
   const portfolioFiltered = useMemo(
-    () => filterDashboardData({ data, system, period: primaryPortfolioPeriod, periods: portfolioPeriods, selectedCreditors: selectedCredores, businessDayMap: new Map(), selectedBusinessDayLimit: null }),
-    [data, portfolioPeriods, primaryPortfolioPeriod, selectedCredores, system]
+    () => filterDashboardData({ data, system, period: primaryPortfolioPeriod, periods: portfolioPeriods, selectedCreditors: selectedCredores, businessDayMap, selectedBusinessDayLimit }),
+    [businessDayMap, data, portfolioPeriods, primaryPortfolioPeriod, selectedBusinessDayLimit, selectedCredores, system]
   );
   const consideredBusinessDays = selectedBusinessDayLimit
     ? selectedPeriodList.reduce((sum, item) => sum + Math.min(selectedBusinessDayLimit, businessDaysInPeriod(item)), 0)
@@ -320,28 +327,69 @@ function DashboardPage() {
     envios: { emails: 0, whatsapp: 0, custo_whatsapp: 0 },
     por_credor: [],
     mensal: [],
+    diario: [],
   };
-  const whatsappCampaignData = WHATSAPP_CAMPAIGN_DATA[primaryPeriod];
-  const whatsappCampaignEnabled = Boolean(whatsappCampaignData);
+  const whatsappCampaignPeriods = useMemo(
+    () => selectedPeriodList.map((item) => ({ period: item, data: WHATSAPP_CAMPAIGN_DATA[item] })).filter((item) => Boolean(item.data)),
+    [selectedPeriodList]
+  );
+  const whatsappCampaignEnabled = whatsappCampaignPeriods.length > 0;
+  const whatsappCampaignMatched = whatsappCampaignPeriods.reduce((sum, item) => sum + (item.data?.summary.matched ?? 0), 0);
   const whatsappCampaignRows = useMemo(
-    () => whatsappCampaignEnabled
-      ? whatsappCampaignData.rows.filter((row: WhatsappCampaignCredor) => !noCreditorSelected && (selectedCredores.size === 0 || selectedCredores.has(row.credor)))
-      : [],
-    [noCreditorSelected, selectedCredores, whatsappCampaignData, whatsappCampaignEnabled]
+    () => {
+      if (!whatsappCampaignEnabled || noCreditorSelected) return [];
+      const byCredor = new Map<string, WhatsappCampaignCredor>();
+
+      whatsappCampaignPeriods.forEach(({ data: campaign }) => {
+        campaign?.rows
+          .filter((row: WhatsappCampaignCredor) => selectedCredores.size === 0 || selectedCredores.has(row.credor))
+          .forEach((row: WhatsappCampaignCredor) => {
+            const current = byCredor.get(row.credor) ?? { credor: row.credor, envios: 0, delivered: 0, read: 0, failed: 0, clicked: 0, custo: 0 };
+            current.envios += row.envios;
+            current.delivered += row.delivered;
+            current.read += row.read;
+            current.failed += row.failed;
+            current.clicked += row.clicked;
+            current.custo += row.custo;
+            byCredor.set(row.credor, current);
+          });
+      });
+
+      return Array.from(byCredor.values());
+    },
+    [noCreditorSelected, selectedCredores, whatsappCampaignEnabled, whatsappCampaignPeriods]
+  );
+  const whatsappCampaignDailyRows = useMemo(
+    () => whatsappCampaignPeriods.flatMap(({ data: campaign }) => campaign?.daily ?? []).filter((row) => matchesSelectedBusinessDays(row.data)),
+    [matchesSelectedBusinessDays, whatsappCampaignPeriods]
   );
   const whatsappCampaignTotals = useMemo(
-    () => whatsappCampaignRows.reduce(
-      (acc: { envios: number; delivered: number; read: number; failed: number; clicked: number; custo: number }, row: WhatsappCampaignCredor) => ({
-        envios: acc.envios + row.envios,
-        delivered: acc.delivered + row.delivered,
-        read: acc.read + row.read,
-        failed: acc.failed + row.failed,
-        clicked: acc.clicked + row.clicked,
-        custo: acc.custo + row.custo,
-      }),
-      { envios: 0, delivered: 0, read: 0, failed: 0, clicked: 0, custo: 0 }
-    ),
-    [whatsappCampaignRows]
+    () => {
+      if (selectedBusinessDayLimit) {
+        const envios = whatsappCampaignDailyRows.reduce((sum, row) => sum + row.envios, 0);
+        return {
+          envios,
+          delivered: 0,
+          read: 0,
+          failed: 0,
+          clicked: whatsappCampaignDailyRows.reduce((sum, row) => sum + row.clicked, 0),
+          custo: envios * 0.05,
+        };
+      }
+
+      return whatsappCampaignRows.reduce(
+        (acc: { envios: number; delivered: number; read: number; failed: number; clicked: number; custo: number }, row: WhatsappCampaignCredor) => ({
+          envios: acc.envios + row.envios,
+          delivered: acc.delivered + row.delivered,
+          read: acc.read + row.read,
+          failed: acc.failed + row.failed,
+          clicked: acc.clicked + row.clicked,
+          custo: acc.custo + row.custo,
+        }),
+        { envios: 0, delivered: 0, read: 0, failed: 0, clicked: 0, custo: 0 }
+      );
+    },
+    [selectedBusinessDayLimit, whatsappCampaignDailyRows, whatsappCampaignRows]
   );
   const whatsappPerformanceRows = useMemo(() => {
     const acessosByCredor = groupBy(filtered.acessos.filter((row: Access) => row.credor), (row: Access) => row.credor || 'OUTROS');
@@ -413,11 +461,22 @@ function DashboardPage() {
       })(),
     };
   }, [comunicacaoView, custosView.categories, whatsappCampaignEnabled, whatsappCampaignRows, whatsappCampaignTotals.custo]);
+  const communicationDailyRows = useMemo(
+    () => (comunicacaoView.diario ?? []).filter((row) => matchesSelectedBusinessDays(row.data)),
+    [comunicacaoView.diario, matchesSelectedBusinessDays]
+  );
+  const hasCommunicationDailyData = (comunicacaoView.diario ?? []).length > 0;
+  const emailEnvios = hasCommunicationDailyData
+    ? communicationDailyRows.reduce((sum, row) => sum + row.qtde_emails, 0)
+    : comunicacaoView.envios.emails;
+  const storedWhatsappEnvios = hasCommunicationDailyData
+    ? communicationDailyRows.reduce((sum, row) => sum + row.mensagens_wati, 0)
+    : comunicacaoView.envios.whatsapp;
   const cliquesPortal = whatsappCampaignEnabled ? whatsappCampaignTotals.clicked : metrics.acessos;
   const acessosPortal = metrics.acessos;
-  const whatsappEnvios = whatsappCampaignEnabled ? whatsappCampaignTotals.envios : comunicacaoView.envios.whatsapp;
-  const whatsappCusto = whatsappCampaignEnabled ? whatsappCampaignTotals.custo : communicationCosts.watiCost;
-  const totalEnviosCanal = comunicacaoView.envios.emails + whatsappEnvios;
+  const whatsappEnvios = whatsappCampaignEnabled ? whatsappCampaignTotals.envios : storedWhatsappEnvios;
+  const whatsappCusto = whatsappCampaignEnabled ? whatsappCampaignTotals.custo : storedWhatsappEnvios * 0.05;
+  const totalEnviosCanal = emailEnvios + whatsappEnvios;
   const enviosMensuraveis = whatsappEnvios;
   const funnelRows = [
     { name: 'Envio WhatsApp -> clique', value: enviosMensuraveis > 0 ? (cliquesPortal / enviosMensuraveis) * 100 : 0 },
@@ -429,7 +488,7 @@ function DashboardPage() {
     const emailCost = communicationCosts.emailCost;
     const whatsappCost = whatsappCusto;
     return [
-      { canal: 'E-mail', envios: comunicacaoView.envios.emails, custo: emailCost },
+      { canal: 'E-mail', envios: emailEnvios, custo: emailCost },
       { canal: 'WhatsApp', envios: whatsappEnvios, custo: whatsappCost },
     ].map((row) => ({
       ...row,
@@ -437,7 +496,7 @@ function DashboardPage() {
       custoPorAcordo: metrics.acordos > 0 ? row.custo / metrics.acordos : 0,
       custoPorEnvio: row.envios > 0 ? row.custo / row.envios : 0,
     }));
-  }, [communicationCosts.emailCost, comunicacaoView.envios.emails, metrics.acessos, metrics.acordos, whatsappCusto, whatsappEnvios]);
+  }, [communicationCosts.emailCost, emailEnvios, metrics.acessos, metrics.acordos, whatsappCusto, whatsappEnvios]);
   const monthlyEvolution = useMemo(() => {
     const byMonth = new Map<string, {
       mes: string;
@@ -539,10 +598,14 @@ function DashboardPage() {
           : activeBaseReport.status === 'error'
             ? 'Falha ao atualizar'
           : 'Cache ainda não gerado';
+  const filteredPortfolioData = useMemo(
+    () => portfolioData.filter((row) => matchesSelectedBusinessDays(row.data, portfolioPeriods)),
+    [matchesSelectedBusinessDays, portfolioData, portfolioPeriods]
+  );
   const portfolioView = useMemo(() => {
     const recoveredByCreditor = groupBy(portfolioFiltered.baixas, (row) => row.credor || 'OUTROS');
     const agreementsByCreditor = groupBy(portfolioFiltered.acordos, (row) => row.credor || 'OUTROS');
-    const byCreditor = Object.entries(groupBy(portfolioData, (row: PortfolioEntry) => row.credor))
+    const byCreditor = Object.entries(groupBy(filteredPortfolioData, (row: PortfolioEntry) => row.credor))
       .map(([credor, rows]) => {
         const valorEntrada = rows.reduce((sum, row) => sum + safe(row.tottit || row.valor_imp), 0);
         const recuperado = (recoveredByCreditor[credor] ?? []).reduce((sum, row) => sum + safe(row.total_pago_portal), 0);
@@ -567,7 +630,7 @@ function DashboardPage() {
       })
       .sort((a, b) => b.valorEntrada - a.valorEntrada);
 
-    const monthly = Object.entries(groupBy(portfolioData, (row: PortfolioEntry) => row.mes))
+    const monthly = Object.entries(groupBy(filteredPortfolioData, (row: PortfolioEntry) => row.mes))
       .map(([mes, rows]) => ({
         mes,
         label: periodLabel(mes),
@@ -587,7 +650,7 @@ function DashboardPage() {
       totalBorderos: byCreditor.reduce((sum, row) => sum + row.borderos, 0),
       totalAcordos: byCreditor.reduce((sum, row) => sum + row.acordos, 0),
     };
-  }, [portfolioData, portfolioFiltered.acordos, portfolioFiltered.baixas]);
+  }, [filteredPortfolioData, portfolioFiltered.acordos, portfolioFiltered.baixas]);
 
   function toggleCredor(credor: string) {
     setSelectedCredores((current) => {
@@ -967,9 +1030,9 @@ function DashboardPage() {
               </div>
             </div>
             <div className="kpi-row">
-              <MetricCard tone="teal" label="Total comunicação" value={money(communicationCosts.total)} current={communicationCosts.total} small="WhatsApp + e-mail" summary="Soma dos custos de comunicação no período." />
-              <MetricCard tone="gold" label="Custo WhatsApp" value={money(communicationCosts.watiCost)} current={communicationCosts.watiCost} small={`${number(whatsappEnvios)} mensagens`} summary="Custo de WhatsApp calculado a R$ 0,05 por mensagem." />
-              <MetricCard tone="rust" label="Custo e-mail" value={money(communicationCosts.emailCost)} current={communicationCosts.emailCost} small={`${number(comunicacaoView.envios.emails)} e-mails enviados`} summary="Custo fixo mensal de e-mail registrado para o relatório." />
+              <MetricCard tone="teal" label="Total comunicação" value={money(communicationCosts.emailCost + whatsappCusto)} current={communicationCosts.emailCost + whatsappCusto} small="WhatsApp + e-mail" summary="Soma dos custos de comunicação no período." />
+              <MetricCard tone="gold" label="Custo WhatsApp" value={money(whatsappCusto)} current={whatsappCusto} small={`${number(whatsappEnvios)} mensagens`} summary="Custo de WhatsApp calculado a R$ 0,05 por mensagem." />
+              <MetricCard tone="rust" label="Custo e-mail" value={money(communicationCosts.emailCost)} current={communicationCosts.emailCost} small={`${number(emailEnvios)} e-mails enviados`} summary="Custo fixo mensal de e-mail registrado para o relatório." />
             </div>
           </header>
 
@@ -1098,9 +1161,9 @@ function DashboardPage() {
             {portfolioError ? <div className="error-state">{portfolioError}</div> : null}
             {!portfolioLoading && !portfolioError ? (
               <>
-                {portfolioData.length === 0 ? (
+                {filteredPortfolioData.length === 0 ? (
                   <div className="notice">
-                    <strong>Sem importações no período selecionado.</strong> Selecione mais meses, outro sistema ou outros credores para ver o acumulado da carteira.
+                    <strong>Sem importações no período selecionado.</strong> Selecione mais meses, mais dias úteis, outro sistema ou outros credores para ver o acumulado da carteira.
                   </div>
                 ) : null}
 
@@ -1174,7 +1237,7 @@ function DashboardPage() {
               </div>
             </div>
             <div className="kpi-row">
-              <MetricCard tone="teal" label="Envios" value={number(totalEnviosCanal)} current={totalEnviosCanal} small={`${number(comunicacaoView.envios.emails)} e-mails - ${number(whatsappEnvios)} WhatsApp`} summary="Total de comunicações enviadas no período." />
+              <MetricCard tone="teal" label="Envios" value={number(totalEnviosCanal)} current={totalEnviosCanal} small={`${number(emailEnvios)} e-mails - ${number(whatsappEnvios)} WhatsApp`} summary="Total de comunicações enviadas no período." />
               <MetricCard tone="gold" label="Cliques" value={number(cliquesPortal)} current={cliquesPortal} small={whatsappCampaignEnabled ? 'Cliques pelo WhatsApp' : 'Eventos do portal'} summary="Cliques no link usados no funil de performance." />
               <MetricCard tone="sky" label="Acessos" value={number(acessosPortal)} current={acessosPortal} previous={previousMetrics?.acessos} small="Acessos no site" summary="Acessos registrados no Portal do Acordo." />
               <MetricCard tone="rust" label="Conversão" value={`${metrics.conversao.toFixed(1)}%`} current={metrics.conversao} small={`${number(metrics.acordos)} acordos`} summary="Conversão de acessos em acordos no período." />
@@ -1204,7 +1267,7 @@ function DashboardPage() {
 
           {whatsappCampaignEnabled ? (
             <Section num="03" title="WhatsApp por Credor">
-              <Panel title="Top 5 envios WhatsApp" meta={`${money(whatsappCampaignTotals.custo)} em ${number(whatsappCampaignTotals.envios)} mensagens · ${number(whatsappCampaignData?.summary.matched ?? 0)} telefones identificados`}>
+              <Panel title="Top 5 envios WhatsApp" meta={`${money(whatsappCampaignTotals.custo)} em ${number(whatsappCampaignTotals.envios)} mensagens · ${number(whatsappCampaignMatched)} telefones identificados`}>
                 {(expanded) => (
                   <table>
                     <thead>

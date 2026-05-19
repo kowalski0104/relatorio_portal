@@ -15,6 +15,11 @@ type EnvioMensalRow = {
   qtde_emails: number | string | null;
 };
 
+type EnvioDiarioRow = {
+  data: Date | string;
+  qtde_emails: number | string | null;
+};
+
 type WatiDia = {
   data: string;
   mensagens: number;
@@ -61,6 +66,7 @@ type ComunicacaoResult = {
   };
   por_credor: Array<{ credor: string; qtde_emails: number; mensagens_wati: number; custo_wati: number }>;
   mensal: Array<{ mes: string; qtde_emails: number; mensagens_wati: number }>;
+  diario: Array<{ data: string; qtde_emails: number; mensagens_wati: number }>;
 };
 
 const comunicacaoCache = new Map<string, { expiresAt: number; data: ComunicacaoResult }>();
@@ -242,10 +248,32 @@ async function queryEnviosMensais(prisma: PrismaClient, filter: ReportFilter) {
   );
 }
 
+async function queryEnviosDiarios(prisma: PrismaClient, filter: ReportFilter) {
+  const range = getLivePeriodYearRange(filter.periodo);
+  const params: unknown[] = [range.start, range.end];
+  const credorExpr = "COALESCE(NULLIF(TRIM(c.grupo), ''), TRIM(c.razaosocial), 'OUTROS')";
+  const credorFilterEmails = buildSqlInFilter(credorExpr, filter.credores, params);
+
+  return prisma.$queryRawUnsafe<EnvioDiarioRow[]>(
+    `
+      SELECT e.data::date AS data,
+             COUNT(*)::bigint AS qtde_emails
+      FROM tb_emails_enviados e
+      LEFT JOIN tb_credor c ON c.id = e.idcredor
+      WHERE e.data >= $1 AND e.data < $2
+        ${credorFilterEmails}
+      GROUP BY 1
+      ORDER BY data
+    `,
+    ...params
+  );
+}
+
 async function getCommunicationUncached(filter: ReportFilter): Promise<ComunicacaoResult> {
-  const [enviosResults, enviosMensaisResults, store] = await Promise.all([
+  const [enviosResults, enviosMensaisResults, enviosDiariosResults, store] = await Promise.all([
     Promise.all(getLiveClients(filter.sistema).map(({ prisma }) => queryEnvios(prisma, filter))),
     Promise.all(getLiveClients(filter.sistema).map(({ prisma }) => queryEnviosMensais(prisma, filter))),
+    Promise.all(getLiveClients(filter.sistema).map(({ prisma }) => queryEnviosDiarios(prisma, filter))),
     readStore(),
   ]);
 
@@ -280,6 +308,20 @@ async function getCommunicationUncached(filter: ReportFilter): Promise<Comunicac
     mensal.set(key, current);
   }
 
+  const diario = new Map<string, { data: string; qtde_emails: number; mensagens_wati: number }>();
+  for (const row of enviosDiariosResults.flat()) {
+    const key = row.data instanceof Date ? row.data.toISOString().slice(0, 10) : String(row.data).slice(0, 10);
+    const current = diario.get(key) ?? { data: key, qtde_emails: 0, mensagens_wati: 0 };
+    current.qtde_emails += Number(row.qtde_emails ?? 0);
+    diario.set(key, current);
+  }
+
+  for (const day of store.dias) {
+    const current = diario.get(day.data) ?? { data: day.data, qtde_emails: 0, mensagens_wati: 0 };
+    current.mensagens_wati += Number(day.mensagens ?? 0);
+    diario.set(day.data, current);
+  }
+
   const porCredorList = Array.from(porCredor.values()).sort((a, b) => b.qtde_emails + b.mensagens_wati - (a.qtde_emails + a.mensagens_wati));
   const totalEmails = porCredorList.reduce((sum, row) => sum + row.qtde_emails, 0);
   const totalWati = porCredorList.reduce((sum, row) => sum + row.mensagens_wati, 0);
@@ -293,6 +335,7 @@ async function getCommunicationUncached(filter: ReportFilter): Promise<Comunicac
     },
     por_credor: porCredorList,
     mensal: Array.from(mensal.values()).sort((a, b) => a.mes.localeCompare(b.mes)),
+    diario: Array.from(diario.values()).sort((a, b) => a.data.localeCompare(b.data)),
   };
 }
 
