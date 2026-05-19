@@ -1067,6 +1067,225 @@ tfoot td {
   font-size: 11px;
 }
 
+.metric-variation {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 12px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.metric-variation.positive,
+.variation-cell.positive {
+  color: #1f8a55;
+}
+
+.metric-variation.negative,
+.variation-cell.negative {
+  color: var(--rust);
+}
+
+.kpi-row .metric-variation.positive {
+  background: rgba(54, 190, 127, .17);
+  color: #caffdf;
+}
+
+.kpi-row .metric-variation.negative {
+  background: rgba(224, 108, 95, .17);
+  color: #ffd4ce;
+}
+
+.variation-cell {
+  font-weight: 900;
+}
+
+.presentation-hud {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(980px, calc(100vw - 48px));
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 14px;
+  background: rgba(5, 11, 20, .76);
+  color: #fff;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .36);
+  backdrop-filter: blur(14px);
+  transform: translateX(-50%);
+}
+
+.presentation-hud > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.presentation-hud strong {
+  display: block;
+  font-size: 13px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.presentation-hud span {
+  display: block;
+  margin-top: 3px;
+  color: rgba(255, 255, 255, .72);
+  font-size: 12px;
+}
+
+.presentation-hud button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, .08);
+  color: #fff;
+  font: 800 11px/1 var(--font-family);
+  cursor: pointer;
+}
+
+.presentation-dots {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.presentation-dots button {
+  width: 9px;
+  min-width: 9px;
+  height: 9px;
+  min-height: 9px;
+  padding: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .28);
+}
+
+.presentation-dots button.active {
+  width: 30px;
+  background: #fff;
+}
+
+.presentation-mode .system-bar,
+.presentation-mode .tab-bar,
+.presentation-mode .footer {
+  display: none;
+}
+
+.presentation-mode {
+  min-height: 100vh;
+  background: #050b14;
+}
+
+.presentation-mode .hero {
+  padding: 96px 64px 0;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(110, 161, 218, .24), transparent 36%),
+    linear-gradient(135deg, #050b14 0%, #081827 62%, #10243c 100%);
+}
+
+.presentation-mode .hero-top {
+  align-items: center;
+  margin-bottom: 42px;
+}
+
+.presentation-mode .logos img {
+  max-height: 72px;
+}
+
+.presentation-mode .hero p {
+  font-size: 13px;
+}
+
+.presentation-mode .hero h1 {
+  font-size: clamp(44px, 5vw, 76px);
+}
+
+.presentation-mode .hero-meta strong {
+  font-size: 34px;
+}
+
+.presentation-mode .hero-meta span,
+.presentation-mode .hero-meta em {
+  font-size: 15px;
+}
+
+.presentation-mode .kpi-row {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.presentation-mode .kpi-row .metric-card {
+  min-height: 180px;
+  padding: 30px 28px;
+}
+
+.presentation-mode .kpi-row span {
+  font-size: 12px;
+}
+
+.presentation-mode .kpi-row strong {
+  font-size: clamp(34px, 4.2vw, 64px);
+}
+
+.presentation-mode .kpi-row small {
+  font-size: 14px;
+}
+
+.presentation-mode .main-content {
+  padding: 42px 64px 72px;
+}
+
+.presentation-mode .section-header h2 {
+  font-size: 30px;
+}
+
+.presentation-mode .section-header span {
+  font-size: 13px;
+}
+
+.presentation-mode .panel-head {
+  min-height: 64px;
+}
+
+.presentation-mode .panel-head span {
+  font-size: 14px;
+}
+
+.presentation-mode .panel-head small {
+  font-size: 13px;
+}
+
+.presentation-mode .chart-wrap {
+  height: 360px;
+}
+
+.presentation-mode .chart-wrap.small {
+  height: 320px;
+}
+
+.presentation-mode table {
+  font-size: 16px;
+}
+
+.presentation-mode th {
+  font-size: 12px;
+}
+
+.presentation-mode td {
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
 @media (max-width: 1200px) {
   .kpi-row {
     grid-template-columns: repeat(3, minmax(0, 1fr));

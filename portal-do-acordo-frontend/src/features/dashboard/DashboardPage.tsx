@@ -15,7 +15,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Building2, Check, ChevronDown, Printer } from 'lucide-react';
+import { Building2, Check, ChevronDown, Pause, Play, Presentation, Printer, X } from 'lucide-react';
 import logoUrl from '../../assets/portal-agreement-logo.png';
 import { BarRows } from './components/BarRows';
 import { MetricCard } from './components/MetricCard';
@@ -27,11 +27,27 @@ import { useActiveBaseData, useDashboardData, useDashboardSupplementalData, useP
 import type { Access, Agreement, CostsData, DashboardTab, PortfolioEntry, SystemFilter, ThemeMode } from './types';
 import { groupBy, isNoCreditorSelection, NO_CREDITOR_SELECTION, normalizeCreditorGroup } from './utils/creditors';
 import { businessDayIndexMap, businessDaysInPeriod, dayLabel, monthKey, periodLabel, periodRangeLabel, previousPeriod } from './utils/dates';
-import { countBusinessDaysWithData, filterDashboardData, filterPreviousPeriodData, getAvailableCreditors, matchesSystem, summarizeDashboardMetrics } from './utils/dashboardMetrics';
+import { countBusinessDaysWithData, filterDashboardData, getAvailableCreditors, matchesSystem, summarizeDashboardMetrics } from './utils/dashboardMetrics';
 import { compactMoney, dateTime, money, number, percent, safeNumber, systemLabel } from './utils/formatters';
 import './styles/dashboard.css';
 
 const safe = safeNumber;
+const PRESENTATION_TABS: DashboardTab[] = ['relatorio', 'performance', 'carteiras', 'custos', 'base-ativa'];
+const TAB_LABELS: Record<DashboardTab, string> = {
+  relatorio: 'Resultados',
+  custos: 'Custos',
+  performance: 'Performance',
+  carteiras: 'Carteiras',
+  'base-ativa': 'Bases',
+};
+
+function variation(current: number, previous: number | null | undefined) {
+  return previous && previous !== 0 ? ((current - previous) / previous) * 100 : null;
+}
+
+function variationLabel(value: number | null) {
+  return value !== null && Number.isFinite(value) ? `${value >= 0 ? '+' : ''}${value.toFixed(1)}%` : 'Sem base';
+}
 
 function DashboardPage() {
   const { data, loading, error, period, setPeriod, periods } = useDashboardData();
@@ -47,6 +63,8 @@ function DashboardPage() {
   const [businessDayLimit, setBusinessDayLimit] = useState('all');
   const [filterOpen, setFilterOpen] = useState(false);
   const [periodFilterOpen, setPeriodFilterOpen] = useState(false);
+  const [presentationMode, setPresentationMode] = useState(false);
+  const [presentationPaused, setPresentationPaused] = useState(false);
   const creditorFilterRef = useRef<HTMLDivElement>(null);
   const periodFilterRef = useRef<HTMLDivElement>(null);
   const effectivePeriods = useMemo(() => (selectedPeriods.size > 0 ? selectedPeriods : period ? new Set([period]) : new Set<string>()), [period, selectedPeriods]);
@@ -94,6 +112,51 @@ function DashboardPage() {
     document.addEventListener('mousedown', closeFiltersOnOutsideClick);
     return () => document.removeEventListener('mousedown', closeFiltersOnOutsideClick);
   }, []);
+
+  useEffect(() => {
+    if (!presentationMode) return;
+    setFilterOpen(false);
+    setPeriodFilterOpen(false);
+  }, [presentationMode]);
+
+  useEffect(() => {
+    if (!presentationMode || presentationPaused) return undefined;
+
+    const interval = window.setInterval(() => {
+      setTab((current) => {
+        const currentIndex = PRESENTATION_TABS.indexOf(current);
+        return PRESENTATION_TABS[(currentIndex + 1) % PRESENTATION_TABS.length];
+      });
+    }, 18000);
+
+    return () => window.clearInterval(interval);
+  }, [presentationMode, presentationPaused]);
+
+  useEffect(() => {
+    function handlePresentationKeys(event: KeyboardEvent) {
+      if (!presentationMode) return;
+      if (event.key === 'Escape') setPresentationMode(false);
+      if (event.key === ' ') {
+        event.preventDefault();
+        setPresentationPaused((current) => !current);
+      }
+      if (event.key === 'ArrowRight') {
+        setTab((current) => {
+          const currentIndex = PRESENTATION_TABS.indexOf(current);
+          return PRESENTATION_TABS[(currentIndex + 1) % PRESENTATION_TABS.length];
+        });
+      }
+      if (event.key === 'ArrowLeft') {
+        setTab((current) => {
+          const currentIndex = PRESENTATION_TABS.indexOf(current);
+          return PRESENTATION_TABS[(currentIndex - 1 + PRESENTATION_TABS.length) % PRESENTATION_TABS.length];
+        });
+      }
+    }
+
+    document.addEventListener('keydown', handlePresentationKeys);
+    return () => document.removeEventListener('keydown', handlePresentationKeys);
+  }, [presentationMode]);
 
   const allCredores = useMemo(() => getAvailableCreditors(data), [data]);
   const noCreditorSelected = isNoCreditorSelection(selectedCredores);
@@ -150,12 +213,64 @@ function DashboardPage() {
 
   const projectionBaseDays = consideredBusinessDays;
 
-  const previousMetrics = useMemo(() => {
-    if (selectedPeriodList.length !== 1) return null;
-    const prev = previousPeriod(primaryPeriod);
-    if (!prev) return null;
-    return summarizeDashboardMetrics(filterPreviousPeriodData(data, system, prev, selectedCredores));
-  }, [data, primaryPeriod, selectedCredores, selectedPeriodList.length, system]);
+  const previousPeriodKey = selectedPeriodList.length === 1 ? previousPeriod(primaryPeriod) : '';
+  const previousBusinessDayMap = useMemo(() => previousPeriodKey ? businessDayIndexMap(previousPeriodKey) : new Map<string, number>(), [previousPeriodKey]);
+  const previousFiltered = useMemo(() => {
+    if (!previousPeriodKey) return null;
+    return filterDashboardData({
+      data,
+      system,
+      period: previousPeriodKey,
+      periods: new Set([previousPeriodKey]),
+      selectedCreditors: selectedCredores,
+      businessDayMap: previousBusinessDayMap,
+      selectedBusinessDayLimit,
+    });
+  }, [data, previousBusinessDayMap, previousPeriodKey, selectedBusinessDayLimit, selectedCredores, system]);
+  const previousMetrics = useMemo(() => previousFiltered ? summarizeDashboardMetrics(previousFiltered) : null, [previousFiltered]);
+  const resultMonthlyRows = useMemo(() => {
+    const keys = isMultiPeriod ? [...selectedPeriodList].sort() : previousPeriodKey ? [previousPeriodKey, primaryPeriod] : [primaryPeriod];
+    let previousTotalPago: number | null = null;
+    let previousAcordos: number | null = null;
+
+    return keys.map((key) => {
+      const periodBusinessDayMap = key === previousPeriodKey ? previousBusinessDayMap : businessDayMap;
+      const rows = filterDashboardData({
+        data,
+        system,
+        period: key,
+        periods: new Set([key]),
+        selectedCreditors: selectedCredores,
+        businessDayMap: periodBusinessDayMap,
+        selectedBusinessDayLimit,
+      });
+      const monthMetrics = summarizeDashboardMetrics(rows);
+      const totalPagoVariation = variation(monthMetrics.totalPago, previousTotalPago);
+      const acordosVariation = variation(monthMetrics.acordos, previousAcordos);
+      previousTotalPago = monthMetrics.totalPago;
+      previousAcordos = monthMetrics.acordos;
+
+      return {
+        period: key,
+        label: periodLabel(key),
+        totalPago: monthMetrics.totalPago,
+        capital: monthMetrics.capital,
+        acordos: monthMetrics.acordos,
+        acessos: monthMetrics.acessos,
+        conversao: monthMetrics.conversao,
+        ticket: monthMetrics.ticketPorAcordo,
+        totalPagoVariation,
+        acordosVariation,
+      };
+    });
+  }, [businessDayMap, data, isMultiPeriod, previousBusinessDayMap, previousPeriodKey, primaryPeriod, selectedBusinessDayLimit, selectedCredores, selectedPeriodList, system]);
+  const resultComparisonRows = useMemo(() => [
+    { name: 'Total Pago', atual: metrics.totalPago, anterior: previousMetrics?.totalPago, variation: variation(metrics.totalPago, previousMetrics?.totalPago), formatter: money },
+    { name: 'Capital Recuperado', atual: metrics.capital, anterior: previousMetrics?.capital, variation: variation(metrics.capital, previousMetrics?.capital), formatter: money },
+    { name: 'Acordos', atual: metrics.acordos, anterior: previousMetrics?.acordos, variation: variation(metrics.acordos, previousMetrics?.acordos), formatter: number },
+    { name: 'Acessos', atual: metrics.acessos, anterior: previousMetrics?.acessos, variation: variation(metrics.acessos, previousMetrics?.acessos), formatter: number },
+    { name: 'Conversão', atual: metrics.conversao, anterior: previousMetrics?.conversao, variation: variation(metrics.conversao, previousMetrics?.conversao), formatter: (value: number) => `${value.toFixed(1)}%` },
+  ], [metrics, previousMetrics]);
 
   const componentRows = useMemo(() => {
     const rows = [
@@ -465,6 +580,24 @@ function DashboardPage() {
     () => (comunicacaoView.diario ?? []).filter((row) => matchesSelectedBusinessDays(row.data)),
     [comunicacaoView.diario, matchesSelectedBusinessDays]
   );
+  const whatsappDailyComparisonRows = useMemo(() => {
+    const rowsByBusinessDay = new Map<number, Record<string, string | number>>();
+
+    whatsappCampaignDailyRows.forEach((row) => {
+      const businessDay = businessDayMap.get(row.data);
+      if (!businessDay) return;
+      const series = periodSeries.find((item) => item.period === monthKey(row.data));
+      if (!series) return;
+
+      const current = rowsByBusinessDay.get(businessDay) ?? { businessDay, label: `${businessDay}º dia útil` };
+      current[series.key] = safe(current[series.key] as number) + row.envios;
+      current[`${series.key}_clicked`] = safe(current[`${series.key}_clicked`] as number) + row.clicked;
+      current[`${series.key}_date`] = dayLabel(row.data);
+      rowsByBusinessDay.set(businessDay, current);
+    });
+
+    return Array.from(rowsByBusinessDay.values()).sort((a, b) => Number(a.businessDay) - Number(b.businessDay));
+  }, [businessDayMap, periodSeries, whatsappCampaignDailyRows]);
   const hasCommunicationDailyData = (comunicacaoView.diario ?? []).length > 0;
   const emailEnvios = hasCommunicationDailyData
     ? communicationDailyRows.reduce((sum, row) => sum + row.qtde_emails, 0)
@@ -602,6 +735,24 @@ function DashboardPage() {
     () => portfolioData.filter((row) => matchesSelectedBusinessDays(row.data, portfolioPeriods)),
     [matchesSelectedBusinessDays, portfolioData, portfolioPeriods]
   );
+  const portfolioDailyComparisonRows = useMemo(() => {
+    const rowsByBusinessDay = new Map<number, Record<string, string | number>>();
+
+    filteredPortfolioData.forEach((row) => {
+      const businessDay = businessDayMap.get(row.data);
+      if (!businessDay) return;
+      const series = periodSeries.find((item) => item.period === row.mes);
+      if (!series) return;
+
+      const current = rowsByBusinessDay.get(businessDay) ?? { businessDay, label: `${businessDay}º dia útil` };
+      current[series.key] = safe(current[series.key] as number) + safe(row.tottit || row.valor_imp);
+      current[`${series.key}_processos`] = safe(current[`${series.key}_processos`] as number) + safe(row.qtdeproc);
+      current[`${series.key}_date`] = dayLabel(row.data);
+      rowsByBusinessDay.set(businessDay, current);
+    });
+
+    return Array.from(rowsByBusinessDay.values()).sort((a, b) => Number(a.businessDay) - Number(b.businessDay));
+  }, [businessDayMap, filteredPortfolioData, periodSeries]);
   const portfolioView = useMemo(() => {
     const recoveredByCreditor = groupBy(portfolioFiltered.baixas, (row) => row.credor || 'OUTROS');
     const agreementsByCreditor = groupBy(portfolioFiltered.acordos, (row) => row.credor || 'OUTROS');
@@ -675,7 +826,28 @@ function DashboardPage() {
   }
 
   return (
-    <div className={`dashboard-shell theme-${theme}`}>
+    <div className={`dashboard-shell theme-${theme} ${presentationMode ? 'presentation-mode' : ''}`}>
+      {presentationMode ? (
+        <div className="presentation-hud">
+          <div>
+            <strong>{TAB_LABELS[tab]}</strong>
+            <span>{selectedPeriodLabel} · {systemLabel(system)} · {selectedBusinessDayLimit ? `${selectedBusinessDayLimit} primeiros dias úteis` : 'todos os dias úteis'}</span>
+          </div>
+          <div className="presentation-dots" aria-label="Slides da apresentação">
+            {PRESENTATION_TABS.map((item) => (
+              <button key={item} type="button" className={tab === item ? 'active' : ''} onClick={() => setTab(item)} aria-label={TAB_LABELS[item]} />
+            ))}
+          </div>
+          <button type="button" onClick={() => setPresentationPaused((current) => !current)}>
+            {presentationPaused ? <Play size={15} /> : <Pause size={15} />}
+            {presentationPaused ? 'Continuar' : 'Pausar'}
+          </button>
+          <button type="button" onClick={() => setPresentationMode(false)}>
+            <X size={15} />
+            Sair
+          </button>
+        </div>
+      ) : null}
       <div className="system-bar">
         <div className="system-group" aria-label="Selecionar sistema">
           <span>Sistema</span>
@@ -747,6 +919,13 @@ function DashboardPage() {
           </select>
           <button type="button" className="control-btn" onClick={() => setTheme(theme === 'sisth' ? 'night' : 'sisth')}>
             Tema {theme === 'sisth' ? 'Escuro' : 'Claro'}
+          </button>
+          <button type="button" className="control-btn presentation-trigger" onClick={() => {
+            setPresentationMode(true);
+            setPresentationPaused(false);
+          }}>
+            <Presentation size={16} />
+            Apresentar
           </button>
           <button type="button" className="control-btn" onClick={() => window.print()}>
             <Printer size={16} />
@@ -837,7 +1016,47 @@ function DashboardPage() {
               </div>
             </Section>
 
-            <Section num="02" title="Remuneração">
+            <Section num="02" title={isMultiPeriod ? 'Resumo por Mês' : 'Comparativo com Mês Anterior'}>
+              <div className="grid-2">
+                <Panel title="Indicadores principais" meta={selectedBusinessDayLimit ? `${selectedBusinessDayLimit} primeiros dias úteis` : 'Período completo'}>
+                  <table>
+                    <thead>
+                      <tr><th>Indicador</th><th className="right">Atual</th><th className="right">Base anterior</th><th className="right">Variação</th></tr>
+                    </thead>
+                    <tbody>
+                      {resultComparisonRows.map((row) => (
+                        <tr key={row.name}>
+                          <td className="bold">{row.name}</td>
+                          <td className="right">{row.formatter(row.atual)}</td>
+                          <td className="right muted">{row.anterior !== undefined ? row.formatter(row.anterior) : 'Sem base'}</td>
+                          <td className={`right variation-cell ${row.variation !== null && row.variation >= 0 ? 'positive' : 'negative'}`}>{variationLabel(row.variation)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </Panel>
+                <Panel title="Evolução mensal filtrada" meta="Mesmo recorte de dias úteis">
+                  <table>
+                    <thead>
+                      <tr><th>Mês</th><th className="right">Total Pago</th><th className="right">Var.</th><th className="right">Acordos</th><th className="right">Conv.</th></tr>
+                    </thead>
+                    <tbody>
+                      {resultMonthlyRows.map((row) => (
+                        <tr key={row.period}>
+                          <td className="bold">{row.label}</td>
+                          <td className="right">{money(row.totalPago)}</td>
+                          <td className={`right variation-cell ${row.totalPagoVariation !== null && row.totalPagoVariation >= 0 ? 'positive' : 'negative'}`}>{variationLabel(row.totalPagoVariation)}</td>
+                          <td className="right">{number(row.acordos)}</td>
+                          <td className="right muted">{row.conversao.toFixed(1)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </Panel>
+              </div>
+            </Section>
+
+            <Section num="03" title="Remuneração">
               <div className="grid-2">
                 <Panel title="Detalhamento por Componente">
                   <table>
@@ -874,7 +1093,7 @@ function DashboardPage() {
               </div>
             </Section>
 
-            <Section num="03" title="Acordos Formalizados">
+            <Section num="04" title="Acordos Formalizados">
               <div className="grid-2">
                 <Panel title="Acordos por Credor / Grupo" meta={`Top 5 de ${number(metrics.acordos)} processos`}>
                   {(expanded) => <BarRows rows={expanded ? acordosRows : acordosRows.slice(0, 5)} color={color} valueLabel="Qtd." showPercent />}
@@ -903,7 +1122,7 @@ function DashboardPage() {
               </div>
             </Section>
 
-            <Section num="04" title="Ticket Médio por Credor">
+            <Section num="05" title="Ticket Médio por Credor">
               <div className="grid-2">
                 <Panel title="Ranking - Ticket Médio" className="ticket-panel">
                   {(expanded) => (
@@ -933,7 +1152,7 @@ function DashboardPage() {
               </div>
             </Section>
 
-            <Section num="05" title="Evolução Diária">
+            <Section num="06" title="Evolução Diária">
               <div className="grid-2">
                 <Panel title="Receita Diária" meta="Por data de baixa">
                   <div className="chart-wrap small">
@@ -976,7 +1195,7 @@ function DashboardPage() {
               </div>
             </Section>
 
-            <Section num="06" title="Top Dias de Conversão">
+            <Section num="07" title="Top Dias de Conversão">
               <Panel title="Maiores volumes de acordos no período" meta={`Top ${topDays.length}`}>
                 <div className="topdays-list">
                   {topDays.length === 0 ? <div className="empty-state">Sem dados no período.</div> : null}
@@ -993,7 +1212,7 @@ function DashboardPage() {
               </Panel>
             </Section>
 
-            <Section num="07" title="Pagamentos por Negociador">
+            <Section num="08" title="Pagamentos por Negociador">
               <div className="neg-grid">
                 {negociadores.length === 0 ? <div className="empty-state">Sem dados no período.</div> : null}
                 {negociadores.map((row, index) => (
@@ -1192,7 +1411,52 @@ function DashboardPage() {
                   </Panel>
                 </Section>
 
-                <Section num="02" title="Evolução das Entradas">
+                <Section num="02" title="Entradas por Dia Útil">
+                  <div className="grid-2">
+                    <Panel title="Valor importado" meta="Comparativo por mês">
+                      {portfolioDailyComparisonRows.length === 0 ? (
+                        <div className="empty-state">Sem importações com data útil no período selecionado.</div>
+                      ) : (
+                        <div className="chart-wrap small">
+                          <ResponsiveContainer>
+                            <BarChart data={portfolioDailyComparisonRows}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                              <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                              <YAxis tickFormatter={(value) => `R$${Math.round(Number(value) / 1000)}k`} tick={{ fontSize: 10 }} />
+                              <Tooltip formatter={(value: number, name: string, item) => [money(value), comparisonTooltipName(name, item)]} />
+                              <Legend verticalAlign="top" height={28} />
+                              {periodSeries.map((item) => (
+                                <Bar key={item.key} dataKey={item.key} name={item.label} fill={item.color} radius={[4, 4, 0, 0]} />
+                              ))}
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      )}
+                    </Panel>
+                    <Panel title="Processos importados" meta="Por dia útil">
+                      {portfolioDailyComparisonRows.length === 0 ? (
+                        <div className="empty-state">Sem processos importados no recorte selecionado.</div>
+                      ) : (
+                        <div className="chart-wrap small">
+                          <ResponsiveContainer>
+                            <LineChart data={portfolioDailyComparisonRows}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                              <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                              <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+                              <Tooltip formatter={(value: number, name: string, item) => [number(value), comparisonTooltipName(name, item)]} />
+                              <Legend verticalAlign="top" height={28} />
+                              {periodSeries.map((item) => (
+                                <Line key={`${item.key}_processos`} type="monotone" dataKey={`${item.key}_processos`} name={item.label} stroke={item.color} strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
+                              ))}
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      )}
+                    </Panel>
+                  </div>
+                </Section>
+
+                <Section num="03" title="Evolução das Entradas">
                   <div className="grid-2">
                     <Panel title="Valor de entrada por mês">
                       <div className="chart-wrap small">
@@ -1240,7 +1504,7 @@ function DashboardPage() {
               <MetricCard tone="teal" label="Envios" value={number(totalEnviosCanal)} current={totalEnviosCanal} small={`${number(emailEnvios)} e-mails - ${number(whatsappEnvios)} WhatsApp`} summary="Total de comunicações enviadas no período." />
               <MetricCard tone="gold" label="Cliques" value={number(cliquesPortal)} current={cliquesPortal} small={whatsappCampaignEnabled ? 'Cliques pelo WhatsApp' : 'Eventos do portal'} summary="Cliques no link usados no funil de performance." />
               <MetricCard tone="sky" label="Acessos" value={number(acessosPortal)} current={acessosPortal} previous={previousMetrics?.acessos} small="Acessos no site" summary="Acessos registrados no Portal do Acordo." />
-              <MetricCard tone="rust" label="Conversão" value={`${metrics.conversao.toFixed(1)}%`} current={metrics.conversao} small={`${number(metrics.acordos)} acordos`} summary="Conversão de acessos em acordos no período." />
+              <MetricCard tone="rust" label="Conversão" value={`${metrics.conversao.toFixed(1)}%`} current={metrics.conversao} previous={previousMetrics?.conversao} small={`${number(metrics.acordos)} acordos`} summary="Conversão de acessos em acordos no período." />
             </div>
           </header>
 
@@ -1261,6 +1525,51 @@ function DashboardPage() {
               </Panel>
               <Panel title="Acessos com Acordo por Credor" meta="Top 5">
                 {(expanded) => <BarRows rows={expanded ? acessosCredorRows : acessosCredorRows.slice(0, 5)} color={color} valueLabel="Qtd." />}
+              </Panel>
+            </div>
+          </Section>
+
+          <Section num="02" title="Comunicação por Dia Útil">
+            <div className="grid-2">
+              <Panel title="Envios WhatsApp" meta="Comparativo por mês">
+                {whatsappDailyComparisonRows.length === 0 ? (
+                  <div className="empty-state">Sem dados diários de WhatsApp para o período selecionado.</div>
+                ) : (
+                  <div className="chart-wrap small">
+                    <ResponsiveContainer>
+                      <BarChart data={whatsappDailyComparisonRows}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+                        <Tooltip formatter={(value: number, name: string, item) => [number(value), comparisonTooltipName(name, item)]} />
+                        <Legend verticalAlign="top" height={28} />
+                        {periodSeries.map((item) => (
+                          <Bar key={item.key} dataKey={item.key} name={item.label} fill={item.color} radius={[4, 4, 0, 0]} />
+                        ))}
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </Panel>
+              <Panel title="Cliques WhatsApp" meta="CLICKED por dia útil">
+                {whatsappDailyComparisonRows.length === 0 ? (
+                  <div className="empty-state">Sem dados diários de clique para o período selecionado.</div>
+                ) : (
+                  <div className="chart-wrap small">
+                    <ResponsiveContainer>
+                      <LineChart data={whatsappDailyComparisonRows}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+                        <Tooltip formatter={(value: number, name: string, item) => [number(value), comparisonTooltipName(name, item)]} />
+                        <Legend verticalAlign="top" height={28} />
+                        {periodSeries.map((item) => (
+                          <Line key={`${item.key}_clicked`} type="monotone" dataKey={`${item.key}_clicked`} name={item.label} stroke={item.color} strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </Panel>
             </div>
           </Section>

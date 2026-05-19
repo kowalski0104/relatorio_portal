@@ -14,6 +14,8 @@ type MetricCardProps = {
 export function MetricCard({ tone, label, value, current, small, previous, summary }: MetricCardProps) {
   const [expanded, setExpanded] = useState(false);
   const variation = previous && previous !== 0 ? ((current - previous) / previous) * 100 : null;
+  const hasVariation = variation !== null && Number.isFinite(variation);
+  const variationClass = hasVariation && variation >= 0 ? 'positive' : 'negative';
 
   return (
     <div
@@ -30,11 +32,12 @@ export function MetricCard({ tone, label, value, current, small, previous, summa
       <span>{label}</span>
       <strong>{value}</strong>
       <small>{small}</small>
+      {hasVariation ? <em className={`metric-variation ${variationClass}`}>{variation >= 0 ? '+' : ''}{variation.toFixed(1)}% vs mês anterior</em> : null}
       {expanded ? (
         <div className="metric-expanded">
           <b>Comparativo mensal</b>
           <em>{previous !== undefined ? `Mês anterior: ${number(previous)}` : 'Sem mês anterior carregado'}</em>
-          <em>{variation !== null && Number.isFinite(variation) ? `Variação: ${variation.toFixed(1)}%` : 'Variação indisponível'}</em>
+          <em>{hasVariation ? `Variação: ${variation >= 0 ? '+' : ''}${variation.toFixed(1)}%` : 'Variação indisponível'}</em>
         </div>
       ) : null}
     </div>
