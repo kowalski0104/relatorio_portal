@@ -230,10 +230,9 @@ function DashboardPage() {
   const previousMetrics = useMemo(() => previousFiltered ? summarizeDashboardMetrics(previousFiltered) : null, [previousFiltered]);
   const resultMonthlyRows = useMemo(() => {
     const keys = isMultiPeriod ? [...selectedPeriodList].sort() : previousPeriodKey ? [previousPeriodKey, primaryPeriod] : [primaryPeriod];
-    let previousTotalPago: number | null = null;
-    let previousAcordos: number | null = null;
 
     return keys.map((key) => {
+      const comparisonPeriod = previousPeriod(key);
       const periodBusinessDayMap = key === previousPeriodKey ? previousBusinessDayMap : businessDayMap;
       const rows = filterDashboardData({
         data,
@@ -244,11 +243,19 @@ function DashboardPage() {
         businessDayMap: periodBusinessDayMap,
         selectedBusinessDayLimit,
       });
+      const previousRows = comparisonPeriod ? filterDashboardData({
+        data,
+        system,
+        period: comparisonPeriod,
+        periods: new Set([comparisonPeriod]),
+        selectedCreditors: selectedCredores,
+        businessDayMap: businessDayIndexMap(comparisonPeriod),
+        selectedBusinessDayLimit,
+      }) : null;
       const monthMetrics = summarizeDashboardMetrics(rows);
-      const totalPagoVariation = variation(monthMetrics.totalPago, previousTotalPago);
-      const acordosVariation = variation(monthMetrics.acordos, previousAcordos);
-      previousTotalPago = monthMetrics.totalPago;
-      previousAcordos = monthMetrics.acordos;
+      const comparisonMetrics = previousRows ? summarizeDashboardMetrics(previousRows) : null;
+      const totalPagoVariation = variation(monthMetrics.totalPago, comparisonMetrics?.totalPago);
+      const acordosVariation = variation(monthMetrics.acordos, comparisonMetrics?.acordos);
 
       return {
         period: key,
@@ -836,6 +843,13 @@ function DashboardPage() {
           <div className="presentation-dots" aria-label="Slides da apresentação">
             {PRESENTATION_TABS.map((item) => (
               <button key={item} type="button" className={tab === item ? 'active' : ''} onClick={() => setTab(item)} aria-label={TAB_LABELS[item]} />
+            ))}
+          </div>
+          <div className="presentation-system-switch" aria-label="Sistema">
+            {(['consulth', 'sisth', 'total'] as SystemFilter[]).map((item) => (
+              <button key={item} type="button" className={system === item ? 'active' : ''} onClick={() => setSystem(item)}>
+                {item === 'total' ? 'Total' : systemLabel(item)}
+              </button>
             ))}
           </div>
           <button type="button" onClick={() => setPresentationPaused((current) => !current)}>
