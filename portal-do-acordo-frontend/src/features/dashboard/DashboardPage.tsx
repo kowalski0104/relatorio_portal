@@ -847,7 +847,7 @@ function DashboardPage() {
           </div>
           <div className="presentation-system-switch" aria-label="Sistema">
             {(['consulth', 'sisth', 'total'] as SystemFilter[]).map((item) => (
-              <button key={item} type="button" className={system === item ? 'active' : ''} onClick={() => setSystem(item)}>
+              <button key={item} type="button" className={system === item ? 'active' : ''} aria-pressed={system === item} onClick={() => setSystem(item)}>
                 {item === 'total' ? 'Total' : systemLabel(item)}
               </button>
             ))}
@@ -862,11 +862,11 @@ function DashboardPage() {
           </button>
         </div>
       ) : null}
-      <div className="system-bar">
+      <div className="system-bar" role="navigation" aria-label="Filtros do relatório">
         <div className="system-group" aria-label="Selecionar sistema">
           <span>Sistema</span>
           {(['consulth', 'sisth', 'total'] as SystemFilter[]).map((item) => (
-            <button key={item} className={system === item ? 'active' : ''} type="button" onClick={() => setSystem(item)}>
+            <button key={item} className={system === item ? 'active' : ''} type="button" aria-pressed={system === item} onClick={() => setSystem(item)}>
               {systemLabel(item)}
             </button>
           ))}
@@ -948,16 +948,16 @@ function DashboardPage() {
         </div>
       </div>
 
-      <div className="tab-bar">
-        <button className={tab === 'relatorio' ? 'active' : ''} type="button" onClick={() => setTab('relatorio')}>Resultados</button>
-        <button className={tab === 'custos' ? 'active' : ''} type="button" onClick={() => setTab('custos')}>Custos</button>
-        <button className={tab === 'performance' ? 'active' : ''} type="button" onClick={() => setTab('performance')}>Performance</button>
-        <button className={tab === 'carteiras' ? 'active' : ''} type="button" onClick={() => setTab('carteiras')}>Carteiras</button>
-        <button className={tab === 'base-ativa' ? 'active' : ''} type="button" onClick={() => setTab('base-ativa')}>Bases</button>
+      <div className="tab-bar" role="tablist" aria-label="Abas do relatório">
+        <button className={tab === 'relatorio' ? 'active' : ''} type="button" role="tab" aria-selected={tab === 'relatorio'} onClick={() => setTab('relatorio')}>Resultados</button>
+        <button className={tab === 'custos' ? 'active' : ''} type="button" role="tab" aria-selected={tab === 'custos'} onClick={() => setTab('custos')}>Custos</button>
+        <button className={tab === 'performance' ? 'active' : ''} type="button" role="tab" aria-selected={tab === 'performance'} onClick={() => setTab('performance')}>Performance</button>
+        <button className={tab === 'carteiras' ? 'active' : ''} type="button" role="tab" aria-selected={tab === 'carteiras'} onClick={() => setTab('carteiras')}>Carteiras</button>
+        <button className={tab === 'base-ativa' ? 'active' : ''} type="button" role="tab" aria-selected={tab === 'base-ativa'} onClick={() => setTab('base-ativa')}>Bases</button>
       </div>
 
-      {loading ? <div className="loading-state">Carregando dados do portal...</div> : null}
-      {error ? <div className="error-state">{error}</div> : null}
+      {loading ? <div className="loading-state" role="status" aria-live="polite">Carregando dados do portal...</div> : null}
+      {error ? <div className="error-state" role="alert">{error}</div> : null}
 
       {!loading && !error && tab === 'relatorio' ? (
         <>

@@ -1,8 +1,6 @@
 import { defineConfig } from 'vite'
 import path from 'path'
-import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-
 
 function figmaAssetResolver() {
   return {
@@ -19,24 +17,20 @@ function figmaAssetResolver() {
 export default defineConfig({
   plugins: [
     figmaAssetResolver(),
-    // The React and Tailwind plugins are both required for Make, even if
-    // Tailwind is not being actively used – do not remove them
     react(),
-    tailwindcss(),
   ],
   resolve: {
     alias: {
-      // Alias @ to the src directory
       '@': path.resolve(__dirname, './src'),
     },
   },
   server: {
-    // Colocamos o link exato de hoje e o "curinga" para funcionar amanhã também
+    // Mantem ngrok liberado para links temporarios e dominios futuros.
     allowedHosts: [
-      'cornea-arise-vocation.ngrok-free.dev', 
+      'cornea-arise-vocation.ngrok-free.dev',
       '.ngrok-free.dev',
       '.ngrok.io',
-      '.ngrok-free.app'
+      '.ngrok-free.app',
     ],
     proxy: {
       '/api': {
@@ -46,7 +40,33 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const normalizedId = id.replace(/\\/g, '/');
 
-  // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
+          if (!normalizedId.includes('/node_modules/')) return undefined;
+          if (normalizedId.includes('/lucide-react/')) return 'icons';
+          if (normalizedId.includes('/recharts/')) return 'charts';
+          if (
+            normalizedId.includes('/d3-') ||
+            normalizedId.includes('/lodash/') ||
+            normalizedId.includes('/react-smooth/') ||
+            normalizedId.includes('/react-transition-group/') ||
+            normalizedId.includes('/recharts-scale/') ||
+            normalizedId.includes('/victory-vendor/')
+          ) return 'chart-vendor';
+          if (
+            normalizedId.includes('/react/') ||
+            normalizedId.includes('/react-dom/') ||
+            normalizedId.includes('/scheduler/')
+          ) return 'react-vendor';
+
+          return 'vendor';
+        },
+      },
+    },
+  },
   assetsInclude: ['**/*.svg', '**/*.csv'],
 })

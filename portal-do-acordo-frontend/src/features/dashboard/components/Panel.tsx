@@ -16,10 +16,15 @@ export function Panel({ title, meta, summary, children, className = '' }: PanelP
       className={`panel ${expanded ? 'expanded' : ''} ${className}`}
       data-summary={summary}
       role="button"
+      aria-expanded={expanded}
+      aria-label={`${expanded ? 'Fechar' : 'Expandir'} painel ${title}`}
       tabIndex={0}
       onClick={() => setExpanded((current) => !current)}
       onKeyDown={(event) => {
-        if (event.key === 'Enter') setExpanded((current) => !current);
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          setExpanded((current) => !current);
+        }
         if (event.key === 'Escape') setExpanded(false);
       }}
     >

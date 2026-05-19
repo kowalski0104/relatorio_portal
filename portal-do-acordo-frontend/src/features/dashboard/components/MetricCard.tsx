@@ -22,10 +22,15 @@ export function MetricCard({ tone, label, value, current, small, previous, summa
       className={`metric-card ${tone} ${expanded ? 'expanded' : ''}`}
       data-summary={summary}
       role="button"
+      aria-expanded={expanded}
+      aria-label={`${expanded ? 'Fechar' : 'Expandir'} KPI ${label}`}
       tabIndex={0}
       onClick={() => setExpanded((current) => !current)}
       onKeyDown={(event) => {
-        if (event.key === 'Enter') setExpanded((current) => !current);
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          setExpanded((current) => !current);
+        }
         if (event.key === 'Escape') setExpanded(false);
       }}
     >

@@ -12,7 +12,7 @@ export function Section({ num, title, children }: SectionProps) {
       <div className="section-header">
         <span>{num}</span>
         <h2>{title}</h2>
-        <div />
+        <div aria-hidden="true" />
       </div>
       {children}
     </section>
