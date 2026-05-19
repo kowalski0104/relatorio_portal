@@ -13,6 +13,9 @@
     "db:seed": "tsx prisma/seed.ts",
     "dev:lan": "tsx watch src/index.ts"
   },
+  "engines": {
+    "node": ">=20 <25"
+  },
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "cors": "^2.8.5",

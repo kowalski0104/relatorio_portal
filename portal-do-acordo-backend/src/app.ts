@@ -17,6 +17,7 @@ export function createApp() {
   const app = express();
   const allowedOrigins = process.env.CORS_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean) ?? [];
 
+  app.set('trust proxy', 1);
   app.use(helmet());
   app.use(cors({
     origin(origin, callback) {
@@ -29,6 +30,23 @@ export function createApp() {
     },
   }));
   app.use(express.json());
+
+  app.get('/', (_req, res) => {
+    res.json({
+      name: 'Portal do Acordo API',
+      status: 'ok',
+      uptime: process.uptime(),
+    });
+  });
+
+  app.get('/health', (_req, res) => {
+    res.json({
+      status: 'ok',
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+    });
+  });
+
   app.use('/api', authMiddleware);
 
   app.use('/api/baixas', paymentRouter);
