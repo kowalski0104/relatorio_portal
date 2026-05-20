@@ -1,11 +1,16 @@
 import { createApp } from './app';
 import { startActiveBaseCacheScheduler } from './services/activeBaseService';
+import { hasDatabaseConfig } from './db/prismaClients';
 
 const port = Number(process.env.PORT ?? 3001);
 const host = process.env.HOST ?? '0.0.0.0';
 const app = createApp();
 
-startActiveBaseCacheScheduler();
+if (hasDatabaseConfig()) {
+  startActiveBaseCacheScheduler();
+} else {
+  console.warn('Cache da Base Ativa não iniciado: DATABASE_URL_401 ou DATABASE_URL_1007 não configurada.');
+}
 
 app.listen(port, host, () => {
   const displayHost = host === '0.0.0.0' ? 'localhost' : host;
