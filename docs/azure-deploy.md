@@ -28,11 +28,9 @@ Crie um App Service:
 - Exemplo de nome: `portal-relatorio-api`
 - URL gerada: `https://portal-relatorio-api.azurewebsites.net`
 
-Configurações do projeto:
+Configurações do App Service:
 
-- Diretório do app: `portal-do-acordo-backend`
-- Build command: `npm run build`
-- Start command: `npm start`
+- Startup command: `npm start`
 - Health check manual: `https://portal-relatorio-api.azurewebsites.net/health`
 
 Variáveis de ambiente no App Service:
@@ -57,6 +55,33 @@ Observações:
 - Não coloque aspas nos valores dentro da Azure.
 - O App Service usa a variável `PORT` automaticamente; o backend já está preparado para isso.
 - O plano Free pode dormir e tem limite de CPU. Para relatório interno, serve para validação; para uso constante com gestores e webhook crítico, o ideal é subir de plano depois.
+
+### Deploy do backend sem Deployment Center
+
+Se o Deployment Center der erro de token do GitHub, use o workflow manual do repositório:
+
+```text
+.github/workflows/backend-azure-app-service.yml
+```
+
+No GitHub, crie estes secrets em `Settings > Secrets and variables > Actions`:
+
+```text
+AZURE_BACKEND_APP_NAME=portal-relatorio-api
+AZURE_BACKEND_PUBLISH_PROFILE=<conteudo do Publish Profile baixado no App Service>
+```
+
+Para baixar o Publish Profile:
+
+```text
+Azure Portal > App Service > Overview > Download publish profile
+```
+
+Depois rode:
+
+```text
+GitHub > Actions > Deploy backend to Azure App Service > Run workflow
+```
 
 ## 2. Frontend no Azure Static Web Apps
 
@@ -83,6 +108,33 @@ O arquivo `portal-do-acordo-frontend/public/staticwebapp.config.json` já está 
 - fallback de SPA para `index.html`;
 - headers básicos de segurança;
 - MIME type de JSON.
+
+### Deploy do frontend sem Deployment Center
+
+Se preferir não usar a integração automática do Portal da Azure, use o workflow manual:
+
+```text
+.github/workflows/frontend-azure-static-web-app.yml
+```
+
+No GitHub, crie estes secrets:
+
+```text
+AZURE_STATIC_WEB_APPS_API_TOKEN=<deployment token do Static Web App>
+VITE_API_BASE_URL=https://portal-relatorio-api.azurewebsites.net
+```
+
+Para pegar o token:
+
+```text
+Azure Portal > Static Web App > Manage deployment token
+```
+
+Depois rode:
+
+```text
+GitHub > Actions > Deploy frontend to Azure Static Web Apps > Run workflow
+```
 
 ## 3. Domínio do frontend
 
