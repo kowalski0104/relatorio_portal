@@ -55,6 +55,10 @@ export async function fetchPortfolio(sistema: SystemFilter, periodos: Set<string
 }
 
 function apiUrl(path: string) {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? '';
+  const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/$/, '') ?? '';
+  const baseUrl = configuredBaseUrl && !/^https?:\/\//i.test(configuredBaseUrl)
+    ? `https://${configuredBaseUrl}`
+    : configuredBaseUrl;
+
   return `${baseUrl}${path}`;
 }
