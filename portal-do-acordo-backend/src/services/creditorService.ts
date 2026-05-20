@@ -57,7 +57,7 @@ async function queryCreditors(prisma: PrismaClient, empresaId: number, periodo?:
 
 export async function getCreditors(filter: { periodo?: string; sistema?: SystemFilter }) {
   const results = await Promise.all(
-    getLiveClients(filter.sistema).map(({ empresaId, prisma }) => queryCreditors(prisma, empresaId, filter.periodo))
+    getLiveClients(filter.sistema).map(({ empresaId, query }) => query((prisma) => queryCreditors(prisma, empresaId, filter.periodo)))
   );
 
   const set = new Set<string>();

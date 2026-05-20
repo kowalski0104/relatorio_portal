@@ -49,6 +49,7 @@ const AGING_TIMEOUT_MS = Number(process.env.ACTIVE_BASE_AGING_TIMEOUT_MS ?? 1800
 const AGING_CREDITOR_TIMEOUT_MS = Number(process.env.ACTIVE_BASE_AGING_CREDITOR_TIMEOUT_MS ?? 900000);
 const AGING_BATCH_SIZE = Number(process.env.ACTIVE_BASE_AGING_BATCH_SIZE ?? 1000);
 const REFRESHING_STALE_MS = Number(process.env.ACTIVE_BASE_REFRESHING_STALE_MS ?? 5 * 60 * 1000);
+const AUTO_REFRESH_ON_START = process.env.ACTIVE_BASE_AUTO_REFRESH_ON_START === 'true';
 
 let refreshPromise: Promise<ActiveBaseCache> | null = null;
 let schedulerStarted = false;
@@ -291,7 +292,7 @@ function mergeAgingRows(currentRows: ActiveBaseAgingCacheRow[], newRows: ActiveB
 }
 
 async function queryActiveBaseAgingByCreditor(creditors: ActiveBaseCreditorCacheRow[], onProgress?: (rows: ActiveBaseAgingCacheRow[]) => Promise<void>) {
-  const clientBySystem = new Map(getLiveClients('total').map(({ empresaId, prisma }) => [systemName(empresaId), { empresaId, prisma }]));
+  const clientBySystem = new Map(getLiveClients('total').map(({ empresaId, query }) => [systemName(empresaId), { empresaId, query }]));
   const rows: ActiveBaseAgingCacheRow[] = [];
   const errors: string[] = [];
 
@@ -302,7 +303,7 @@ async function queryActiveBaseAgingByCreditor(creditors: ActiveBaseCreditorCache
     try {
       rows.push(
         ...(await withHardTimeout(
-          queryActiveBaseAgingForCreditor(client.prisma, client.empresaId, creditor.credor),
+          client.query((prisma) => queryActiveBaseAgingForCreditor(prisma, client.empresaId, creditor.credor)),
           AGING_CREDITOR_TIMEOUT_MS + 15000,
           `vencimentos ${creditor.sistema} ${creditor.credor}`
         ))
@@ -325,9 +326,9 @@ export async function refreshActiveBaseCache() {
 
     const errors: string[] = [];
     const creditorResults = await Promise.all(
-      getLiveClients('total').map(async ({ empresaId, prisma }) => {
+      getLiveClients('total').map(async ({ empresaId, query }) => {
         try {
-          return { rows: await withHardTimeout(queryActiveBaseByCreditor(prisma, empresaId), SUMMARY_TIMEOUT_MS + 15000, `base ativa ${systemName(empresaId)}`) };
+          return { rows: await withHardTimeout(query((prisma) => queryActiveBaseByCreditor(prisma, empresaId)), SUMMARY_TIMEOUT_MS + 15000, `base ativa ${systemName(empresaId)}`) };
         } catch (error) {
           return { rows: [], error: `${systemName(empresaId)}: ${formatError(error)}` };
         }
@@ -441,7 +442,7 @@ export function startActiveBaseCacheScheduler() {
   if (schedulerStarted) return;
   schedulerStarted = true;
 
-  void readCache().then((cache) => {
+  if (AUTO_REFRESH_ON_START) void readCache().then((cache) => {
     if (cache.status === 'empty' || (cache.status === 'error' && cache.by_credor.length === 0)) void refreshActiveBaseCache();
   });
 

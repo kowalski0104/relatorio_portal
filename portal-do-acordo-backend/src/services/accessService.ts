@@ -60,7 +60,7 @@ async function queryAccesses(prisma: PrismaClient, empresaId: number, filter: Re
 
 export async function getAccesses(filter: ReportFilter) {
   const results = await Promise.all(
-    getLiveClients(filter.sistema).map(({ empresaId, prisma }) => queryAccesses(prisma, empresaId, filter))
+    getLiveClients(filter.sistema).map(({ empresaId, query }) => query((prisma) => queryAccesses(prisma, empresaId, filter)))
   );
   const allData = results.flat();
 

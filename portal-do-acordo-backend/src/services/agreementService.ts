@@ -54,7 +54,7 @@ async function queryAgreements(prisma: PrismaClient, empresaId: number, filter: 
 
 export async function getAgreements(filter: ReportFilter) {
   const results = await Promise.all(
-    getLiveClients(filter.sistema).map(({ empresaId, prisma }) => queryAgreements(prisma, empresaId, filter))
+    getLiveClients(filter.sistema).map(({ empresaId, query }) => query((prisma) => queryAgreements(prisma, empresaId, filter)))
   );
   const allData = results.flat();
 

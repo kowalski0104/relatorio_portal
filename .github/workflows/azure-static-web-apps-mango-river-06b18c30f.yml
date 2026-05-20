@@ -22,6 +22,8 @@ jobs:
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
+        env:
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_MANGO_RIVER_06B18C30F }}
           repo_token: ${{ secrets.GITHUB_TOKEN }} # Used for Github integrations (i.e. PR comments)
@@ -31,6 +33,7 @@ jobs:
           app_location: "./portal-do-acordo-frontend" # App source code path
           api_location: "" # Api source code path - optional
           output_location: "dist" # Built app content directory - optional
+          app_build_command: "npm run build"
           ###### End of Repository/Build Configurations ######
 
   close_pull_request_job:

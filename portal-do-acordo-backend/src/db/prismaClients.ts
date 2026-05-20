@@ -7,11 +7,16 @@ const databaseEnvByCompany: Record<CompanyId, string> = {
 };
 
 const clientsByCompany: Partial<Record<CompanyId, PrismaClient>> = {};
+const clientQueues: Record<CompanyId, Promise<unknown>> = {
+  401: Promise.resolve(),
+  1007: Promise.resolve(),
+};
 
 export function getLiveClients(system?: SystemFilter) {
   return getSystemCompanyIds(system).map((companyId) => ({
     empresaId: companyId,
     prisma: getClient(companyId),
+    query: <T>(operation: (prisma: PrismaClient) => Promise<T>) => runQueued(companyId, operation),
   }));
 }
 
@@ -30,4 +35,11 @@ function getClient(companyId: CompanyId) {
   const client = new PrismaClient({ datasources: { db: { url } } });
   clientsByCompany[companyId] = client;
   return client;
+}
+
+function runQueued<T>(companyId: CompanyId, operation: (prisma: PrismaClient) => Promise<T>) {
+  const run = () => operation(getClient(companyId));
+  const next = clientQueues[companyId].catch(() => undefined).then(run);
+  clientQueues[companyId] = next.catch(() => undefined);
+  return next;
 }

@@ -62,10 +62,8 @@ async function queryCosts(prisma: PrismaClient, empresaId: number, start: Date, 
       AND TRIM(COALESCE(c.grupo, '')) != ''
   `;
 
-  const [baixas, acordos] = await Promise.all([
-    prisma.$queryRawUnsafe<BaixaCustoRow[]>(baixasQuery, ...baixaParams),
-    prisma.$queryRawUnsafe<AcordoCustoRow[]>(acordosQuery, ...acordoParams),
-  ]);
+  const baixas = await prisma.$queryRawUnsafe<BaixaCustoRow[]>(baixasQuery, ...baixaParams);
+  const acordos = await prisma.$queryRawUnsafe<AcordoCustoRow[]>(acordosQuery, ...acordoParams);
 
   return { baixas, acordos };
 }
@@ -79,7 +77,7 @@ export async function getCosts(filter: { periodo?: string; sistema?: SystemFilte
   lastDate.setUTCMonth(lastDate.getUTCMonth() + 1);
 
   const results = await Promise.all(
-    getLiveClients(filter.sistema).map(({ empresaId, prisma }) => queryCosts(prisma, empresaId, firstDate, lastDate))
+    getLiveClients(filter.sistema).map(({ empresaId, query }) => query((prisma) => queryCosts(prisma, empresaId, firstDate, lastDate)))
   );
 
   const baixas = results.flatMap((result) => result.baixas);

@@ -158,11 +158,20 @@ export async function handleWhatsAppWebhook(payload: WhatsAppWebhookPayload) {
   let credor = 'Nao identificado';
 
   if (phone) {
-    for (const { prisma } of getLiveClients('total')) {
+    for (const { query } of getLiveClients('total')) {
       try {
-        idcredor = await findCredorByPhone(prisma, phone);
-        if (idcredor) {
-          credor = await findCredorName(prisma, idcredor);
+        const match = await query(async (prisma) => {
+          const foundCredorId = await findCredorByPhone(prisma, phone);
+          if (!foundCredorId) return null;
+          return {
+            idcredor: foundCredorId,
+            credor: await findCredorName(prisma, foundCredorId),
+          };
+        });
+
+        if (match) {
+          idcredor = match.idcredor;
+          credor = match.credor;
           break;
         }
       } catch (error) {
@@ -270,10 +279,11 @@ async function queryEnviosDiarios(prisma: PrismaClient, filter: ReportFilter) {
 }
 
 async function getCommunicationUncached(filter: ReportFilter): Promise<ComunicacaoResult> {
+  const clients = getLiveClients(filter.sistema);
   const [enviosResults, enviosMensaisResults, enviosDiariosResults, store] = await Promise.all([
-    Promise.all(getLiveClients(filter.sistema).map(({ prisma }) => queryEnvios(prisma, filter))),
-    Promise.all(getLiveClients(filter.sistema).map(({ prisma }) => queryEnviosMensais(prisma, filter))),
-    Promise.all(getLiveClients(filter.sistema).map(({ prisma }) => queryEnviosDiarios(prisma, filter))),
+    Promise.all(clients.map(({ query }) => query((prisma) => queryEnvios(prisma, filter)))),
+    Promise.all(clients.map(({ query }) => query((prisma) => queryEnviosMensais(prisma, filter)))),
+    Promise.all(clients.map(({ query }) => query((prisma) => queryEnviosDiarios(prisma, filter)))),
     readStore(),
   ]);
 

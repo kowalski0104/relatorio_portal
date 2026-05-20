@@ -55,7 +55,7 @@ async function queryPayments(prisma: PrismaClient, empresaId: number, filter: Re
 
 export async function getPayments(filter: ReportFilter) {
   const results = await Promise.all(
-    getLiveClients(filter.sistema).map(({ empresaId, prisma }) => queryPayments(prisma, empresaId, filter))
+    getLiveClients(filter.sistema).map(({ empresaId, query }) => query((prisma) => queryPayments(prisma, empresaId, filter)))
   );
   const allData = results.flat();
 

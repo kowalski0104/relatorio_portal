@@ -119,7 +119,7 @@ async function queryPortfolio(prisma: PrismaClient, empresaId: number, filter: P
 }
 
 export async function getPortfolio(filter: PortfolioQuery) {
-  const rows = (await Promise.all(getLiveClients(filter.sistema).map(({ empresaId, prisma }) => queryPortfolio(prisma, empresaId, filter)))).flat();
+  const rows = (await Promise.all(getLiveClients(filter.sistema).map(({ empresaId, query }) => query((prisma) => queryPortfolio(prisma, empresaId, filter))))).flat();
   const selectedCreditors = new Set((filter.credores ?? []).map((creditor) => creditor.trim()).filter(Boolean));
   const filteredRows = rows.filter((row) => selectedCreditors.size === 0 || selectedCreditors.has(row.credor));
 
