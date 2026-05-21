@@ -1,4 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
+import {
+  DEMO_DASHBOARD_DATA,
+  DEMO_PRIMARY_PERIOD,
+  getDemoActiveBase,
+  getDemoCommunication,
+  getDemoCosts,
+  getDemoPortfolio,
+  isDemoMode,
+} from '../data/demoDashboardData';
 import { fetchActiveBase, fetchCommunication, fetchCosts, fetchDashboardData, fetchPortfolio } from '../services/dashboardApi';
 import type { ActiveBaseReport, CommunicationData, CostsData, DashboardData, PortfolioEntry, SystemFilter } from '../types';
 import { monthKey } from '../utils/dates';
@@ -17,11 +26,19 @@ const EMPTY_ACTIVE_BASE_REPORT: ActiveBaseReport = {
 
 export function useDashboardData() {
   const [data, setData] = useState<DashboardData>(EMPTY_DASHBOARD_DATA);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isDemoMode());
   const [error, setError] = useState('');
-  const [period, setPeriod] = useState(getCurrentPeriodKey);
+  const [period, setPeriod] = useState(() => isDemoMode() ? DEMO_PRIMARY_PERIOD : getCurrentPeriodKey());
 
   useEffect(() => {
+    if (isDemoMode()) {
+      setData(DEMO_DASHBOARD_DATA);
+      setPeriod(DEMO_PRIMARY_PERIOD);
+      setError('');
+      setLoading(false);
+      return undefined;
+    }
+
     let active = true;
 
     async function load() {
@@ -69,6 +86,11 @@ export function useDashboardSupplementalData(period: string, system: SystemFilte
 
   useEffect(() => {
     if (!period) return;
+    if (isDemoMode()) {
+      setCosts(getDemoCosts(period, system));
+      setCommunication(getDemoCommunication(period, system, selectedCreditors));
+      return;
+    }
 
     let active = true;
     Promise.all([
@@ -101,6 +123,12 @@ export function useActiveBaseData(system: SystemFilter, selectedCreditors: Set<s
 
   useEffect(() => {
     if (!enabled) return;
+    if (isDemoMode()) {
+      setData(getDemoActiveBase(system, selectedCreditors));
+      setError('');
+      setLoading(false);
+      return;
+    }
 
     let active = true;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -142,6 +170,12 @@ export function usePortfolioData(system: SystemFilter, selectedPeriods: Set<stri
 
   useEffect(() => {
     if (!enabled) return;
+    if (isDemoMode()) {
+      setData(getDemoPortfolio(system, selectedPeriods, selectedCreditors));
+      setError('');
+      setLoading(false);
+      return;
+    }
 
     let active = true;
     setLoading(true);

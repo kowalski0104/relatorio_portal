@@ -22,6 +22,7 @@ import { MetricCard } from './components/MetricCard';
 import { Panel } from './components/Panel';
 import { Section } from './components/Section';
 import { CHART_PALETTE, COLORS, FIXED_EMAIL_COST } from './config/constants';
+import { DEMO_WHATSAPP_CAMPAIGN_DATA, isDemoMode } from './data/demoDashboardData';
 import { WHATSAPP_CAMPAIGN_DATA, type WhatsappCampaignCredor } from './data/whatsappCampaigns';
 import { useActiveBaseData, useDashboardData, useDashboardSupplementalData, usePortfolioData } from './hooks/useDashboardData';
 import type { Access, Agreement, CostsData, DashboardTab, PortfolioEntry, SystemFilter, ThemeMode } from './types';
@@ -32,6 +33,7 @@ import { compactMoney, dateTime, money, number, percent, safeNumber, systemLabel
 import './styles/dashboard.css';
 
 const safe = safeNumber;
+const CHART_ANIMATION_ACTIVE = false;
 const PRESENTATION_TABS: DashboardTab[] = ['relatorio', 'performance', 'carteiras', 'custos', 'base-ativa'];
 const TAB_LABELS: Record<DashboardTab, string> = {
   relatorio: 'Resultados',
@@ -49,15 +51,22 @@ function variationLabel(value: number | null) {
   return value !== null && Number.isFinite(value) ? `${value >= 0 ? '+' : ''}${value.toFixed(1)}%` : 'Sem base';
 }
 
+function getInitialTab(): DashboardTab {
+  if (typeof window === 'undefined') return 'relatorio';
+  const requestedTab = new URLSearchParams(window.location.search).get('tab') as DashboardTab | null;
+  return requestedTab && TAB_LABELS[requestedTab] ? requestedTab : 'relatorio';
+}
+
 function DashboardPage() {
+  const demoMode = isDemoMode();
   const { data, loading, error, period, setPeriod, periods } = useDashboardData();
-  const [system, setSystem] = useState<SystemFilter>('consulth');
+  const [system, setSystem] = useState<SystemFilter>(() => demoMode ? 'total' : 'consulth');
   const [theme, setTheme] = useState<ThemeMode>(() => {
     if (typeof window === 'undefined') return 'night';
     const savedTheme = window.localStorage.getItem('portal-theme');
     return savedTheme === 'sisth' ? 'sisth' : 'night';
   });
-  const [tab, setTab] = useState<DashboardTab>('relatorio');
+  const [tab, setTab] = useState<DashboardTab>(getInitialTab);
   const [selectedCredores, setSelectedCredores] = useState<Set<string>>(new Set());
   const [selectedPeriods, setSelectedPeriods] = useState<Set<string>>(new Set());
   const [businessDayLimit, setBusinessDayLimit] = useState('all');
@@ -451,9 +460,10 @@ function DashboardPage() {
     mensal: [],
     diario: [],
   };
+  const whatsappCampaignData = demoMode ? DEMO_WHATSAPP_CAMPAIGN_DATA : WHATSAPP_CAMPAIGN_DATA;
   const whatsappCampaignPeriods = useMemo(
-    () => selectedPeriodList.map((item) => ({ period: item, data: WHATSAPP_CAMPAIGN_DATA[item] })).filter((item) => Boolean(item.data)),
-    [selectedPeriodList]
+    () => selectedPeriodList.map((item) => ({ period: item, data: whatsappCampaignData[item] })).filter((item) => Boolean(item.data)),
+    [selectedPeriodList, whatsappCampaignData]
   );
   const whatsappCampaignEnabled = whatsappCampaignPeriods.length > 0;
   const whatsappCampaignMatched = whatsappCampaignPeriods.reduce((sum, item) => sum + (item.data?.summary.matched ?? 0), 0);
@@ -956,6 +966,13 @@ function DashboardPage() {
         <button className={tab === 'base-ativa' ? 'active' : ''} type="button" role="tab" aria-selected={tab === 'base-ativa'} onClick={() => setTab('base-ativa')}>Bases</button>
       </div>
 
+      {demoMode ? (
+        <div className="demo-banner" role="note">
+          <strong>Modo demo</strong>
+          <span>Dados 100% fictícios para apresentação pública. A API real não é chamada nesta visualização.</span>
+        </div>
+      ) : null}
+
       {loading ? <div className="loading-state" role="status" aria-live="polite">Carregando dados do portal...</div> : null}
       {error ? <div className="error-state" role="alert">{error}</div> : null}
 
@@ -1005,8 +1022,8 @@ function DashboardPage() {
                         <YAxis tick={{ fontSize: 10 }} />
                         <Tooltip formatter={(value: number, name: string) => [money(value), name]} />
                         <Legend verticalAlign="top" height={28} />
-                        <Bar dataKey="atual" name="Atual" fill={COLORS.sky} radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="projetado" name="Projetado" fill={COLORS.green} radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="atual" name="Atual" fill={COLORS.sky} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                        <Bar dataKey="projetado" name="Projetado" fill={COLORS.green} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -1095,7 +1112,7 @@ function DashboardPage() {
                   <div className="chart-wrap">
                     <ResponsiveContainer>
                       <PieChart>
-                        <Pie data={componentRows} dataKey="value" nameKey="name" innerRadius={68} outerRadius={96} paddingAngle={2}>
+                        <Pie data={componentRows} dataKey="value" nameKey="name" innerRadius={68} outerRadius={96} paddingAngle={2} isAnimationActive={CHART_ANIMATION_ACTIVE}>
                           {componentRows.map((row) => <Cell key={row.name} fill={row.color} />)}
                         </Pie>
                         <Tooltip formatter={(value: number, name: string) => [money(value), name]} />
@@ -1124,7 +1141,7 @@ function DashboardPage() {
                             <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
                             <Tooltip formatter={(value: number) => [`${value} acordos`, 'Quantidade']} />
                             <Legend verticalAlign="top" height={28} />
-                            <Bar dataKey="value" name="Quantidade de acordos" fill={chartAccent} radius={[4, 4, 0, 0]}>
+                            <Bar dataKey="value" name="Quantidade de acordos" fill={chartAccent} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE}>
                               {rows.map((row, index) => <Cell key={row.name} fill={CHART_PALETTE[index % CHART_PALETTE.length]} />)}
                             </Bar>
                           </BarChart>
@@ -1178,9 +1195,9 @@ function DashboardPage() {
                         <Tooltip formatter={(value: number, name: string, item) => [money(value), isMultiPeriod ? comparisonTooltipName(name, item) : name]} />
                         <Legend verticalAlign="top" height={28} />
                         {isMultiPeriod ? periodSeries.map((item) => (
-                          <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={item.color} strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
+                          <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={item.color} strokeWidth={2.5} dot={{ r: 3 }} connectNulls isAnimationActive={CHART_ANIMATION_ACTIVE} />
                         )) : (
-                          <Line type="monotone" dataKey="receita" name="Receita diária" stroke={chartAccent} strokeWidth={2.5} dot={{ r: 3 }} />
+                          <Line type="monotone" dataKey="receita" name="Receita diária" stroke={chartAccent} strokeWidth={2.5} dot={{ r: 3 }} isAnimationActive={CHART_ANIMATION_ACTIVE} />
                         )}
                       </LineChart>
                     </ResponsiveContainer>
@@ -1196,9 +1213,9 @@ function DashboardPage() {
                         <Tooltip formatter={(value: number, name: string, item) => [`${value} acordos`, isMultiPeriod ? comparisonTooltipName(name, item) : name]} />
                         <Legend verticalAlign="top" height={28} />
                         {isMultiPeriod ? periodSeries.map((item) => (
-                          <Bar key={item.key} dataKey={item.key} name={item.label} fill={item.color} radius={[4, 4, 0, 0]} />
+                          <Bar key={item.key} dataKey={item.key} name={item.label} fill={item.color} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
                         )) : (
-                          <Bar dataKey="acordos" name="Acordos por dia útil" fill={chartAccent} radius={[4, 4, 0, 0]}>
+                          <Bar dataKey="acordos" name="Acordos por dia útil" fill={chartAccent} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE}>
                             {acordosDiarios.map((row, index) => <Cell key={row.date} fill={CHART_PALETTE[index % CHART_PALETTE.length]} />)}
                           </Bar>
                         )}
@@ -1440,7 +1457,7 @@ function DashboardPage() {
                               <Tooltip formatter={(value: number, name: string, item) => [money(value), comparisonTooltipName(name, item)]} />
                               <Legend verticalAlign="top" height={28} />
                               {periodSeries.map((item) => (
-                                <Bar key={item.key} dataKey={item.key} name={item.label} fill={item.color} radius={[4, 4, 0, 0]} />
+                                <Bar key={item.key} dataKey={item.key} name={item.label} fill={item.color} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
                               ))}
                             </BarChart>
                           </ResponsiveContainer>
@@ -1460,7 +1477,7 @@ function DashboardPage() {
                               <Tooltip formatter={(value: number, name: string, item) => [number(value), comparisonTooltipName(name, item)]} />
                               <Legend verticalAlign="top" height={28} />
                               {periodSeries.map((item) => (
-                                <Line key={`${item.key}_processos`} type="monotone" dataKey={`${item.key}_processos`} name={item.label} stroke={item.color} strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
+                                <Line key={`${item.key}_processos`} type="monotone" dataKey={`${item.key}_processos`} name={item.label} stroke={item.color} strokeWidth={2.5} dot={{ r: 3 }} connectNulls isAnimationActive={CHART_ANIMATION_ACTIVE} />
                               ))}
                             </LineChart>
                           </ResponsiveContainer>
@@ -1480,7 +1497,7 @@ function DashboardPage() {
                             <XAxis dataKey="label" tick={{ fontSize: 10 }} />
                             <YAxis tickFormatter={(value) => `R$${Math.round(Number(value) / 1000)}k`} tick={{ fontSize: 10 }} />
                             <Tooltip formatter={(value: number) => money(value)} />
-                            <Bar dataKey="valorEntrada" name="Valor de entrada" fill={chartAccent} radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="valorEntrada" name="Valor de entrada" fill={chartAccent} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
                           </BarChart>
                         </ResponsiveContainer>
                       </div>
@@ -1558,7 +1575,7 @@ function DashboardPage() {
                         <Tooltip formatter={(value: number, name: string, item) => [number(value), comparisonTooltipName(name, item)]} />
                         <Legend verticalAlign="top" height={28} />
                         {periodSeries.map((item) => (
-                          <Bar key={item.key} dataKey={item.key} name={item.label} fill={item.color} radius={[4, 4, 0, 0]} />
+                          <Bar key={item.key} dataKey={item.key} name={item.label} fill={item.color} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
                         ))}
                       </BarChart>
                     </ResponsiveContainer>
@@ -1578,7 +1595,7 @@ function DashboardPage() {
                         <Tooltip formatter={(value: number, name: string, item) => [number(value), comparisonTooltipName(name, item)]} />
                         <Legend verticalAlign="top" height={28} />
                         {periodSeries.map((item) => (
-                          <Line key={`${item.key}_clicked`} type="monotone" dataKey={`${item.key}_clicked`} name={item.label} stroke={item.color} strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
+                          <Line key={`${item.key}_clicked`} type="monotone" dataKey={`${item.key}_clicked`} name={item.label} stroke={item.color} strokeWidth={2.5} dot={{ r: 3 }} connectNulls isAnimationActive={CHART_ANIMATION_ACTIVE} />
                         ))}
                       </LineChart>
                     </ResponsiveContainer>
@@ -1657,8 +1674,8 @@ function DashboardPage() {
                       <YAxis tick={{ fontSize: 10 }} />
                       <Tooltip formatter={(value: number, name: string) => [number(value), name]} />
                       <Legend verticalAlign="top" height={28} />
-                      <Bar dataKey="emails" name="E-mails" fill={COLORS.sky} stackId="envios" radius={[0, 0, 0, 0]} />
-                      <Bar dataKey="whatsapp" name="WhatsApp" fill={COLORS.green} stackId="envios" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="emails" name="E-mails" fill={COLORS.sky} stackId="envios" radius={[0, 0, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                      <Bar dataKey="whatsapp" name="WhatsApp" fill={COLORS.green} stackId="envios" radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -1673,9 +1690,9 @@ function DashboardPage() {
                       <YAxis yAxisId="rate" orientation="right" tickFormatter={(value) => `${value}%`} tick={{ fontSize: 10 }} />
                       <Tooltip formatter={(value: number, name: string) => [name === 'Conversão acesso -> acordo' ? `${value.toFixed(1)}%` : number(value), name]} />
                       <Legend verticalAlign="top" height={28} />
-                      <Bar yAxisId="volume" dataKey="acessos" name="Acessos" fill={COLORS.sky} radius={[4, 4, 0, 0]} />
-                      <Bar yAxisId="volume" dataKey="acordos" name="Acordos" fill={COLORS.rust} radius={[4, 4, 0, 0]} />
-                      <Line yAxisId="rate" type="monotone" dataKey="conversao" name="Conversão acesso -> acordo" stroke={COLORS.green} strokeWidth={2.5} />
+                      <Bar yAxisId="volume" dataKey="acessos" name="Acessos" fill={COLORS.sky} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                      <Bar yAxisId="volume" dataKey="acordos" name="Acordos" fill={COLORS.rust} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                      <Line yAxisId="rate" type="monotone" dataKey="conversao" name="Conversão acesso -> acordo" stroke={COLORS.green} strokeWidth={2.5} isAnimationActive={CHART_ANIMATION_ACTIVE} />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
@@ -1698,9 +1715,9 @@ function DashboardPage() {
                         <YAxis yAxisId="rate" orientation="right" tickFormatter={(value) => `${value}%`} tick={{ fontSize: 10 }} />
                         <Tooltip formatter={(value: number, name: string) => [name === 'Conversão' ? `${value.toFixed(1)}%` : number(value), name]} />
                         <Legend verticalAlign="top" height={28} />
-                        <Bar yAxisId="volume" dataKey="acessos" name="Acessos" fill={COLORS.sky} radius={[4, 4, 0, 0]} />
-                        <Bar yAxisId="volume" dataKey="acordos" name="Acordos" fill={COLORS.rust} radius={[4, 4, 0, 0]} />
-                        <Line yAxisId="rate" type="monotone" dataKey="conversao" name="Conversão" stroke={COLORS.green} strokeWidth={2.5} />
+                        <Bar yAxisId="volume" dataKey="acessos" name="Acessos" fill={COLORS.sky} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                        <Bar yAxisId="volume" dataKey="acordos" name="Acordos" fill={COLORS.rust} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                        <Line yAxisId="rate" type="monotone" dataKey="conversao" name="Conversão" stroke={COLORS.green} strokeWidth={2.5} isAnimationActive={CHART_ANIMATION_ACTIVE} />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>

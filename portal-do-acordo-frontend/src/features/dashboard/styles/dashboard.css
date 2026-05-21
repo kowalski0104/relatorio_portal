@@ -1094,6 +1094,33 @@ tfoot td {
   font-size: 13px;
 }
 
+.demo-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 48px 0;
+  padding: 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  color: var(--ink);
+  font-size: 12px;
+  box-shadow: 0 12px 28px rgba(13, 17, 23, .08);
+}
+
+.demo-banner strong {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
 .loading-state,
 .error-state {
   margin: 32px 48px;
@@ -1248,6 +1275,7 @@ tfoot td {
 
 .presentation-mode .system-bar,
 .presentation-mode .tab-bar,
+.presentation-mode .demo-banner,
 .presentation-mode .footer {
   display: none;
 }
@@ -1436,6 +1464,13 @@ tfoot td {
   .footer {
     padding-left: 20px;
     padding-right: 20px;
+  }
+
+  .demo-banner {
+    align-items: flex-start;
+    flex-direction: column;
+    margin-left: 20px;
+    margin-right: 20px;
   }
 
   .hero h1 {
