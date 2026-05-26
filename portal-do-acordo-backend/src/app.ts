@@ -10,6 +10,7 @@ import costRouter from './routes/costRoutes';
 import communicationRouter from './routes/communicationRoutes';
 import activeBaseRouter from './routes/activeBaseRoutes';
 import portfolioRouter from './routes/portfolioRoutes';
+import emailWebhookRouter, { clickRouter } from './routes/emailTrackingRoutes';
 import { authMiddleware } from './middleware/auth';
 import { errorHandler } from './middleware/errorHandler';
 
@@ -47,6 +48,10 @@ export function createApp() {
     });
   });
 
+  // Rota de clique de e-mail DEVE estar ANTES da autenticação
+  // Precisa ser pública para cliques anônimos de e-mails
+  app.use('/r', clickRouter);
+
   app.use('/api', authMiddleware);
 
   app.use('/api/baixas', paymentRouter);
@@ -57,6 +62,7 @@ export function createApp() {
   app.use('/api/comunicacao', communicationRouter);
   app.use('/api/base-ativa', activeBaseRouter);
   app.use('/api/carteiras', portfolioRouter);
+  app.use('/api/mailgrid', emailWebhookRouter);
 
   app.use(errorHandler);
 
