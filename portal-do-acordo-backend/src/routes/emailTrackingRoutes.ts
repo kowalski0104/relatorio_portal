@@ -8,6 +8,12 @@ let pool: sql.ConnectionPool | null = null;
 
 async function getConnection() {
   if (!pool) {
+    console.log('Tentando conectar ao Azure SQL:', {
+      server: process.env.AZURE_SQL_SERVER,
+      database: process.env.AZURE_SQL_DATABASE,
+      user: process.env.AZURE_SQL_USER,
+    });
+
     pool = new sql.ConnectionPool({
       server: process.env.AZURE_SQL_SERVER || '',
       database: process.env.AZURE_SQL_DATABASE || '',
@@ -26,8 +32,14 @@ async function getConnection() {
       },
     });
 
-    await pool.connect();
-    console.log('Conectado ao Azure SQL');
+    try {
+      await pool.connect();
+      console.log('✅ Conectado ao Azure SQL com sucesso');
+    } catch (err) {
+      console.error('❌ Erro ao conectar ao Azure SQL:', err);
+      pool = null;
+      throw err;
+    }
   }
 
   return pool;
@@ -41,6 +53,7 @@ export const clickRouter = Router();
 clickRouter.get('/:token', async (req, res) => {
   try {
     const token = req.params.token;
+    console.log(`📧 Clique recebido - Token: ${token}`);
 
     const pool = await getConnection();
     const result = await pool
@@ -51,8 +64,11 @@ clickRouter.get('/:token', async (req, res) => {
     const envio = result.recordset[0];
 
     if (!envio) {
+      console.warn(`⚠️ Token não encontrado: ${token}`);
       return res.status(404).send('Link não encontrado.');
     }
+
+    console.log(`✅ Envio encontrado: ${envio.url_destino}`);
 
     // Salva o clique no banco
     await pool
@@ -91,11 +107,13 @@ clickRouter.get('/:token', async (req, res) => {
         )
       `);
 
+    console.log(`💾 Clique salvo no banco`);
+
     // Redireciona para a URL real
     return res.redirect(envio.url_destino);
   } catch (error) {
-    console.error('Erro ao processar clique:', error);
-    res.status(500).send('Erro ao processar clique');
+    console.error('❌ Erro ao processar clique:', error);
+    res.status(500).send(`Erro ao processar clique: ${error}`);
   }
 });
 
