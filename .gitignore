@@ -1,5 +1,5 @@
 node_modules/
-dist/
+portal-do-acordo-frontend/dist/
 __pycache__/
 *.py[cod]
 

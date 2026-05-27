@@ -1,6 +1,12 @@
 name: Deploy backend to Azure App Service
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'portal-do-acordo-backend/**'
+      - '.github/workflows/backend-azure-app-service.yml'
   workflow_dispatch:
 
 env:
