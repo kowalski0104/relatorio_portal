@@ -8,8 +8,8 @@ import {
   getDemoPortfolio,
   isDemoMode,
 } from '../data/demoDashboardData';
-import { fetchActiveBase, fetchCommunication, fetchCosts, fetchDashboardData, fetchPortfolio } from '../services/dashboardApi';
-import type { ActiveBaseReport, CommunicationData, CostsData, DashboardData, PortfolioEntry, SystemFilter } from '../types';
+import { fetchActiveBase, fetchCommunication, fetchCosts, fetchDashboardData, fetchEmailClicks, fetchPortfolio } from '../services/dashboardApi';
+import type { ActiveBaseReport, CommunicationData, CostsData, DashboardData, EmailClickData, PortfolioEntry, SystemFilter } from '../types';
 import { monthKey } from '../utils/dates';
 
 const EMPTY_DASHBOARD_DATA: DashboardData = { baixas: [], acordos: [], acessos: [] };
@@ -83,12 +83,14 @@ export function useDashboardData() {
 export function useDashboardSupplementalData(period: string, system: SystemFilter, selectedCreditors: Set<string>) {
   const [costs, setCosts] = useState<CostsData | null>(null);
   const [communication, setCommunication] = useState<CommunicationData | null>(null);
+  const [emailClicks, setEmailClicks] = useState<EmailClickData | null>(null);
 
   useEffect(() => {
     if (!period) return;
     if (isDemoMode()) {
       setCosts(getDemoCosts(period, system));
       setCommunication(getDemoCommunication(period, system, selectedCreditors));
+      setEmailClicks(null);
       return;
     }
 
@@ -96,16 +98,19 @@ export function useDashboardSupplementalData(period: string, system: SystemFilte
     Promise.all([
       fetchCosts(period, system),
       fetchCommunication(period, system, selectedCreditors),
+      fetchEmailClicks(period, system, selectedCreditors),
     ])
-      .then(([costsResult, communicationResult]) => {
+      .then(([costsResult, communicationResult, emailClicksResult]) => {
         if (!active) return;
         setCosts(costsResult);
         setCommunication(communicationResult);
+        setEmailClicks(emailClicksResult);
       })
       .catch(() => {
         if (!active) return;
         setCosts(null);
         setCommunication(null);
+        setEmailClicks(null);
       });
 
     return () => {
@@ -113,7 +118,7 @@ export function useDashboardSupplementalData(period: string, system: SystemFilte
     };
   }, [period, selectedCreditors, system]);
 
-  return { costs, communication };
+  return { costs, communication, emailClicks };
 }
 
 export function useActiveBaseData(system: SystemFilter, selectedCreditors: Set<string>, enabled: boolean) {

@@ -124,3 +124,36 @@ export type CommunicationData = {
     mensagens_wati: number;
   }>;
 };
+
+export type EmailClickData = {
+  total: {
+    cliques: number;
+    links_unicos: number;
+    processos: number;
+    destinatarios: number;
+  };
+  por_credor: Array<{
+    credor: string;
+    cliques: number;
+    links_unicos: number;
+    processos: number;
+    destinatarios: number;
+    campanhas: number;
+    templates: number;
+    ips: number;
+    user_agents: number;
+    primeiro_clique: string | null;
+    ultimo_clique: string | null;
+  }>;
+  recentes: Array<{
+    token: string | null;
+    processo: string | null;
+    email_destinatario: string | null;
+    credor: string;
+    campanha: string | null;
+    template: string | null;
+    ip: string | null;
+    user_agent: string | null;
+    data_clique: string | null;
+  }>;
+};

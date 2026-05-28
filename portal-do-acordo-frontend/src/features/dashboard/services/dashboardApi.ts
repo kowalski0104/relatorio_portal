@@ -1,4 +1,4 @@
-import type { Access, ActiveBaseReport, Agreement, CommunicationData, CostsData, DashboardData, Payment, PortfolioEntry, SystemFilter } from '../types';
+import type { Access, ActiveBaseReport, Agreement, CommunicationData, CostsData, DashboardData, EmailClickData, Payment, PortfolioEntry, SystemFilter } from '../types';
 
 export async function fetchDataset<T>(url: string): Promise<T[]> {
   const response = await fetch(apiUrl(url));
@@ -30,6 +30,15 @@ export async function fetchCommunication(periodo: string, sistema: SystemFilter,
   const params = new URLSearchParams({ periodo, sistema });
   if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
   const response = await fetch(apiUrl(`/api/comunicacao?${params.toString()}`));
+  if (!response.ok) return null;
+  const payload = await response.json();
+  return payload.data ?? null;
+}
+
+export async function fetchEmailClicks(periodo: string, sistema: SystemFilter, credores: Set<string>): Promise<EmailClickData | null> {
+  const params = new URLSearchParams({ periodo, sistema });
+  if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
+  const response = await fetch(apiUrl(`/api/mailgrid/cliques?${params.toString()}`));
   if (!response.ok) return null;
   const payload = await response.json();
   return payload.data ?? null;
