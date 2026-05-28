@@ -91,7 +91,6 @@ export type PortfolioEntry = {
   idcredor: number;
   credor: string;
   qtdetit: number;
-  tottit: number;
   qtdeimp: number;
   qtdeproc: number;
   qtdedup: number;

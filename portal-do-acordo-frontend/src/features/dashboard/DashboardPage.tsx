@@ -863,7 +863,7 @@ function DashboardPage() {
       if (!series) return;
 
       const current = rowsByBusinessDay.get(businessDay) ?? { businessDay, label: `${businessDay}º dia útil` };
-      current[series.key] = safe(current[series.key] as number) + safe(row.tottit || row.valor_imp);
+      current[series.key] = safe(current[series.key] as number) + safe(row.valor_imp);
       current[`${series.key}_processos`] = safe(current[`${series.key}_processos`] as number) + safe(row.qtdeproc);
       current[`${series.key}_date`] = dayLabel(row.data);
       rowsByBusinessDay.set(businessDay, current);
@@ -876,7 +876,7 @@ function DashboardPage() {
     const agreementsByCreditor = groupBy(portfolioFiltered.acordos, (row) => row.credor || 'OUTROS');
     const byCreditor = Object.entries(groupBy(filteredPortfolioData, (row: PortfolioEntry) => row.credor))
       .map(([credor, rows]) => {
-        const valorEntrada = rows.reduce((sum, row) => sum + safe(row.tottit || row.valor_imp), 0);
+        const valorEntrada = rows.reduce((sum, row) => sum + safe(row.valor_imp), 0);
         const recuperado = (recoveredByCreditor[credor] ?? []).reduce((sum, row) => sum + safe(row.total_pago_portal), 0);
         const processos = rows.reduce((sum, row) => sum + safe(row.qtdeproc), 0);
         const titulos = rows.reduce((sum, row) => sum + safe(row.qtdetit), 0);
@@ -903,7 +903,7 @@ function DashboardPage() {
       .map(([mes, rows]) => ({
         mes,
         label: periodLabel(mes),
-        valorEntrada: rows.reduce((sum, row) => sum + safe(row.tottit || row.valor_imp), 0),
+        valorEntrada: rows.reduce((sum, row) => sum + safe(row.valor_imp), 0),
         processos: rows.reduce((sum, row) => sum + safe(row.qtdeproc), 0),
         borderos: rows.length,
       }))

@@ -13,7 +13,6 @@ type BorderoRawRow = {
   idcredor: number | string;
   credor: string | null;
   qtdetit: number | string | null;
-  tottit: number | string | null;
   qtdeimp: number | string | null;
   qtdeproc: number | string | null;
   qtdedup: number | string | null;
@@ -78,7 +77,6 @@ async function queryPortfolio(prisma: PrismaClient, empresaId: number, filter: P
         b.idcredor,
         TRIM(c.grupo) AS credor,
         b.qtdetit,
-        b.tottit,
         b.qtdeimp,
         b.qtdeproc,
         b.qtdedup,
@@ -110,7 +108,6 @@ async function queryPortfolio(prisma: PrismaClient, empresaId: number, filter: P
       idcredor: Number(row.idcredor),
       credor: normalizeCreditor(row) || 'OUTROS',
       qtdetit: Number(row.qtdetit ?? 0),
-      tottit: Number(row.tottit ?? 0),
       qtdeimp: Number(row.qtdeimp ?? 0),
       qtdeproc: Number(row.qtdeproc ?? 0),
       qtdedup: Number(row.qtdedup ?? 0),

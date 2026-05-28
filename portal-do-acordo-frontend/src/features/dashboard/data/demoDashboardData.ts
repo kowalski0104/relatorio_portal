@@ -244,7 +244,6 @@ export function getDemoPortfolio(sistema: SystemFilter, selectedPeriods: Set<str
         idcredor: creditor.idcredor,
         credor: creditor.credor,
         qtdetit: titulos,
-        tottit: valor,
         qtdeimp: titulos,
         qtdeproc: processos,
         qtdedup: Math.round(titulos * 0.025),
