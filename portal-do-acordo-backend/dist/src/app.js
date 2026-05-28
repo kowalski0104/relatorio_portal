@@ -50,6 +50,7 @@ const communicationRoutes_1 = __importDefault(require("./routes/communicationRou
 const activeBaseRoutes_1 = __importDefault(require("./routes/activeBaseRoutes"));
 const portfolioRoutes_1 = __importDefault(require("./routes/portfolioRoutes"));
 const emailTrackingRoutes_1 = __importStar(require("./routes/emailTrackingRoutes"));
+const activeUsersRoutes_1 = __importStar(require("./routes/activeUsersRoutes"));
 const auth_1 = require("./middleware/auth");
 const errorHandler_1 = require("./middleware/errorHandler");
 function createApp() {
@@ -94,6 +95,8 @@ function createApp() {
     app.use('/api/base-ativa', activeBaseRoutes_1.default);
     app.use('/api/carteiras', portfolioRoutes_1.default);
     app.use('/api/mailgrid', emailTrackingRoutes_1.default);
+    app.use('/api/presenca', activeUsersRoutes_1.default);
+    app.use('/api/admin', activeUsersRoutes_1.activeUsersAdminRouter);
     app.use(errorHandler_1.errorHandler);
     return app;
 }

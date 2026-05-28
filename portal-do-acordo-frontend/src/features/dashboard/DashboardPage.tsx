@@ -25,6 +25,7 @@ import { CHART_PALETTE, COLORS, FIXED_EMAIL_COST } from './config/constants';
 import { DEMO_WHATSAPP_CAMPAIGN_DATA, isDemoMode } from './data/demoDashboardData';
 import { WHATSAPP_CAMPAIGN_DATA, type WhatsappCampaignCredor } from './data/whatsappCampaigns';
 import { useActiveBaseData, useDashboardData, useDashboardSupplementalData, usePortfolioData } from './hooks/useDashboardData';
+import { sendPresenceHeartbeat } from './services/dashboardApi';
 import type { Access, Agreement, CostsData, DashboardTab, PortfolioEntry, SystemFilter, ThemeMode } from './types';
 import { groupBy, isNoCreditorSelection, NO_CREDITOR_SELECTION, normalizeCreditorGroup } from './utils/creditors';
 import { businessDayIndexMap, businessDaysInPeriod, dayLabel, monthKey, periodLabel, periodRangeLabel, previousPeriod } from './utils/dates';
@@ -34,6 +35,7 @@ import './styles/dashboard.css';
 
 const safe = safeNumber;
 const CHART_ANIMATION_ACTIVE = false;
+const PRESENCE_SESSION_KEY = 'portal-presence-session-id';
 const PRESENTATION_TABS: DashboardTab[] = ['relatorio', 'performance', 'carteiras', 'custos', 'base-ativa'];
 const TAB_LABELS: Record<DashboardTab, string> = {
   relatorio: 'Resultados',
@@ -55,6 +57,18 @@ function getInitialTab(): DashboardTab {
   if (typeof window === 'undefined') return 'relatorio';
   const requestedTab = new URLSearchParams(window.location.search).get('tab') as DashboardTab | null;
   return requestedTab && TAB_LABELS[requestedTab] ? requestedTab : 'relatorio';
+}
+
+function getPresenceSessionId() {
+  if (typeof window === 'undefined') return '';
+  const existing = window.localStorage.getItem(PRESENCE_SESSION_KEY);
+  if (existing) return existing;
+
+  const next = typeof window.crypto?.randomUUID === 'function'
+    ? window.crypto.randomUUID()
+    : `session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  window.localStorage.setItem(PRESENCE_SESSION_KEY, next);
+  return next;
 }
 
 function DashboardPage() {
@@ -106,6 +120,37 @@ function DashboardPage() {
   useEffect(() => {
     window.localStorage.setItem('portal-theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (demoMode) return undefined;
+
+    const sendHeartbeat = () => {
+      sendPresenceHeartbeat({
+        sessionId: getPresenceSessionId(),
+        path: `${window.location.pathname}${window.location.search}`,
+        tab,
+        period: primaryPeriod,
+        system,
+        referrer: document.referrer,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        language: navigator.language,
+        visibility: document.visibilityState,
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        screen: { width: window.screen.width, height: window.screen.height },
+      });
+    };
+
+    sendHeartbeat();
+    const interval = window.setInterval(sendHeartbeat, 30000);
+    window.addEventListener('focus', sendHeartbeat);
+    document.addEventListener('visibilitychange', sendHeartbeat);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', sendHeartbeat);
+      document.removeEventListener('visibilitychange', sendHeartbeat);
+    };
+  }, [demoMode, primaryPeriod, system, tab]);
 
   useEffect(() => {
     function closeFiltersOnOutsideClick(event: MouseEvent) {
@@ -634,7 +679,6 @@ function DashboardPage() {
   const totalEnviosCanal = emailEnvios + whatsappEnvios;
   const enviosMensuraveis = whatsappEnvios;
   const emailClickTotal = emailClickView.total.cliques;
-  const totalTrackedClicks = cliquesPortal + emailClickTotal;
   const emailClickRows = emailClickView.por_credor
     .filter((row) => row.credor !== 'SEM CREDOR' && row.credor !== 'OUTROS')
     .sort((a, b) => b.cliques - a.cliques || b.links_unicos - a.links_unicos || a.credor.localeCompare(b.credor));
@@ -1543,7 +1587,8 @@ function DashboardPage() {
             </div>
             <div className="kpi-row">
               <MetricCard tone="teal" label="Envios" value={number(totalEnviosCanal)} current={totalEnviosCanal} small={`${number(emailEnvios)} e-mails - ${number(whatsappEnvios)} WhatsApp`} summary="Total de comunicações enviadas no período." />
-              <MetricCard tone="gold" label="Cliques" value={number(totalTrackedClicks)} current={totalTrackedClicks} small={`${number(cliquesPortal)} WhatsApp - ${number(emailClickTotal)} e-mail`} summary="Cliques rastreados nos links de WhatsApp e e-mail." />
+              <MetricCard tone="gold" label="Cliques" value={number(cliquesPortal)} current={cliquesPortal} small={whatsappCampaignEnabled ? 'Cliques pelo WhatsApp' : 'Eventos do portal'} summary="Cliques no link usados no funil de performance." />
+              <MetricCard tone="teal" label="Cliques e-mail" value={number(emailClickTotal)} current={emailClickTotal} small={`${number(emailClickView.total.links_unicos)} links rastreados`} summary="Cliques rastreados pelos tokens de e-mail." />
               <MetricCard tone="sky" label="Acessos" value={number(acessosPortal)} current={acessosPortal} previous={previousMetrics?.acessos} small="Acessos no site" summary="Acessos registrados no Portal do Acordo." />
               <MetricCard tone="rust" label="Conversão" value={`${metrics.conversao.toFixed(1)}%`} current={metrics.conversao} previous={previousMetrics?.conversao} small={`${number(metrics.acordos)} acordos`} summary="Conversão de acessos em acordos no período." />
             </div>

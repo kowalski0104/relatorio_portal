@@ -96,9 +96,9 @@ export function useDashboardSupplementalData(period: string, system: SystemFilte
 
     let active = true;
     Promise.all([
-      fetchCosts(period, system),
-      fetchCommunication(period, system, selectedCreditors),
-      fetchEmailClicks(period, system, selectedCreditors),
+      fetchCosts(period, system).catch(() => null),
+      fetchCommunication(period, system, selectedCreditors).catch(() => null),
+      fetchEmailClicks(period, system, selectedCreditors).catch(() => null),
     ])
       .then(([costsResult, communicationResult, emailClicksResult]) => {
         if (!active) return;
@@ -106,12 +106,6 @@ export function useDashboardSupplementalData(period: string, system: SystemFilte
         setCommunication(communicationResult);
         setEmailClicks(emailClicksResult);
       })
-      .catch(() => {
-        if (!active) return;
-        setCosts(null);
-        setCommunication(null);
-        setEmailClicks(null);
-      });
 
     return () => {
       active = false;

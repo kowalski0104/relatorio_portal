@@ -11,6 +11,7 @@ import communicationRouter from './routes/communicationRoutes';
 import activeBaseRouter from './routes/activeBaseRoutes';
 import portfolioRouter from './routes/portfolioRoutes';
 import emailWebhookRouter, { clickRouter } from './routes/emailTrackingRoutes';
+import presenceRouter, { activeUsersAdminRouter } from './routes/activeUsersRoutes';
 import { authMiddleware } from './middleware/auth';
 import { errorHandler } from './middleware/errorHandler';
 
@@ -63,6 +64,8 @@ export function createApp() {
   app.use('/api/base-ativa', activeBaseRouter);
   app.use('/api/carteiras', portfolioRouter);
   app.use('/api/mailgrid', emailWebhookRouter);
+  app.use('/api/presenca', presenceRouter);
+  app.use('/api/admin', activeUsersAdminRouter);
 
   app.use(errorHandler);
 

@@ -1,5 +1,19 @@
 import type { Access, ActiveBaseReport, Agreement, CommunicationData, CostsData, DashboardData, EmailClickData, Payment, PortfolioEntry, SystemFilter } from '../types';
 
+export type PresenceHeartbeatPayload = {
+  sessionId: string;
+  path: string;
+  tab: string;
+  period: string;
+  system: string;
+  referrer: string;
+  timezone: string;
+  language: string;
+  visibility: string;
+  viewport: { width: number; height: number };
+  screen: { width: number; height: number };
+};
+
 export async function fetchDataset<T>(url: string): Promise<T[]> {
   const response = await fetch(apiUrl(url));
   if (!response.ok) throw new Error(`Falha ao carregar ${url}: ${response.status}`);
@@ -61,6 +75,15 @@ export async function fetchPortfolio(sistema: SystemFilter, periodos: Set<string
   if (!response.ok) throw new Error(`Falha ao carregar /api/carteiras: ${response.status}`);
   const payload = await response.json();
   return Array.isArray(payload.data) ? payload.data : [];
+}
+
+export function sendPresenceHeartbeat(payload: PresenceHeartbeatPayload) {
+  return fetch(apiUrl('/api/presenca/heartbeat'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    keepalive: true,
+  }).catch(() => undefined);
 }
 
 function apiUrl(path: string) {
