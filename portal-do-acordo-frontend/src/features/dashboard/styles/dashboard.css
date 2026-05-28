@@ -452,6 +452,12 @@ select:focus-visible,
   gap: 24px;
 }
 
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+
 .panel {
   overflow: hidden;
   background: var(--surface);
@@ -1407,6 +1413,7 @@ tfoot td {
   }
 
   .grid-2,
+  .grid-3,
   .metric-grid,
   .neg-grid {
     gap: 18px;
@@ -1488,6 +1495,7 @@ tfoot td {
 
   .kpi-row,
   .grid-2,
+  .grid-3,
   .neg-grid,
   .metric-grid,
   .funnel-grid {

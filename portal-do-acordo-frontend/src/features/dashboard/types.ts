@@ -2,6 +2,35 @@ export type SystemFilter = 'consulth' | 'sisth' | 'total';
 export type DashboardTab = 'relatorio' | 'custos' | 'performance' | 'carteiras' | 'base-ativa';
 export type ThemeMode = 'sisth' | 'night';
 
+export type ActiveUsersReport = {
+  generated_at: string;
+  active_window_seconds: number;
+  total_active: number;
+  by_tab: Array<{ name: string; value: number }>;
+  by_device: Array<{ name: string; value: number }>;
+  by_browser: Array<{ name: string; value: number }>;
+  sessions: Array<{
+    session_id: string;
+    first_seen: string;
+    last_seen: string;
+    seconds_online: number;
+    path: string;
+    tab: string;
+    period: string;
+    system: string;
+    referrer: string;
+    timezone: string;
+    language: string;
+    visibility: string;
+    viewport: { width: number | null; height: number | null };
+    screen: { width: number | null; height: number | null };
+    ip_hash: string;
+    browser: string;
+    os: string;
+    device: string;
+  }>;
+};
+
 export type Payment = {
   id: string;
   processo: string;

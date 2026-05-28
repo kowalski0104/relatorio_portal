@@ -1,4 +1,4 @@
-import type { Access, ActiveBaseReport, Agreement, CommunicationData, CostsData, DashboardData, EmailClickData, Payment, PortfolioEntry, SystemFilter } from '../types';
+import type { Access, ActiveBaseReport, ActiveUsersReport, Agreement, CommunicationData, CostsData, DashboardData, EmailClickData, Payment, PortfolioEntry, SystemFilter } from '../types';
 
 export type PresenceHeartbeatPayload = {
   sessionId: string;
@@ -84,6 +84,15 @@ export function sendPresenceHeartbeat(payload: PresenceHeartbeatPayload) {
     body: JSON.stringify(payload),
     keepalive: true,
   }).catch(() => undefined);
+}
+
+export async function fetchActiveUsers(token: string): Promise<ActiveUsersReport> {
+  const response = await fetch(apiUrl('/api/admin/active-users'), {
+    headers: { 'x-admin-token': token },
+  });
+  if (!response.ok) throw new Error(`Falha ao carregar pessoas ativas: ${response.status}`);
+  const payload = await response.json();
+  return payload.data;
 }
 
 function apiUrl(path: string) {

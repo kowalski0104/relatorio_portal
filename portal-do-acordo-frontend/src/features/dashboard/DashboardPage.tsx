@@ -25,8 +25,8 @@ import { CHART_PALETTE, COLORS, FIXED_EMAIL_COST } from './config/constants';
 import { DEMO_WHATSAPP_CAMPAIGN_DATA, isDemoMode } from './data/demoDashboardData';
 import { WHATSAPP_CAMPAIGN_DATA, type WhatsappCampaignCredor } from './data/whatsappCampaigns';
 import { useActiveBaseData, useDashboardData, useDashboardSupplementalData, usePortfolioData } from './hooks/useDashboardData';
-import { sendPresenceHeartbeat } from './services/dashboardApi';
-import type { Access, Agreement, CostsData, DashboardTab, PortfolioEntry, SystemFilter, ThemeMode } from './types';
+import { fetchActiveUsers, sendPresenceHeartbeat } from './services/dashboardApi';
+import type { Access, ActiveUsersReport, Agreement, CostsData, DashboardTab, PortfolioEntry, SystemFilter, ThemeMode } from './types';
 import { groupBy, isNoCreditorSelection, NO_CREDITOR_SELECTION, normalizeCreditorGroup } from './utils/creditors';
 import { businessDayIndexMap, businessDaysInPeriod, dayLabel, monthKey, periodLabel, periodRangeLabel, previousPeriod } from './utils/dates';
 import { countBusinessDaysWithData, filterDashboardData, getAvailableCreditors, matchesSystem, summarizeDashboardMetrics } from './utils/dashboardMetrics';
@@ -71,7 +71,28 @@ function getPresenceSessionId() {
   return next;
 }
 
+function getAdminToken() {
+  if (typeof window === 'undefined') return '';
+  return new URLSearchParams(window.location.search).get('admin')?.trim() ?? '';
+}
+
+function formatDuration(seconds: number) {
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes < 60) return `${minutes}min ${remainingSeconds}s`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}min`;
+}
+
+function viewportLabel(value: { width: number | null; height: number | null }) {
+  return value.width && value.height ? `${value.width} x ${value.height}` : '-';
+}
+
 function DashboardPage() {
+  const adminToken = getAdminToken();
+  const [activeUsers, setActiveUsers] = useState<ActiveUsersReport | null>(null);
+  const [activeUsersError, setActiveUsersError] = useState('');
   const demoMode = isDemoMode();
   const { data, loading, error, period, setPeriod, periods } = useDashboardData();
   const [system, setSystem] = useState<SystemFilter>(() => demoMode ? 'total' : 'consulth');
@@ -120,6 +141,32 @@ function DashboardPage() {
   useEffect(() => {
     window.localStorage.setItem('portal-theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (!adminToken) return undefined;
+
+    let active = true;
+    const loadActiveUsers = () => {
+      fetchActiveUsers(adminToken)
+        .then((report) => {
+          if (!active) return;
+          setActiveUsers(report);
+          setActiveUsersError('');
+        })
+        .catch((err) => {
+          if (!active) return;
+          setActiveUsers(null);
+          setActiveUsersError(err instanceof Error ? err.message : 'Erro ao carregar pessoas ativas.');
+        });
+    };
+
+    loadActiveUsers();
+    const interval = window.setInterval(loadActiveUsers, 15000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [adminToken]);
 
   useEffect(() => {
     if (demoMode) return undefined;
@@ -894,6 +941,85 @@ function DashboardPage() {
       setPeriod(item);
       return next;
     });
+  }
+
+  if (adminToken) {
+    return (
+      <div className={`dashboard-shell theme-${theme}`}>
+        <header className="hero admin-hero">
+          <div className="hero-top">
+            <div>
+              <div className="logos">
+                <img src={logoUrl} alt="Portal do Acordo" />
+              </div>
+              <p>Admin</p>
+              <h1><span>Pessoas ativas</span></h1>
+            </div>
+            <div className="hero-meta">
+              <strong>{number(activeUsers?.total_active ?? 0)} online</strong>
+              <span>Janela de {activeUsers ? formatDuration(activeUsers.active_window_seconds) : '2min'}</span>
+              <span>Atualiza a cada 15s</span>
+              <em>{dateTime(activeUsers?.generated_at)}</em>
+            </div>
+          </div>
+          <div className="kpi-row">
+            <MetricCard tone="teal" label="Online agora" value={number(activeUsers?.total_active ?? 0)} current={activeUsers?.total_active ?? 0} small="Sessões ativas" summary="Sessões com sinal nos últimos minutos." />
+            <MetricCard tone="gold" label="Abas" value={number(activeUsers?.by_tab.length ?? 0)} current={activeUsers?.by_tab.length ?? 0} small="Seções abertas" summary="Quantidade de abas/seções em uso agora." />
+            <MetricCard tone="sky" label="Dispositivo" value={activeUsers?.by_device[0]?.name ?? '-'} current={activeUsers?.by_device[0]?.value ?? 0} small={activeUsers?.by_device[0] ? `${number(activeUsers.by_device[0].value)} sessão(ões)` : 'Sem dados'} summary="Dispositivo mais frequente neste momento." />
+            <MetricCard tone="rust" label="Navegador" value={activeUsers?.by_browser[0]?.name ?? '-'} current={activeUsers?.by_browser[0]?.value ?? 0} small={activeUsers?.by_browser[0] ? `${number(activeUsers.by_browser[0].value)} sessão(ões)` : 'Sem dados'} summary="Navegador mais frequente neste momento." />
+          </div>
+        </header>
+
+        <main className="main-content admin-content">
+          {activeUsersError ? <div className="error-state" role="alert">{activeUsersError}</div> : null}
+          {!activeUsers && !activeUsersError ? <div className="loading-state">Carregando pessoas ativas...</div> : null}
+          {activeUsers ? (
+            <>
+              <Section num="01" title="Resumo Agora">
+                <div className="grid-3">
+                  <Panel title="Por Aba">
+                    <BarRows rows={activeUsers.by_tab} color={color} valueLabel="Sessões" />
+                  </Panel>
+                  <Panel title="Por Dispositivo">
+                    <BarRows rows={activeUsers.by_device} color={COLORS.gold} valueLabel="Sessões" />
+                  </Panel>
+                  <Panel title="Por Navegador">
+                    <BarRows rows={activeUsers.by_browser} color={COLORS.sky} valueLabel="Sessões" />
+                  </Panel>
+                </div>
+              </Section>
+
+              <Section num="02" title="Sessões Ativas">
+                <Panel title="Detalhes anônimos" meta={`${number(activeUsers.sessions.length)} sessão(ões)`}>
+                  <table>
+                    <thead>
+                      <tr><th>Último sinal</th><th>Aba</th><th>Sistema</th><th>Período</th><th>Tempo online</th><th>Dispositivo</th><th>Navegador</th><th>Janela</th><th>Timezone</th><th>IP hash</th></tr>
+                    </thead>
+                    <tbody>
+                      {activeUsers.sessions.length === 0 ? <tr><td colSpan={10} className="muted">Ninguém ativo agora.</td></tr> : null}
+                      {activeUsers.sessions.map((session) => (
+                        <tr key={session.session_id}>
+                          <td className="bold">{dateTime(session.last_seen)}</td>
+                          <td>{TAB_LABELS[session.tab as DashboardTab] ?? session.tab}</td>
+                          <td>{session.system || '-'}</td>
+                          <td>{session.period || '-'}</td>
+                          <td>{formatDuration(session.seconds_online)}</td>
+                          <td>{session.device} / {session.os}</td>
+                          <td>{session.browser}</td>
+                          <td>{viewportLabel(session.viewport)}</td>
+                          <td>{session.timezone || '-'}</td>
+                          <td className="muted">{session.ip_hash}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </Panel>
+              </Section>
+            </>
+          ) : null}
+        </main>
+      </div>
+    );
   }
 
   return (
