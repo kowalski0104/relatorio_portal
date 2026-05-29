@@ -836,6 +836,12 @@ tfoot td {
   font-weight: 800;
 }
 
+.highlight-row td {
+  background: color-mix(in srgb, var(--gold) 16%, transparent);
+  color: var(--ink);
+  font-weight: 800;
+}
+
 .right {
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -999,6 +1005,49 @@ tfoot td {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.center-funnel {
+  display: grid;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+.center-funnel-row {
+  display: flex;
+  justify-content: center;
+}
+
+.center-funnel-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 120px;
+  min-height: 42px;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: #fff;
+  box-shadow: 0 10px 20px rgba(13, 17, 23, .12);
+}
+
+.center-funnel-bar span,
+.center-funnel-bar strong {
+  color: inherit;
+  line-height: 1;
+}
+
+.center-funnel-bar span {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.center-funnel-bar strong {
+  font-size: 18px;
+  font-weight: 900;
+  white-space: nowrap;
 }
 
 .funnel-card {

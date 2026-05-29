@@ -506,24 +506,15 @@ function DashboardPage() {
     });
 
     return hours
-      .map((row) => ({ ...row, conversao: row.acessos > 0 ? (row.acordos / row.acessos) * 100 : 0 }))
-      .filter((row) => row.acessos > 0 || row.acordos > 0);
+      .map((row) => ({ ...row, conversao: row.acessos > 0 ? (row.acordos / row.acessos) * 100 : 0 }));
   }, [filtered.acessos, filtered.acordos]);
 
-  const conversionCredorRows = useMemo(() => {
-    const acessosByCredor = groupBy(filtered.acessos.filter((row) => row.credor), (row) => row.credor || 'OUTROS');
-    const acordosByCredor = groupBy(filtered.acordos.filter((row) => row.credor), (row) => row.credor || 'OUTROS');
-    const names = new Set([...Object.keys(acessosByCredor), ...Object.keys(acordosByCredor)]);
-
-    return Array.from(names)
-      .map((name) => {
-        const acessos = acessosByCredor[name]?.length ?? 0;
-        const acordos = acordosByCredor[name]?.length ?? 0;
-        return { name, acessos, acordos, conversao: acessos > 0 ? (acordos / acessos) * 100 : 0 };
-      })
-      .filter((row) => row.acessos > 0)
-      .sort((a, b) => b.conversao - a.conversao || b.acordos - a.acordos);
-  }, [filtered.acessos, filtered.acordos]);
+  const bestHourlyRow = useMemo(
+    () => hourlyConversionRows
+      .filter((row) => row.acessos > 0 || row.acordos > 0)
+      .sort((a, b) => b.conversao - a.conversao || b.acordos - a.acordos || b.acessos - a.acessos)[0] ?? null,
+    [hourlyConversionRows]
+  );
 
   const negociadores = useMemo(() => {
     const groups = groupBy(filtered.baixas, (row) => row.negociador || 'Sem negociador');
@@ -737,6 +728,77 @@ function DashboardPage() {
   const emailClickRows = emailClickView.por_credor
     .filter((row) => row.credor !== 'SEM CREDOR' && row.credor !== 'OUTROS')
     .sort((a, b) => b.cliques - a.cliques || b.links_unicos - a.links_unicos || a.credor.localeCompare(b.credor));
+  const clickCredorRows = useMemo(() => {
+    const byCredor = new Map<string, {
+      credor: string;
+      whatsapp: number;
+      email: number;
+      acessos: number;
+      acordos: number;
+      campanhas: number;
+      templates: number;
+      ultimoClique: string | null;
+    }>();
+    const acessosByCredor = groupBy(filtered.acessos.filter((row) => row.credor), (row) => row.credor || 'OUTROS');
+    const acordosByCredor = groupBy(filtered.acordos.filter((row) => row.credor), (row) => row.credor || 'OUTROS');
+    const touch = (credor: string) => {
+      const current = byCredor.get(credor) ?? {
+        credor,
+        whatsapp: 0,
+        email: 0,
+        acessos: acessosByCredor[credor]?.length ?? 0,
+        acordos: acordosByCredor[credor]?.length ?? 0,
+        campanhas: 0,
+        templates: 0,
+        ultimoClique: null,
+      };
+      byCredor.set(credor, current);
+      return current;
+    };
+    const newerDate = (current: string | null, next: string | null) => {
+      if (!next) return current;
+      if (!current) return next;
+      return next > current ? next : current;
+    };
+
+    emailClickRows.forEach((row) => {
+      const current = touch(row.credor);
+      current.email += row.cliques;
+      current.campanhas += row.campanhas;
+      current.templates += row.templates;
+      current.ultimoClique = newerDate(current.ultimoClique, row.ultimo_clique);
+    });
+
+    whatsappPerformanceRows.forEach((row) => {
+      const current = touch(row.credor);
+      current.whatsapp += row.clicked;
+      current.acessos = Math.max(current.acessos, row.acessos);
+      current.acordos = Math.max(current.acordos, row.acordos);
+    });
+
+    return Array.from(byCredor.values())
+      .map((row) => ({
+        ...row,
+        total: row.whatsapp + row.email,
+        conversao: row.acessos > 0 ? (row.acordos / row.acessos) * 100 : 0,
+      }))
+      .filter((row) => row.total > 0 || row.acessos > 0 || row.acordos > 0)
+      .sort((a, b) => b.total - a.total || b.acordos - a.acordos || a.credor.localeCompare(b.credor));
+  }, [emailClickRows, filtered.acessos, filtered.acordos, whatsappPerformanceRows]);
+  const recentClickRows = useMemo(
+    () => emailClickView.recentes
+      .map((row, index) => ({
+        id: `${row.token ?? 'token'}-${row.data_clique ?? index}`,
+        canal: row.canal || 'E-mail',
+        data: row.data_clique,
+        credor: row.credor,
+        processo: row.processo,
+        destinatario: row.destinatario || row.email_destinatario || row.telefone || '-',
+        campanha: row.campanha || row.template || '-',
+      }))
+      .sort((a, b) => (b.data ?? '').localeCompare(a.data ?? '')),
+    [emailClickView.recentes]
+  );
   const funnelRows = [
     { name: 'Envio -> clique no link', value: totalEnviosCanal > 0 ? (totalCliquesLink / totalEnviosCanal) * 100 : 0 },
     { name: 'Clique -> acesso', value: totalCliquesLink > 0 ? (acessosPortal / totalCliquesLink) * 100 : 0 },
@@ -745,9 +807,9 @@ function DashboardPage() {
   ];
   const accessFunnelRows = [
     { name: 'Acessos', value: number(metrics.acessos), fill: 100 },
-    { name: 'Com acordo', value: number(metrics.acessosComAcordo), fill: metrics.acessos > 0 ? (metrics.acessosComAcordo / metrics.acessos) * 100 : 0 },
-    { name: 'Sem acordo', value: number(metrics.acessosSemAcordo), fill: metrics.acessos > 0 ? (metrics.acessosSemAcordo / metrics.acessos) * 100 : 0 },
-    { name: 'Conversão', value: `${metrics.acessos > 0 ? ((metrics.acessosComAcordo / metrics.acessos) * 100).toFixed(1) : '0.0'}%`, fill: metrics.acessos > 0 ? (metrics.acessosComAcordo / metrics.acessos) * 100 : 0 },
+    { name: 'Acessos com acordo', value: number(metrics.acessosComAcordo), fill: metrics.acessos > 0 ? (metrics.acessosComAcordo / metrics.acessos) * 100 : 0 },
+    { name: 'Acordos', value: number(metrics.acordos), fill: metrics.acessos > 0 ? (metrics.acordos / metrics.acessos) * 100 : 0 },
+    { name: 'Conversão', value: `${metrics.conversao.toFixed(1)}%`, fill: metrics.conversao },
   ];
   const channelCostRows = useMemo(() => {
     const emailCost = communicationCosts.emailCost;
@@ -1659,12 +1721,13 @@ function DashboardPage() {
           <Section num="01" title="Acessos e Conversão">
             <div className="grid-2">
               <Panel title="Mini funil de acessos">
-                <div className="funnel-grid mini-funnel">
+                <div className="center-funnel">
                   {accessFunnelRows.map((row, index) => (
-                    <div className="funnel-card" key={row.name}>
-                      <span>{row.name}</span>
-                      <strong>{row.value}</strong>
-                      <div className="bar-track"><div className="bar-fill" style={{ width: `${Math.min(row.fill, 100)}%`, background: CHART_PALETTE[index % CHART_PALETTE.length] }} /></div>
+                    <div className="center-funnel-row" key={row.name}>
+                      <div className="center-funnel-bar" style={{ width: `${Math.max(Math.min(row.fill, 100), 12)}%`, background: CHART_PALETTE[index % CHART_PALETTE.length] }}>
+                        <span>{row.name}</span>
+                        <strong>{row.value}</strong>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1722,53 +1785,28 @@ function DashboardPage() {
           </Section>
           */}
 
-          {whatsappCampaignEnabled ? (
-            <Section num="02" title="WhatsApp por Credor">
-              <Panel title="Top 5 envios WhatsApp" meta={`${money(whatsappCampaignTotals.custo)} em ${number(whatsappCampaignTotals.envios)} mensagens · ${number(whatsappCampaignMatched)} telefones identificados`}>
-                {(expanded) => (
-                  <table>
-                    <thead>
-                      <tr><th>Credor / Grupo</th><th className="right">Envios</th><th className="right">Cliques</th><th className="right">Acessos</th><th className="right">Acordos</th><th className="right">Conversão</th><th className="right">Custo</th></tr>
-                    </thead>
-                    <tbody>
-                      {(expanded ? whatsappPerformanceRows : whatsappPerformanceRows.slice(0, 5)).map((row) => (
-                        <tr key={row.credor}>
-                          <td className="bold">{row.credor}</td>
-                          <td className="right">{number(row.envios)}</td>
-                          <td className="right muted">{number(row.clicked)}</td>
-                          <td className="right">{number(row.acessos)}</td>
-                          <td className="right">{number(row.acordos)}</td>
-                          <td className="right">{row.taxaAcordo.toFixed(1)}%</td>
-                          <td className="right">{money(row.custo)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </Panel>
-            </Section>
-          ) : null}
-
-          <Section num="03" title="E-mail por Credor">
+          <Section num="02" title="Cliques por Credor">
             <div className="grid-2">
-              <Panel title="Cliques por E-mail" meta={`${number(emailClickTotal)} cliques rastreados`}>
+              <Panel title="WhatsApp e E-mail por Credor" meta={`${number(totalCliquesLink)} cliques no link`}>
                 {(expanded) => {
-                  const rows = expanded ? emailClickRows : emailClickRows.slice(0, 5);
+                  const rows = expanded ? clickCredorRows : clickCredorRows.slice(0, 5);
                   return (
                     <table>
                       <thead>
-                        <tr><th>Credor / Grupo</th><th className="right">Cliques</th><th className="right">Processos</th><th className="right">Campanhas</th><th className="right">Templates</th><th className="right">Último clique</th></tr>
+                        <tr><th>Credor / Grupo</th><th className="right">WhatsApp</th><th className="right">E-mail</th><th className="right">Total</th><th className="right">Acessos</th><th className="right">Acordos</th><th className="right">Conversão</th><th className="right">Último clique</th></tr>
                       </thead>
                       <tbody>
-                        {rows.length === 0 ? <tr><td colSpan={6} className="muted">Sem cliques de e-mail no período.</td></tr> : null}
+                        {rows.length === 0 ? <tr><td colSpan={8} className="muted">Sem cliques no período.</td></tr> : null}
                         {rows.map((row) => (
                           <tr key={row.credor}>
                             <td className="bold">{row.credor}</td>
-                            <td className="right">{number(row.cliques)}</td>
-                            <td className="right">{number(row.processos)}</td>
-                            <td className="right">{number(row.campanhas)}</td>
-                            <td className="right">{number(row.templates)}</td>
-                            <td className="right">{dateTime(row.ultimo_clique)}</td>
+                            <td className="right">{number(row.whatsapp)}</td>
+                            <td className="right">{number(row.email)}</td>
+                            <td className="right bold">{number(row.total)}</td>
+                            <td className="right">{number(row.acessos)}</td>
+                            <td className="right">{number(row.acordos)}</td>
+                            <td className="right">{row.conversao.toFixed(1)}%</td>
+                            <td className="right">{dateTime(row.ultimoClique)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1776,23 +1814,24 @@ function DashboardPage() {
                   );
                 }}
               </Panel>
-              <Panel title="Últimos cliques de e-mail" meta="Eventos mais recentes">
+              <Panel title="Últimos cliques" meta="WhatsApp e e-mail">
                 {(expanded) => {
-                  const rows = expanded ? emailClickView.recentes : emailClickView.recentes.slice(0, 8);
+                  const rows = expanded ? recentClickRows : recentClickRows.slice(0, 8);
                   return (
                     <table>
                       <thead>
-                        <tr><th>Horário</th><th>Credor</th><th>Processo</th><th>E-mail</th><th>Campanha</th></tr>
+                        <tr><th>Horário</th><th>Canal</th><th>Credor</th><th>Processo</th><th>Destinatário</th><th>Campanha</th></tr>
                       </thead>
                       <tbody>
-                        {rows.length === 0 ? <tr><td colSpan={5} className="muted">Sem eventos rastreados.</td></tr> : null}
-                        {rows.map((row, index) => (
-                          <tr key={`${row.token ?? 'token'}-${row.data_clique ?? index}`}>
-                            <td className="bold">{dateTime(row.data_clique)}</td>
+                        {rows.length === 0 ? <tr><td colSpan={6} className="muted">Sem eventos rastreados.</td></tr> : null}
+                        {rows.map((row) => (
+                          <tr key={row.id}>
+                            <td className="bold">{dateTime(row.data)}</td>
+                            <td>{row.canal}</td>
                             <td>{row.credor}</td>
                             <td>{row.processo || '-'}</td>
-                            <td>{row.email_destinatario || '-'}</td>
-                            <td>{row.campanha || row.template || '-'}</td>
+                            <td>{row.destinatario}</td>
+                            <td>{row.campanha}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1803,49 +1842,35 @@ function DashboardPage() {
             </div>
           </Section>
 
-          <Section num="04" title="Indicadores de Conversão">
-            <div className="grid-2">
-              <Panel title="Funil do Canal">
-                <div className="funnel-grid">
-                  {funnelRows.map((row, index) => (
-                    <div className="funnel-card" key={row.name}>
-                      <span>{row.name}</span>
-                      <strong>{row.value.toFixed(1)}%</strong>
-                      <div className="bar-track"><div className="bar-fill" style={{ width: `${Math.min(row.value, 100)}%`, background: CHART_PALETTE[index % CHART_PALETTE.length] }} /></div>
-                    </div>
-                  ))}
-                </div>
-              </Panel>
-              <Panel title="Tabela Resumida">
-                <table>
-                  <thead>
-                    <tr><th>Etapa</th><th className="right">Volume</th><th className="right">Conversão</th></tr>
-                  </thead>
-                  <tbody>
-                    <tr><td>Envios</td><td className="right">{number(totalEnviosCanal)}</td><td className="right muted">100%</td></tr>
-                    <tr><td>Cliques no link</td><td className="right">{number(totalCliquesLink)}</td><td className="right">{funnelRows[0].value.toFixed(1)}%</td></tr>
-                    <tr><td>Acessos / cadastros</td><td className="right">{number(acessosPortal)}</td><td className="right">{funnelRows[1].value.toFixed(1)}%</td></tr>
-                    <tr><td>Acordos</td><td className="right">{number(metrics.acordos)}</td><td className="right">{funnelRows[2].value.toFixed(1)}%</td></tr>
-                  </tbody>
-                </table>
-              </Panel>
-            </div>
+          <Section num="03" title="Indicadores de Conversão">
+            <Panel title="Funil do Canal">
+              <div className="funnel-grid">
+                {funnelRows.map((row, index) => (
+                  <div className="funnel-card" key={row.name}>
+                    <span>{row.name}</span>
+                    <strong>{row.value.toFixed(1)}%</strong>
+                    <div className="bar-track"><div className="bar-fill" style={{ width: `${Math.min(row.value, 100)}%`, background: CHART_PALETTE[index % CHART_PALETTE.length] }} /></div>
+                  </div>
+                ))}
+              </div>
+            </Panel>
           </Section>
 
-          <Section num="05" title="Comparativo Mensal">
+          <Section num="04" title="Comparativo Mensal">
             <div className="grid-2">
               <Panel title="Volume de Envios">
                 <div className="chart-wrap small">
                   <ResponsiveContainer>
-                    <BarChart data={monthlyEvolution}>
+                    <ComposedChart data={monthlyEvolution}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
                       <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
                       <Tooltip formatter={(value: number, name: string) => [number(value), name]} />
                       <Legend verticalAlign="top" height={28} />
-                      <Bar dataKey="emails" name="E-mails" fill={COLORS.sky} stackId="envios" radius={[0, 0, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
-                      <Bar dataKey="whatsapp" name="WhatsApp" fill={COLORS.green} stackId="envios" radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
-                    </BarChart>
+                      <Bar dataKey="emails" name="E-mails" fill={COLORS.sky} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                      <Bar dataKey="whatsapp" name="WhatsApp" fill={COLORS.green} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                      <Line type="monotone" dataKey="envios" name="Total de envios" stroke={COLORS.gold} strokeWidth={2.5} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                    </ComposedChart>
                   </ResponsiveContainer>
                 </div>
               </Panel>
@@ -1869,51 +1894,28 @@ function DashboardPage() {
             </div>
           </Section>
 
-          <Section num="06" title="Performance por Horário">
-            <div className="grid-2">
-              <Panel title="Conversão por faixa de horário">
-                {hourlyConversionRows.length === 0 ? (
-                  <div className="empty-state">O banco está retornando apenas a data, sem hora real. Assim que existir uma coluna com horário, este gráfico passa a mostrar a conversão por faixa.</div>
-                ) : (
-                  <div className="chart-wrap small">
-                    <ResponsiveContainer>
-                      <ComposedChart data={hourlyConversionRows}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                        <YAxis yAxisId="volume" allowDecimals={false} tick={{ fontSize: 10 }} />
-                        <YAxis yAxisId="rate" orientation="right" tickFormatter={(value) => `${value}%`} tick={{ fontSize: 10 }} />
-                        <Tooltip formatter={(value: number, name: string) => [name === 'Conversão' ? `${value.toFixed(1)}%` : number(value), name]} />
-                        <Legend verticalAlign="top" height={28} />
-                        <Bar yAxisId="volume" dataKey="acessos" name="Acessos" fill={COLORS.sky} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
-                        <Bar yAxisId="volume" dataKey="acordos" name="Acordos" fill={COLORS.rust} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
-                        <Line yAxisId="rate" type="monotone" dataKey="conversao" name="Conversão" stroke={COLORS.green} strokeWidth={2.5} isAnimationActive={CHART_ANIMATION_ACTIVE} />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-              </Panel>
-              <Panel title="Melhores horários" meta="Ordenado por conversão">
-                <table>
-                  <thead>
-                    <tr><th>Horário</th><th className="right">Acessos</th><th className="right">Acordos</th><th className="right">Conversão</th></tr>
-                  </thead>
-                  <tbody>
-                    {hourlyConversionRows.length === 0 ? <tr><td colSpan={4} className="muted">Sem horário nos dados carregados.</td></tr> : null}
-                    {[...hourlyConversionRows].sort((a, b) => b.conversao - a.conversao || b.acordos - a.acordos).slice(0, 8).map((row) => (
-                      <tr key={row.hour}>
-                        <td className="bold">{row.label}</td>
-                        <td className="right">{number(row.acessos)}</td>
-                        <td className="right">{number(row.acordos)}</td>
-                        <td className="right">{row.conversao.toFixed(1)}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </Panel>
-            </div>
+          <Section num="05" title="Performance por Horário">
+            <Panel title="Melhores horários" meta="Ordem cronológica; melhor conversão destacada">
+              <table>
+                <thead>
+                  <tr><th>Horário</th><th className="right">Acessos</th><th className="right">Acordos</th><th className="right">Conversão</th></tr>
+                </thead>
+                <tbody>
+                  {hourlyConversionRows.length === 0 ? <tr><td colSpan={4} className="muted">Sem horário nos dados carregados.</td></tr> : null}
+                  {hourlyConversionRows.map((row) => (
+                    <tr key={row.hour} className={bestHourlyRow?.hour === row.hour ? 'highlight-row' : ''}>
+                      <td className="bold">{row.label}</td>
+                      <td className="right">{number(row.acessos)}</td>
+                      <td className="right">{number(row.acordos)}</td>
+                      <td className="right">{row.conversao.toFixed(1)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Panel>
           </Section>
 
-          <Section num="07" title="Custo por Canal">
+          <Section num="06" title="Custo por Canal">
             <div className="grid-2">
               <Panel title="Custo por acesso e por acordo" meta="Acesso/acordo usam o total do período">
                 <table>
@@ -1951,42 +1953,20 @@ function DashboardPage() {
             </div>
           </Section>
 
-          <Section num="08" title="Pagamentos e Conversão">
-            <div className="grid-2">
-              <Panel title="Pagamentos por Negociador">
-                <div className="neg-grid panel-neg-grid">
-                  {negociadores.length === 0 ? <div className="empty-state">Sem dados no período.</div> : null}
-                  {negociadores.map((row, index) => (
-                    <div className="neg-card" key={row.name}>
-                      <span>{row.name}</span>
-                      <strong>{compactMoney(row.total)}</strong>
-                      <small>{number(row.qtd)} pagamento{row.qtd === 1 ? '' : 's'}</small>
-                      <div style={{ width: `${(row.total / Math.max(negociadores[0]?.total || 1, 1)) * 100}%`, background: CHART_PALETTE[index % CHART_PALETTE.length] }} />
-                    </div>
-                  ))}
-                </div>
-              </Panel>
-              <Panel title="Top credores por taxa de conversão" meta="Acordos / acessos">
-                {(expanded) => (
-                  <table>
-                    <thead>
-                      <tr><th>Credor / Grupo</th><th className="right">Acessos</th><th className="right">Acordos</th><th className="right">Conversão</th></tr>
-                    </thead>
-                    <tbody>
-                      {conversionCredorRows.length === 0 ? <tr><td colSpan={4} className="muted">Sem dados no período.</td></tr> : null}
-                      {(expanded ? conversionCredorRows : conversionCredorRows.slice(0, 5)).map((row) => (
-                        <tr key={row.name}>
-                          <td className="bold">{row.name}</td>
-                          <td className="right">{number(row.acessos)}</td>
-                          <td className="right">{number(row.acordos)}</td>
-                          <td className="right">{row.conversao.toFixed(1)}%</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </Panel>
-            </div>
+          <Section num="07" title="Pagamentos por Negociador">
+            <Panel title="Pagamentos por Negociador">
+              <div className="neg-grid panel-neg-grid">
+                {negociadores.length === 0 ? <div className="empty-state">Sem dados no período.</div> : null}
+                {negociadores.map((row, index) => (
+                  <div className="neg-card" key={row.name}>
+                    <span>{row.name}</span>
+                    <strong>{compactMoney(row.total)}</strong>
+                    <small>{number(row.qtd)} pagamento{row.qtd === 1 ? '' : 's'}</small>
+                    <div style={{ width: `${(row.total / Math.max(negociadores[0]?.total || 1, 1)) * 100}%`, background: CHART_PALETTE[index % CHART_PALETTE.length] }} />
+                  </div>
+                ))}
+              </div>
+            </Panel>
           </Section>
           </main>
         </>

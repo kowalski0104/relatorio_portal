@@ -175,8 +175,11 @@ export type EmailClickData = {
   }>;
   recentes: Array<{
     token: string | null;
+    canal?: string | null;
     processo: string | null;
+    destinatario?: string | null;
     email_destinatario: string | null;
+    telefone?: string | null;
     credor: string;
     campanha: string | null;
     template: string | null;
