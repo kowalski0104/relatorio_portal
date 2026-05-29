@@ -327,55 +327,13 @@ function DashboardPage() {
     });
   }, [data, previousBusinessDayMap, previousPeriodKey, selectedBusinessDayLimit, selectedCredores, system]);
   const previousMetrics = useMemo(() => previousFiltered ? summarizeDashboardMetrics(previousFiltered) : null, [previousFiltered]);
-  const resultMonthlyRows = useMemo(() => {
-    const keys = isMultiPeriod ? [...selectedPeriodList].sort() : previousPeriodKey ? [previousPeriodKey, primaryPeriod] : [primaryPeriod];
-
-    return keys.map((key) => {
-      const comparisonPeriod = previousPeriod(key);
-      const periodBusinessDayMap = key === previousPeriodKey ? previousBusinessDayMap : businessDayMap;
-      const rows = filterDashboardData({
-        data,
-        system,
-        period: key,
-        periods: new Set([key]),
-        selectedCreditors: selectedCredores,
-        businessDayMap: periodBusinessDayMap,
-        selectedBusinessDayLimit,
-      });
-      const previousRows = comparisonPeriod ? filterDashboardData({
-        data,
-        system,
-        period: comparisonPeriod,
-        periods: new Set([comparisonPeriod]),
-        selectedCreditors: selectedCredores,
-        businessDayMap: businessDayIndexMap(comparisonPeriod),
-        selectedBusinessDayLimit,
-      }) : null;
-      const monthMetrics = summarizeDashboardMetrics(rows);
-      const comparisonMetrics = previousRows ? summarizeDashboardMetrics(previousRows) : null;
-      const totalPagoVariation = variation(monthMetrics.totalPago, comparisonMetrics?.totalPago);
-      const acordosVariation = variation(monthMetrics.acordos, comparisonMetrics?.acordos);
-
-      return {
-        period: key,
-        label: periodLabel(key),
-        totalPago: monthMetrics.totalPago,
-        capital: monthMetrics.capital,
-        acordos: monthMetrics.acordos,
-        acessos: monthMetrics.acessos,
-        conversao: monthMetrics.conversao,
-        ticket: monthMetrics.ticketPorAcordo,
-        totalPagoVariation,
-        acordosVariation,
-      };
-    });
-  }, [businessDayMap, data, isMultiPeriod, previousBusinessDayMap, previousPeriodKey, primaryPeriod, selectedBusinessDayLimit, selectedCredores, selectedPeriodList, system]);
   const resultComparisonRows = useMemo(() => [
-    { name: 'Total Pago', atual: metrics.totalPago, anterior: previousMetrics?.totalPago, variation: variation(metrics.totalPago, previousMetrics?.totalPago), formatter: money },
-    { name: 'Capital Recuperado', atual: metrics.capital, anterior: previousMetrics?.capital, variation: variation(metrics.capital, previousMetrics?.capital), formatter: money },
-    { name: 'Acordos', atual: metrics.acordos, anterior: previousMetrics?.acordos, variation: variation(metrics.acordos, previousMetrics?.acordos), formatter: number },
-    { name: 'Acessos', atual: metrics.acessos, anterior: previousMetrics?.acessos, variation: variation(metrics.acessos, previousMetrics?.acessos), formatter: number },
-    { name: 'Conversão', atual: metrics.conversao, anterior: previousMetrics?.conversao, variation: variation(metrics.conversao, previousMetrics?.conversao), formatter: (value: number) => `${value.toFixed(1)}%` },
+    { name: 'TOTAL RECUPERADO', atual: metrics.totalPago, anterior: previousMetrics?.totalPago, variation: variation(metrics.totalPago, previousMetrics?.totalPago), formatter: money },
+    { name: 'CAPITAL RECUPERADO', atual: metrics.capital, anterior: previousMetrics?.capital, variation: variation(metrics.capital, previousMetrics?.capital), formatter: money },
+    { name: 'FATURAMENTO', atual: metrics.faturamento, anterior: previousMetrics?.faturamento, variation: variation(metrics.faturamento, previousMetrics?.faturamento), formatter: money },
+    { name: 'ACORDOS', atual: metrics.acordos, anterior: previousMetrics?.acordos, variation: variation(metrics.acordos, previousMetrics?.acordos), formatter: number },
+    { name: 'ACESSO', atual: metrics.acessos, anterior: previousMetrics?.acessos, variation: variation(metrics.acessos, previousMetrics?.acessos), formatter: number },
+    { name: 'CONVERSÃO', atual: metrics.conversao, anterior: previousMetrics?.conversao, variation: variation(metrics.conversao, previousMetrics?.conversao), formatter: (value: number) => `${value.toFixed(1)}%` },
   ], [metrics, previousMetrics]);
 
   const componentRows = useMemo(() => {
@@ -1189,32 +1147,29 @@ function DashboardPage() {
               </div>
             ) : null}
 
-            <Section num="01" title="Projeção do Mês">
-              <Panel title="Resumo da projeção" meta={`${number(projectionBaseDays)} de ${number(businessDays)} dias úteis considerados`}>
-                <table>
-                  <thead>
-                    <tr><th>Indicador</th><th className="right">Realizado</th><th className="right">Projeção final</th><th className="right">A projetar</th></tr>
-                  </thead>
-                  <tbody>
-                    {projectionRows.map((row) => (
-                      <tr key={row.name}>
-                        <td className="bold">{row.name}</td>
-                        <td className="right">{money(row.atual)}</td>
-                        <td className="right">{money(row.projetado)}</td>
-                        <td className="right muted">{money(Math.max(row.projetado - row.atual, 0))}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </Panel>
-            </Section>
-
-            <Section num="02" title={isMultiPeriod ? 'Resumo por Mês' : 'Comparativo com Mês Anterior'}>
+            <Section num="01" title="Projeção e Comparativo">
               <div className="grid-2">
+                <Panel title="Projeção do mês" meta={`${number(projectionBaseDays)} de ${number(businessDays)} dias úteis considerados`}>
+                  <table>
+                    <thead>
+                      <tr><th>Indicador</th><th className="right">Realizado</th><th className="right">Projeção final</th><th className="right">A projetar</th></tr>
+                    </thead>
+                    <tbody>
+                      {projectionRows.map((row) => (
+                        <tr key={row.name}>
+                          <td className="bold">{row.name}</td>
+                          <td className="right">{money(row.atual)}</td>
+                          <td className="right">{money(row.projetado)}</td>
+                          <td className="right muted">{money(Math.max(row.projetado - row.atual, 0))}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </Panel>
                 <Panel title="Indicadores principais" meta={selectedBusinessDayLimit ? `${selectedBusinessDayLimit} primeiros dias úteis` : 'Período completo'}>
                   <table>
                     <thead>
-                      <tr><th>Indicador</th><th className="right">Atual</th><th className="right">Base anterior</th><th className="right">Variação</th></tr>
+                      <tr><th>INDICADOR</th><th className="right">ATUAL</th><th className="right">MÊS ANTERIOR</th><th className="right">VARIAÇÃO</th></tr>
                     </thead>
                     <tbody>
                       {resultComparisonRows.map((row) => (
@@ -1228,28 +1183,10 @@ function DashboardPage() {
                     </tbody>
                   </table>
                 </Panel>
-                <Panel title="Evolução mensal filtrada" meta="Mesmo recorte de dias úteis">
-                  <table>
-                    <thead>
-                      <tr><th>Mês</th><th className="right">Total Pago</th><th className="right">Var.</th><th className="right">Acordos</th><th className="right">Conv.</th></tr>
-                    </thead>
-                    <tbody>
-                      {resultMonthlyRows.map((row) => (
-                        <tr key={row.period}>
-                          <td className="bold">{row.label}</td>
-                          <td className="right">{money(row.totalPago)}</td>
-                          <td className={`right variation-cell ${row.totalPagoVariation !== null && row.totalPagoVariation >= 0 ? 'positive' : 'negative'}`}>{variationLabel(row.totalPagoVariation)}</td>
-                          <td className="right">{number(row.acordos)}</td>
-                          <td className="right muted">{row.conversao.toFixed(1)}%</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </Panel>
               </div>
             </Section>
 
-            <Section num="03" title="Remuneração">
+            <Section num="02" title="Remuneração">
               <div className="grid-2">
                 <Panel title="Detalhamento por Componente">
                   <table>
@@ -1286,7 +1223,7 @@ function DashboardPage() {
               </div>
             </Section>
 
-            <Section num="04" title="Acordos Formalizados">
+            <Section num="03" title="Acordos Formalizados">
               <div className="grid-2">
                 <Panel title="Acordos por Credor / Grupo" meta={`Top 5 de ${number(metrics.acordos)} processos`}>
                   {(expanded) => <BarRows rows={expanded ? acordosRows : acordosRows.slice(0, 5)} color={color} valueLabel="Qtd." showPercent />}
@@ -1315,7 +1252,7 @@ function DashboardPage() {
               </div>
             </Section>
 
-            <Section num="05" title="Ticket Médio por Credor">
+            <Section num="04" title="Ticket Médio por Credor">
               <div className="grid-2">
                 <Panel title="Ranking - Ticket Médio" className="ticket-panel">
                   {(expanded) => (
@@ -1345,7 +1282,7 @@ function DashboardPage() {
               </div>
             </Section>
 
-            <Section num="06" title="Evolução Diária">
+            <Section num="05" title="Evolução Diária">
               <div className="grid-2">
                 <Panel title="Receita Diária" meta="Por data de baixa">
                   <div className="chart-wrap small">
@@ -1388,7 +1325,7 @@ function DashboardPage() {
               </div>
             </Section>
 
-            <Section num="07" title="Top Dias de Conversão">
+            <Section num="06" title="Top Dias de Conversão">
               <Panel title="Maiores volumes de acordos no período" meta={`Top ${topDays.length}`}>
                 <div className="topdays-list">
                   {topDays.length === 0 ? <div className="empty-state">Sem dados no período.</div> : null}
@@ -1405,7 +1342,7 @@ function DashboardPage() {
               </Panel>
             </Section>
 
-            <Section num="08" title="Pagamentos por Negociador">
+            <Section num="07" title="Pagamentos por Negociador">
               <div className="neg-grid">
                 {negociadores.length === 0 ? <div className="empty-state">Sem dados no período.</div> : null}
                 {negociadores.map((row, index) => (
