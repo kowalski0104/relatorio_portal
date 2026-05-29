@@ -12,9 +12,10 @@ type BarRowsProps = {
   valueFormatter?: (value: number) => string;
   showPercent?: boolean;
   valueLabel?: string;
+  visualLabel?: string;
 };
 
-export function BarRows({ rows, color, valueFormatter = number, showPercent = false, valueLabel = 'Valor' }: BarRowsProps) {
+export function BarRows({ rows, color, valueFormatter = number, showPercent = false, valueLabel = 'Valor', visualLabel = 'Participação visual' }: BarRowsProps) {
   const max = Math.max(...rows.map((row) => row.value), 1);
   const total = rows.reduce((sum, row) => sum + row.value, 0);
 
@@ -24,7 +25,7 @@ export function BarRows({ rows, color, valueFormatter = number, showPercent = fa
     <div className="bar-list">
       <div className="bar-table-head">
         <span>Grupo</span>
-        <span>Participação visual</span>
+        <span>{visualLabel}</span>
         <span>{valueLabel}</span>
         {showPercent ? <span>%</span> : null}
       </div>

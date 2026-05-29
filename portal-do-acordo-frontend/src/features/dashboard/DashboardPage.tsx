@@ -732,16 +732,22 @@ function DashboardPage() {
   const whatsappEnvios = whatsappCampaignEnabled ? whatsappCampaignTotals.envios : storedWhatsappEnvios;
   const whatsappCusto = whatsappCampaignEnabled ? whatsappCampaignTotals.custo : storedWhatsappEnvios * 0.05;
   const totalEnviosCanal = emailEnvios + whatsappEnvios;
-  const enviosMensuraveis = whatsappEnvios;
   const emailClickTotal = emailClickView.total.cliques;
+  const totalCliquesLink = cliquesPortal + emailClickTotal;
   const emailClickRows = emailClickView.por_credor
     .filter((row) => row.credor !== 'SEM CREDOR' && row.credor !== 'OUTROS')
     .sort((a, b) => b.cliques - a.cliques || b.links_unicos - a.links_unicos || a.credor.localeCompare(b.credor));
   const funnelRows = [
-    { name: 'Envio WhatsApp -> clique', value: enviosMensuraveis > 0 ? (cliquesPortal / enviosMensuraveis) * 100 : 0 },
-    { name: 'Clique -> acesso', value: cliquesPortal > 0 ? (acessosPortal / cliquesPortal) * 100 : 0 },
+    { name: 'Envio -> clique no link', value: totalEnviosCanal > 0 ? (totalCliquesLink / totalEnviosCanal) * 100 : 0 },
+    { name: 'Clique -> acesso', value: totalCliquesLink > 0 ? (acessosPortal / totalCliquesLink) * 100 : 0 },
     { name: 'Acesso -> acordo', value: acessosPortal > 0 ? (metrics.acordos / acessosPortal) * 100 : 0 },
-    { name: 'WhatsApp -> acordo', value: enviosMensuraveis > 0 ? (metrics.acordos / enviosMensuraveis) * 100 : 0 },
+    { name: 'Envio -> acordo', value: totalEnviosCanal > 0 ? (metrics.acordos / totalEnviosCanal) * 100 : 0 },
+  ];
+  const accessFunnelRows = [
+    { name: 'Acessos', value: number(metrics.acessos), fill: 100 },
+    { name: 'Com acordo', value: number(metrics.acessosComAcordo), fill: metrics.acessos > 0 ? (metrics.acessosComAcordo / metrics.acessos) * 100 : 0 },
+    { name: 'Sem acordo', value: number(metrics.acessosSemAcordo), fill: metrics.acessos > 0 ? (metrics.acessosSemAcordo / metrics.acessos) * 100 : 0 },
+    { name: 'Conversão', value: `${metrics.acessos > 0 ? ((metrics.acessosComAcordo / metrics.acessos) * 100).toFixed(1) : '0.0'}%`, fill: metrics.acessos > 0 ? (metrics.acessosComAcordo / metrics.acessos) * 100 : 0 },
   ];
   const channelCostRows = useMemo(() => {
     const emailCost = communicationCosts.emailCost;
@@ -1641,9 +1647,9 @@ function DashboardPage() {
             </div>
             <div className="kpi-row">
               <MetricCard tone="teal" label="Envios" value={number(totalEnviosCanal)} current={totalEnviosCanal} small={`${number(emailEnvios)} e-mails - ${number(whatsappEnvios)} WhatsApp`} summary="Total de comunicações enviadas no período." />
-              <MetricCard tone="gold" label="Cliques" value={number(cliquesPortal)} current={cliquesPortal} small={whatsappCampaignEnabled ? 'Cliques pelo WhatsApp' : 'Eventos do portal'} summary="Cliques no link usados no funil de performance." />
-              <MetricCard tone="teal" label="Cliques e-mail" value={number(emailClickTotal)} current={emailClickTotal} small={`${number(emailClickView.total.links_unicos)} links rastreados`} summary="Cliques rastreados pelos tokens de e-mail." />
+              <MetricCard tone="gold" label="CLIQUES NO LINK" value={number(totalCliquesLink)} current={totalCliquesLink} small={`${number(cliquesPortal)} WhatsApp - ${number(emailClickTotal)} e-mail`} summary="Cliques no link de WhatsApp e e-mail somados no período." />
               <MetricCard tone="sky" label="Acessos" value={number(acessosPortal)} current={acessosPortal} previous={previousMetrics?.acessos} small="Acessos no site" summary="Acessos registrados no Portal do Acordo." />
+              <MetricCard tone="teal" label="Quantidade de Acordos" value={number(metrics.acordos)} current={metrics.acordos} previous={previousMetrics?.acordos} small="Acordos formalizados" summary="Quantidade de acordos formalizados no período." />
               <MetricCard tone="rust" label="Conversão" value={`${metrics.conversao.toFixed(1)}%`} current={metrics.conversao} previous={previousMetrics?.conversao} small={`${number(metrics.acordos)} acordos`} summary="Conversão de acessos em acordos no período." />
             </div>
           </header>
@@ -1652,23 +1658,24 @@ function DashboardPage() {
 
           <Section num="01" title="Acessos e Conversão">
             <div className="grid-2">
-              <Panel title="Distribuição de Acessos">
-                <div className="access-meter">
-                  <div style={{ width: `${metrics.acessos > 0 ? (metrics.acessosComAcordo / metrics.acessos) * 100 : 0}%`, background: chartAccent }} />
-                </div>
-                <div className="stat-list">
-                  <span>Total de acessos <strong>{number(metrics.acessos)}</strong></span>
-                  <span>Com acordo <strong>{number(metrics.acessosComAcordo)}</strong></span>
-                  <span>Sem acordo <strong>{number(metrics.acessosSemAcordo)}</strong></span>
-                  <span>Taxa de conversão <strong>{metrics.acessos > 0 ? ((metrics.acessosComAcordo / metrics.acessos) * 100).toFixed(1) : '0.0'}%</strong></span>
+              <Panel title="Mini funil de acessos">
+                <div className="funnel-grid mini-funnel">
+                  {accessFunnelRows.map((row, index) => (
+                    <div className="funnel-card" key={row.name}>
+                      <span>{row.name}</span>
+                      <strong>{row.value}</strong>
+                      <div className="bar-track"><div className="bar-fill" style={{ width: `${Math.min(row.fill, 100)}%`, background: CHART_PALETTE[index % CHART_PALETTE.length] }} /></div>
+                    </div>
+                  ))}
                 </div>
               </Panel>
               <Panel title="Acessos com Acordo por Credor" meta="Top 5">
-                {(expanded) => <BarRows rows={expanded ? acessosCredorRows : acessosCredorRows.slice(0, 5)} color={color} valueLabel="Qtd." />}
+                {(expanded) => <BarRows rows={expanded ? acessosCredorRows : acessosCredorRows.slice(0, 5)} color={color} valueLabel="Qtd." visualLabel="Acordos por Credor" />}
               </Panel>
             </div>
           </Section>
 
+          {/* Comunicação por Dia Útil mantida no código, mas retirada da tela por enquanto.
           <Section num="02" title="Comunicação por Dia Útil">
             <div className="grid-2">
               <Panel title="Envios WhatsApp" meta="Comparativo por mês">
@@ -1713,14 +1720,15 @@ function DashboardPage() {
               </Panel>
             </div>
           </Section>
+          */}
 
           {whatsappCampaignEnabled ? (
-            <Section num="03" title="WhatsApp por Credor">
+            <Section num="02" title="WhatsApp por Credor">
               <Panel title="Top 5 envios WhatsApp" meta={`${money(whatsappCampaignTotals.custo)} em ${number(whatsappCampaignTotals.envios)} mensagens · ${number(whatsappCampaignMatched)} telefones identificados`}>
                 {(expanded) => (
                   <table>
                     <thead>
-                      <tr><th>Credor / Grupo</th><th className="right">Envios</th><th className="right">Cliques</th><th className="right">Acessos</th><th className="right">Acordos</th><th className="right">Cliques/envios</th><th className="right">Acessos/envios</th><th className="right">Conv. envio/acordo</th><th className="right">Custo</th></tr>
+                      <tr><th>Credor / Grupo</th><th className="right">Envios</th><th className="right">Cliques</th><th className="right">Acessos</th><th className="right">Acordos</th><th className="right">Conversão</th><th className="right">Custo</th></tr>
                     </thead>
                     <tbody>
                       {(expanded ? whatsappPerformanceRows : whatsappPerformanceRows.slice(0, 5)).map((row) => (
@@ -1730,8 +1738,6 @@ function DashboardPage() {
                           <td className="right muted">{number(row.clicked)}</td>
                           <td className="right">{number(row.acessos)}</td>
                           <td className="right">{number(row.acordos)}</td>
-                          <td className="right">{row.envios > 0 ? ((row.clicked / row.envios) * 100).toFixed(1) : '0.0'}%</td>
-                          <td className="right">{row.taxaAcesso.toFixed(1)}%</td>
                           <td className="right">{row.taxaAcordo.toFixed(1)}%</td>
                           <td className="right">{money(row.custo)}</td>
                         </tr>
@@ -1743,28 +1749,25 @@ function DashboardPage() {
             </Section>
           ) : null}
 
-          <Section num="04" title="E-mail por Credor">
+          <Section num="03" title="E-mail por Credor">
             <div className="grid-2">
-              <Panel title="Cliques por E-mail" meta={`${number(emailClickTotal)} cliques em ${number(emailClickView.total.links_unicos)} links`}>
+              <Panel title="Cliques por E-mail" meta={`${number(emailClickTotal)} cliques rastreados`}>
                 {(expanded) => {
                   const rows = expanded ? emailClickRows : emailClickRows.slice(0, 5);
                   return (
                     <table>
                       <thead>
-                        <tr><th>Credor / Grupo</th><th className="right">Cliques</th><th className="right">Links</th><th className="right">Processos</th><th className="right">E-mails</th><th className="right">Campanhas</th><th className="right">Templates</th><th className="right">IPs</th><th className="right">Último clique</th></tr>
+                        <tr><th>Credor / Grupo</th><th className="right">Cliques</th><th className="right">Processos</th><th className="right">Campanhas</th><th className="right">Templates</th><th className="right">Último clique</th></tr>
                       </thead>
                       <tbody>
-                        {rows.length === 0 ? <tr><td colSpan={9} className="muted">Sem cliques de e-mail no período.</td></tr> : null}
+                        {rows.length === 0 ? <tr><td colSpan={6} className="muted">Sem cliques de e-mail no período.</td></tr> : null}
                         {rows.map((row) => (
                           <tr key={row.credor}>
                             <td className="bold">{row.credor}</td>
                             <td className="right">{number(row.cliques)}</td>
-                            <td className="right muted">{number(row.links_unicos)}</td>
                             <td className="right">{number(row.processos)}</td>
-                            <td className="right">{number(row.destinatarios)}</td>
                             <td className="right">{number(row.campanhas)}</td>
                             <td className="right">{number(row.templates)}</td>
-                            <td className="right muted">{number(row.ips)}</td>
                             <td className="right">{dateTime(row.ultimo_clique)}</td>
                           </tr>
                         ))}
@@ -1779,10 +1782,10 @@ function DashboardPage() {
                   return (
                     <table>
                       <thead>
-                        <tr><th>Horário</th><th>Credor</th><th>Processo</th><th>E-mail</th><th>Campanha</th><th className="right">IP</th></tr>
+                        <tr><th>Horário</th><th>Credor</th><th>Processo</th><th>E-mail</th><th>Campanha</th></tr>
                       </thead>
                       <tbody>
-                        {rows.length === 0 ? <tr><td colSpan={6} className="muted">Sem eventos rastreados.</td></tr> : null}
+                        {rows.length === 0 ? <tr><td colSpan={5} className="muted">Sem eventos rastreados.</td></tr> : null}
                         {rows.map((row, index) => (
                           <tr key={`${row.token ?? 'token'}-${row.data_clique ?? index}`}>
                             <td className="bold">{dateTime(row.data_clique)}</td>
@@ -1790,7 +1793,6 @@ function DashboardPage() {
                             <td>{row.processo || '-'}</td>
                             <td>{row.email_destinatario || '-'}</td>
                             <td>{row.campanha || row.template || '-'}</td>
-                            <td className="right muted">{row.ip || '-'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1801,7 +1803,7 @@ function DashboardPage() {
             </div>
           </Section>
 
-          <Section num="05" title="Indicadores de Conversão">
+          <Section num="04" title="Indicadores de Conversão">
             <div className="grid-2">
               <Panel title="Funil do Canal">
                 <div className="funnel-grid">
@@ -1820,8 +1822,8 @@ function DashboardPage() {
                     <tr><th>Etapa</th><th className="right">Volume</th><th className="right">Conversão</th></tr>
                   </thead>
                   <tbody>
-                    <tr><td>Envios WhatsApp</td><td className="right">{number(enviosMensuraveis)}</td><td className="right muted">100%</td></tr>
-                    <tr><td>Cliques</td><td className="right">{number(cliquesPortal)}</td><td className="right">{funnelRows[0].value.toFixed(1)}%</td></tr>
+                    <tr><td>Envios</td><td className="right">{number(totalEnviosCanal)}</td><td className="right muted">100%</td></tr>
+                    <tr><td>Cliques no link</td><td className="right">{number(totalCliquesLink)}</td><td className="right">{funnelRows[0].value.toFixed(1)}%</td></tr>
                     <tr><td>Acessos / cadastros</td><td className="right">{number(acessosPortal)}</td><td className="right">{funnelRows[1].value.toFixed(1)}%</td></tr>
                     <tr><td>Acordos</td><td className="right">{number(metrics.acordos)}</td><td className="right">{funnelRows[2].value.toFixed(1)}%</td></tr>
                   </tbody>
@@ -1830,7 +1832,7 @@ function DashboardPage() {
             </div>
           </Section>
 
-          <Section num="06" title="Comparativo Mensal">
+          <Section num="05" title="Comparativo Mensal">
             <div className="grid-2">
               <Panel title="Volume de Envios">
                 <div className="chart-wrap small">
@@ -1867,7 +1869,7 @@ function DashboardPage() {
             </div>
           </Section>
 
-          <Section num="07" title="Performance por Horário">
+          <Section num="06" title="Performance por Horário">
             <div className="grid-2">
               <Panel title="Conversão por faixa de horário">
                 {hourlyConversionRows.length === 0 ? (
@@ -1911,7 +1913,7 @@ function DashboardPage() {
             </div>
           </Section>
 
-          <Section num="08" title="Custo por Canal">
+          <Section num="07" title="Custo por Canal">
             <div className="grid-2">
               <Panel title="Custo por acesso e por acordo" meta="Acesso/acordo usam o total do período">
                 <table>
@@ -1949,7 +1951,7 @@ function DashboardPage() {
             </div>
           </Section>
 
-          <Section num="09" title="Pagamentos e Conversão">
+          <Section num="08" title="Pagamentos e Conversão">
             <div className="grid-2">
               <Panel title="Pagamentos por Negociador">
                 <div className="neg-grid panel-neg-grid">
