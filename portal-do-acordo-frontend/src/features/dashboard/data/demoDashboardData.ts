@@ -1,5 +1,6 @@
 import type {
   ActiveBaseReport,
+  BaseSummaryReport,
   CommunicationData,
   CostsData,
   DashboardData,
@@ -253,6 +254,112 @@ export function getDemoPortfolio(sistema: SystemFilter, selectedPeriods: Set<str
       };
     }));
   });
+}
+
+export function getDemoBaseSummary(sistema: SystemFilter, selectedPeriods: Set<string>, selectedCreditors: Set<string>): BaseSummaryReport {
+  const activeBase = getDemoActiveBase(sistema, selectedCreditors);
+  const portfolio = getDemoPortfolio(sistema, selectedPeriods, selectedCreditors);
+  const portfolioByCreditor = new Map<string, BaseSummaryReport['entrada_por_credor'][number]>();
+
+  portfolio.forEach((row) => {
+    const current = portfolioByCreditor.get(row.credor) ?? {
+      credor: row.credor,
+      borderos: 0,
+      valorEntrada: 0,
+      recuperado: 0,
+      processos: 0,
+      titulos: 0,
+      importados: 0,
+      duplicados: 0,
+      acordos: 0,
+      percentualRecuperado: 0,
+      conversaoCarteira: 0,
+    };
+    current.borderos += 1;
+    current.valorEntrada += row.valor_imp;
+    current.processos += row.qtdeproc;
+    current.titulos += row.qtdetit;
+    current.importados += row.qtdeimp;
+    current.duplicados += row.qtdedup;
+    portfolioByCreditor.set(row.credor, current);
+  });
+
+  const entradaPorCredor = Array.from(portfolioByCreditor.values())
+    .map((row, index) => {
+      const recuperado = roundMoney(row.valorEntrada * (0.12 + (index % 4) * 0.018));
+      const acordos = Math.round(row.processos * (0.018 + (index % 3) * 0.004));
+      return {
+        ...row,
+        recuperado,
+        acordos,
+        percentualRecuperado: row.valorEntrada > 0 ? (recuperado / row.valorEntrada) * 100 : 0,
+        conversaoCarteira: row.processos > 0 ? (acordos / row.processos) * 100 : 0,
+      };
+    })
+    .sort((a, b) => b.valorEntrada - a.valorEntrada);
+
+  const totalValorEntrada = entradaPorCredor.reduce((sum, row) => sum + row.valorEntrada, 0);
+  const totalProcessosEntrada = entradaPorCredor.reduce((sum, row) => sum + row.processos, 0);
+  const totalRecuperado = entradaPorCredor.reduce((sum, row) => sum + row.recuperado, 0);
+  const totalAcordos = entradaPorCredor.reduce((sum, row) => sum + row.acordos, 0);
+  const overallTicket = totalProcessosEntrada > 0 ? totalValorEntrada / totalProcessosEntrada : 0;
+  const entryByCreditor = new Map(entradaPorCredor.map((row) => [row.credor, row]));
+  const totalAgingByCreditor = new Map<string, number>();
+
+  activeBase.aging_by_credor?.forEach((row) => {
+    totalAgingByCreditor.set(row.credor, (totalAgingByCreditor.get(row.credor) ?? 0) + row.processos);
+  });
+
+  const agingOrder = ['0-90', '91-180', '181-360', '361+'];
+  const agingLabels: Record<string, string> = {
+    '0-90': '0 a 90 dias',
+    '91-180': '91 a 180 dias',
+    '181-360': '181 a 360 dias',
+    '361+': '361+ dias',
+  };
+  const agingMap = new Map(agingOrder.map((faixa) => [faixa, { faixa, name: agingLabels[faixa], processos: 0, valorCarteira: 0, valorMedio: 0, recuperado: 0, recuperacao: 0, acordos: 0, conversao: 0 }]));
+
+  activeBase.aging_by_credor?.forEach((row) => {
+    if (row.faixa === 'SEM VENCIMENTO') return;
+    const current = agingMap.get(row.faixa);
+    if (!current) return;
+
+    const creditorPortfolio = entryByCreditor.get(row.credor);
+    const creditorTicket = creditorPortfolio && creditorPortfolio.processos > 0 ? creditorPortfolio.valorEntrada / creditorPortfolio.processos : overallTicket;
+    const creditorBaseTotal = totalAgingByCreditor.get(row.credor) ?? 0;
+    const share = creditorBaseTotal > 0 ? row.processos / creditorBaseTotal : 0;
+    const creditorRecovered = creditorPortfolio?.recuperado ?? totalRecuperado;
+    const creditorAgreements = creditorPortfolio?.acordos ?? totalAcordos;
+
+    current.processos += row.processos;
+    current.valorCarteira += row.processos * creditorTicket;
+    current.recuperado += creditorRecovered * share;
+    current.acordos += creditorAgreements * share;
+  });
+
+  const aging = Array.from(agingMap.values()).map((row) => ({
+    ...row,
+    valorMedio: row.processos > 0 ? row.valorCarteira / row.processos : 0,
+    recuperacao: row.valorCarteira > 0 ? (row.recuperado / row.valorCarteira) * 100 : 0,
+    conversao: row.processos > 0 ? (row.acordos / row.processos) * 100 : 0,
+  }));
+
+  return {
+    generated_at: new Date().toISOString(),
+    updated_at: activeBase.updated_at,
+    aging_updated_at: activeBase.aging_updated_at,
+    status: activeBase.status,
+    error: activeBase.error,
+    aging_complete: activeBase.aging_complete,
+    total_processos: activeBase.total_processos,
+    total_credores: activeBase.total_credores,
+    valor_total_carteira: totalValorEntrada,
+    total_borderos: entradaPorCredor.reduce((sum, row) => sum + row.borderos, 0),
+    ticket_medio: activeBase.total_processos > 0 ? totalValorEntrada / activeBase.total_processos : 0,
+    processos_por_credor: activeBase.by_credor,
+    entrada_por_credor: entradaPorCredor,
+    aging,
+  };
 }
 
 function buildDashboardData(): DashboardData {

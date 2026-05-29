@@ -23,7 +23,7 @@ import { Section } from './components/Section';
 import { CHART_PALETTE, COLORS, FIXED_EMAIL_COST } from './config/constants';
 import { DEMO_WHATSAPP_CAMPAIGN_DATA, isDemoMode } from './data/demoDashboardData';
 import { WHATSAPP_CAMPAIGN_DATA, type WhatsappCampaignCredor } from './data/whatsappCampaigns';
-import { useActiveBaseData, useDashboardData, useDashboardSupplementalData, usePortfolioData } from './hooks/useDashboardData';
+import { useBaseSummaryData, useDashboardData, useDashboardSupplementalData, usePortfolioData } from './hooks/useDashboardData';
 import { fetchActiveUsers, sendPresenceHeartbeat } from './services/dashboardApi';
 import type { Access, ActiveUsersReport, Agreement, CostsData, DashboardTab, PortfolioEntry, SystemFilter, ThemeMode } from './types';
 import { groupBy, isNoCreditorSelection, NO_CREDITOR_SELECTION, normalizeCreditorGroup } from './utils/creditors';
@@ -43,8 +43,6 @@ const TAB_LABELS: Record<DashboardTab, string> = {
   carteiras: 'Carteiras',
   'base-ativa': 'Bases',
 };
-const AGING_ORDER = ['0-90', '91-180', '181-360', '361+', 'SEM VENCIMENTO'];
-const VISIBLE_AGING_ORDER = AGING_ORDER.filter((range) => range !== 'SEM VENCIMENTO');
 const AGING_LABELS: Record<string, string> = {
   '0-90': '0 a 90 dias',
   '91-180': '91 a 180 dias',
@@ -152,8 +150,8 @@ function DashboardPage() {
     return date ? `${name} (${date})` : name;
   };
   const { costs: custos, communication: comunicacao, emailClicks } = useDashboardSupplementalData(primaryPeriod, system, selectedCredores);
-  const { activeBaseReport, activeBaseLoading, activeBaseError } = useActiveBaseData(system, selectedCredores, tab === 'base-ativa');
-  const { portfolioData, portfolioLoading, portfolioError } = usePortfolioData(system, portfolioPeriods, selectedCredores, tab === 'base-ativa');
+  const { baseSummary, baseSummaryLoading, baseSummaryError } = useBaseSummaryData(system, portfolioPeriods, selectedCredores, tab === 'base-ativa');
+  const { portfolioData, portfolioLoading, portfolioError } = usePortfolioData(system, portfolioPeriods, selectedCredores, tab === 'carteiras');
 
   useEffect(() => {
     window.localStorage.setItem('portal-theme', theme);
@@ -911,29 +909,27 @@ function DashboardPage() {
   const visiblePeriodLabel = dateFilterIgnored ? 'Não aplicado' : visiblePeriodList.length === 1 ? periodLabel(visiblePrimaryPeriod) : `${visiblePeriodList.length} meses`;
   const portfolioPeriodTitle = portfolioPeriodList.length === 1 ? periodLabel(primaryPortfolioPeriod, true) : `${portfolioPeriodList.length} meses selecionados`;
   const portfolioPeriodRange = portfolioPeriodList.length === 1 ? periodRangeLabel(primaryPortfolioPeriod) : `${periodLabel([...portfolioPeriodList].sort()[0] ?? primaryPortfolioPeriod)} a ${periodLabel(primaryPortfolioPeriod)}`;
-  const activeBaseCredorRows = useMemo(
-    () => activeBaseReport.by_credor.map((row) => ({ name: row.credor, value: row.processos })),
-    [activeBaseReport.by_credor]
+  const baseProcessCredorRows = useMemo(
+    () => baseSummary.processos_por_credor.map((row) => ({ name: row.credor, value: row.processos })),
+    [baseSummary.processos_por_credor]
   );
-  const activeBaseAgingRows = useMemo(() => {
-    const byRange = new Map(activeBaseReport.aging.map((row) => [row.faixa, row.processos]));
-    return VISIBLE_AGING_ORDER.map((range) => ({ name: AGING_LABELS[range] ?? range, value: byRange.get(range) ?? 0 }));
-  }, [activeBaseReport.aging]);
-  const activeBaseStatusLabel =
-    activeBaseReport.aging_complete || activeBaseReport.status === 'ready'
+  const baseAgingProcessRows = useMemo(
+    () => baseSummary.aging.map((row) => ({ name: row.name || AGING_LABELS[row.faixa] || row.faixa, value: row.processos })),
+    [baseSummary.aging]
+  );
+  const baseStatusLabel =
+    baseSummary.aging_complete || baseSummary.status === 'ready'
       ? 'Cache atualizado'
-      : activeBaseReport.status === 'refreshing'
+      : baseSummary.status === 'refreshing'
         ? 'Cache atualizando'
-        : activeBaseReport.status === 'partial'
+        : baseSummary.status === 'partial'
           ? 'Vencimentos pendentes'
-          : activeBaseReport.status === 'error'
+          : baseSummary.status === 'error'
             ? 'Falha ao atualizar'
           : 'Cache ainda não gerado';
   const filteredPortfolioData = useMemo(
-    () => tab === 'base-ativa'
-      ? portfolioData
-      : portfolioData.filter((row) => matchesSelectedBusinessDays(row.data, portfolioPeriods)),
-    [matchesSelectedBusinessDays, portfolioData, portfolioPeriods, tab]
+    () => portfolioData.filter((row) => matchesSelectedBusinessDays(row.data, portfolioPeriods)),
+    [matchesSelectedBusinessDays, portfolioData, portfolioPeriods]
   );
   const portfolioDailyComparisonRows = useMemo(() => {
     const rowsByBusinessDay = new Map<number, Record<string, string | number>>();
@@ -1002,62 +998,13 @@ function DashboardPage() {
       totalAcordos: byCreditor.reduce((sum, row) => sum + row.acordos, 0),
     };
   }, [filteredPortfolioData, portfolioFiltered.acordos, portfolioFiltered.baixas]);
-  const baseTotalProcessos = activeBaseReport.total_processos || portfolioView.totalProcessos;
-  const baseValorTotal = portfolioView.totalValorEntrada;
-  const baseCredoresAtivos = activeBaseReport.total_credores || portfolioView.byCreditor.length;
-  const baseTicketMedio = baseTotalProcessos > 0 ? baseValorTotal / baseTotalProcessos : 0;
-  const baseRangeRows = useMemo(() => {
-    const overallTicket = portfolioView.totalProcessos > 0 ? portfolioView.totalValorEntrada / portfolioView.totalProcessos : 0;
-    const portfolioByCredor = new Map(portfolioView.byCreditor.map((row) => [row.credor, row]));
-    const recoveredByCredor = groupBy(portfolioFiltered.baixas, (row) => row.credor || 'OUTROS');
-    const agreementsByCredor = groupBy(portfolioFiltered.acordos, (row) => row.credor || 'OUTROS');
-    const activeAgingByCredor = activeBaseReport.aging_by_credor ?? [];
-    const agingByCredor = activeAgingByCredor.length > 0
-      ? activeAgingByCredor
-      : activeBaseReport.aging.flatMap((row) => ({ credor: 'TOTAL', faixa: row.faixa, processos: row.processos }));
-    const totalAgingByCredor = new Map<string, number>();
-
-    agingByCredor.forEach((row) => {
-      totalAgingByCredor.set(row.credor, (totalAgingByCredor.get(row.credor) ?? 0) + safe(row.processos));
-    });
-
-    const byRange = new Map<string, { faixa: string; processos: number; valorCarteira: number; recuperado: number; acordos: number }>();
-
-    VISIBLE_AGING_ORDER.forEach((faixa) => byRange.set(faixa, { faixa, processos: 0, valorCarteira: 0, recuperado: 0, acordos: 0 }));
-
-    agingByCredor.forEach((row) => {
-      if (row.faixa === 'SEM VENCIMENTO') return;
-      const processos = safe(row.processos);
-      const current = byRange.get(row.faixa) ?? { faixa: row.faixa, processos: 0, valorCarteira: 0, recuperado: 0, acordos: 0 };
-      const creditorPortfolio = portfolioByCredor.get(row.credor);
-      const creditorTicket = creditorPortfolio && creditorPortfolio.processos > 0 ? creditorPortfolio.valorEntrada / creditorPortfolio.processos : overallTicket;
-      const creditorBaseTotal = totalAgingByCredor.get(row.credor) ?? 0;
-      const share = creditorBaseTotal > 0 ? processos / creditorBaseTotal : 0;
-      const creditorRecovered = row.credor === 'TOTAL'
-        ? portfolioView.totalRecuperado
-        : (recoveredByCredor[row.credor] ?? []).reduce((sum, payment) => sum + safe(payment.total_pago_portal), 0);
-      const creditorAgreements = row.credor === 'TOTAL'
-        ? portfolioView.totalAcordos
-        : (agreementsByCredor[row.credor] ?? []).length;
-
-      current.processos += processos;
-      current.valorCarteira += processos * creditorTicket;
-      current.recuperado += creditorRecovered * share;
-      current.acordos += creditorAgreements * share;
-      byRange.set(row.faixa, current);
-    });
-
-    return VISIBLE_AGING_ORDER.map((faixa) => {
-      const row = byRange.get(faixa) ?? { faixa, processos: 0, valorCarteira: 0, recuperado: 0, acordos: 0 };
-      return {
-        ...row,
-        name: AGING_LABELS[faixa] ?? faixa,
-        valorMedio: row.processos > 0 ? row.valorCarteira / row.processos : 0,
-        recuperacao: row.valorCarteira > 0 ? (row.recuperado / row.valorCarteira) * 100 : 0,
-        conversao: row.processos > 0 ? (row.acordos / row.processos) * 100 : 0,
-      };
-    });
-  }, [activeBaseReport.aging, activeBaseReport.aging_by_credor, portfolioFiltered.acordos, portfolioFiltered.baixas, portfolioView]);
+  const baseTotalProcessos = baseSummary.total_processos;
+  const baseValorTotal = baseSummary.valor_total_carteira;
+  const baseCredoresAtivos = baseSummary.total_credores;
+  const baseTicketMedio = baseSummary.ticket_medio;
+  const baseTotalBorderos = baseSummary.total_borderos;
+  const baseEntryCreditorRows = baseSummary.entrada_por_credor;
+  const baseRangeRows = baseSummary.aging;
 
   function toggleCredor(credor: string) {
     setSelectedCredores((current) => {
@@ -1290,8 +1237,8 @@ function DashboardPage() {
         </div>
       ) : null}
 
-      {loading ? <div className="loading-state" role="status" aria-live="polite">Carregando dados do portal...</div> : null}
-      {error ? <div className="error-state" role="alert">{error}</div> : null}
+      {loading && tab !== 'base-ativa' ? <div className="loading-state" role="status" aria-live="polite">Carregando dados do portal...</div> : null}
+      {error && tab !== 'base-ativa' ? <div className="error-state" role="alert">{error}</div> : null}
 
       {!loading && !error && tab === 'relatorio' ? (
         <>
@@ -1560,7 +1507,7 @@ function DashboardPage() {
         </>
       ) : null}
 
-      {!loading && !error && tab === 'base-ativa' ? (
+      {tab === 'base-ativa' ? (
         <>
           <header className="hero">
             <div className="hero-top">
@@ -1580,28 +1527,26 @@ function DashboardPage() {
             </div>
             <div className="kpi-row">
               <MetricCard tone="teal" label="Total de Processos" value={number(baseTotalProcessos)} current={baseTotalProcessos} small="Processos na base" summary="Quantidade de processos considerados na carteira/base filtrada." />
-              <MetricCard tone="gold" label="Valor Total da Carteira" value={compactMoney(baseValorTotal)} current={baseValorTotal} small={`${number(portfolioView.totalBorderos)} borderôs`} summary="Soma do valor informado nas importações válidas da carteira." />
-              <MetricCard tone="sky" label="Credores Ativos" value={number(baseCredoresAtivos)} current={baseCredoresAtivos} small={activeBaseStatusLabel} summary="Quantidade de grupos de credores ativos na base filtrada." />
+              <MetricCard tone="gold" label="Valor Total da Carteira" value={compactMoney(baseValorTotal)} current={baseValorTotal} small={`${number(baseTotalBorderos)} borderôs`} summary="Soma do valor informado nas importações válidas da carteira." />
+              <MetricCard tone="sky" label="Credores Ativos" value={number(baseCredoresAtivos)} current={baseCredoresAtivos} small={baseStatusLabel} summary="Quantidade de grupos de credores ativos na base filtrada." />
               <MetricCard tone="rust" label="Ticket Médio" value={money(baseTicketMedio)} current={baseTicketMedio} small="Valor por processo" summary="Valor total da carteira dividido pela quantidade de processos da base." />
             </div>
           </header>
 
           <main className="main-content">
-            {activeBaseLoading ? <div className="loading-state">Carregando bases...</div> : null}
-            {activeBaseError ? <div className="error-state">{activeBaseError}</div> : null}
-            {portfolioLoading ? <div className="loading-state">Carregando carteiras...</div> : null}
-            {portfolioError ? <div className="error-state">{portfolioError}</div> : null}
-            {!activeBaseLoading && !activeBaseError && !portfolioLoading && !portfolioError ? (
+            {baseSummaryLoading ? <div className="loading-state">Carregando bases...</div> : null}
+            {baseSummaryError ? <div className="error-state">{baseSummaryError}</div> : null}
+            {!baseSummaryLoading && !baseSummaryError ? (
               <>
-                {!activeBaseReport.aging_complete && activeBaseReport.status !== 'ready' ? (
-                  <div className={activeBaseReport.status === 'error' ? 'error-state' : 'loading-state'}>
-                    {activeBaseReport.error ??
-                      (activeBaseReport.status === 'partial'
+                {!baseSummary.aging_complete && baseSummary.status !== 'ready' ? (
+                  <div className={baseSummary.status === 'error' ? 'error-state' : 'loading-state'}>
+                    {baseSummary.error ??
+                      (baseSummary.status === 'partial'
                         ? 'Os processos por credor já foram carregados. Os vencimentos ainda não terminaram dentro do tempo limite.'
                         : 'As Bases estão sendo atualizadas em segundo plano. Quando terminar, a tela passa a usar o cache local.')}
                   </div>
                 ) : null}
-                {filteredPortfolioData.length === 0 ? (
+                {baseTotalBorderos === 0 ? (
                   <div className="notice">
                     <strong>Sem importações no período selecionado.</strong> Selecione mais meses, outro sistema ou outros credores para ver o valor total da carteira.
                   </div>
@@ -1609,17 +1554,17 @@ function DashboardPage() {
 
                 <Section num="01" title="Visão por Credor">
                   <div className="grid-2">
-                    <Panel title="Processos por Credor" meta={`Top ${Math.min(activeBaseCredorRows.length, 5)}`} expandable={false}>
-                      <BarRows rows={activeBaseCredorRows.slice(0, 5)} color={color} valueLabel="Processos" />
+                    <Panel title="Processos por Credor" meta={`Top ${Math.min(baseProcessCredorRows.length, 5)}`} expandable={false}>
+                      <BarRows rows={baseProcessCredorRows.slice(0, 5)} color={color} valueLabel="Processos" />
                     </Panel>
-                    <Panel title="Entrada x Recuperado" meta={`Top ${Math.min(portfolioView.byCreditor.length, 5)}`} expandable={false}>
+                    <Panel title="Entrada x Recuperado" meta={`Top ${Math.min(baseEntryCreditorRows.length, 5)}`} expandable={false}>
                       <table>
                         <thead>
                           <tr><th>Credor / Grupo</th><th className="right">Entrada</th><th className="right">Recuperado</th><th className="right">% Rec.</th><th className="right">Proc.</th><th className="right">Acordos</th></tr>
                         </thead>
                         <tbody>
-                          {portfolioView.byCreditor.length === 0 ? <tr><td colSpan={6} className="muted">Sem carteiras no período selecionado.</td></tr> : null}
-                          {portfolioView.byCreditor.slice(0, 5).map((row) => (
+                          {baseEntryCreditorRows.length === 0 ? <tr><td colSpan={6} className="muted">Sem carteiras no período selecionado.</td></tr> : null}
+                          {baseEntryCreditorRows.slice(0, 5).map((row) => (
                             <tr key={row.credor}>
                               <td className="bold">{row.credor}</td>
                               <td className="right">{money(row.valorEntrada)}</td>
@@ -1638,7 +1583,7 @@ function DashboardPage() {
                 <Section num="02" title="Envelhecimento">
                   <div className="grid-2">
                     <Panel title="Processos por Faixa" meta="Menor vencimento por processo">
-                      <BarRows rows={activeBaseAgingRows} color={color} valueLabel="Processos" showPercent />
+                      <BarRows rows={baseAgingProcessRows} color={color} valueLabel="Processos" showPercent />
                     </Panel>
                     <Panel title="Valor Médio por Faixa" meta="Valor da carteira / processos da faixa">
                       <div className="chart-wrap small">

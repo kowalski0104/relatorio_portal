@@ -3,13 +3,14 @@ import {
   DEMO_DASHBOARD_DATA,
   DEMO_PRIMARY_PERIOD,
   getDemoActiveBase,
+  getDemoBaseSummary,
   getDemoCommunication,
   getDemoCosts,
   getDemoPortfolio,
   isDemoMode,
 } from '../data/demoDashboardData';
-import { fetchActiveBase, fetchCommunication, fetchCosts, fetchDashboardData, fetchEmailClicks, fetchPortfolio } from '../services/dashboardApi';
-import type { ActiveBaseReport, CommunicationData, CostsData, DashboardData, EmailClickData, PortfolioEntry, SystemFilter } from '../types';
+import { fetchActiveBase, fetchBaseSummary, fetchCommunication, fetchCosts, fetchDashboardData, fetchEmailClicks, fetchPortfolio } from '../services/dashboardApi';
+import type { ActiveBaseReport, BaseSummaryReport, CommunicationData, CostsData, DashboardData, EmailClickData, PortfolioEntry, SystemFilter } from '../types';
 import { monthKey } from '../utils/dates';
 
 const EMPTY_DASHBOARD_DATA: DashboardData = { baixas: [], acordos: [], acessos: [] };
@@ -23,6 +24,21 @@ const EMPTY_ACTIVE_BASE_REPORT: ActiveBaseReport = {
   by_credor: [],
   aging: [],
   aging_by_credor: [],
+};
+const EMPTY_BASE_SUMMARY_REPORT: BaseSummaryReport = {
+  generated_at: '',
+  updated_at: null,
+  aging_updated_at: null,
+  status: 'empty',
+  total_processos: 0,
+  total_credores: 0,
+  valor_total_carteira: 0,
+  total_borderos: 0,
+  ticket_medio: 0,
+  aging_complete: false,
+  processos_por_credor: [],
+  entrada_por_credor: [],
+  aging: [],
 };
 
 export function useDashboardData() {
@@ -201,6 +217,46 @@ export function usePortfolioData(system: SystemFilter, selectedPeriods: Set<stri
   }, [enabled, selectedCreditors, selectedPeriods, system]);
 
   return { portfolioData: data, portfolioLoading: loading, portfolioError: error };
+}
+
+export function useBaseSummaryData(system: SystemFilter, selectedPeriods: Set<string>, selectedCreditors: Set<string>, enabled: boolean) {
+  const [data, setData] = useState<BaseSummaryReport>(EMPTY_BASE_SUMMARY_REPORT);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!enabled) return;
+    if (isDemoMode()) {
+      setData(getDemoBaseSummary(system, selectedPeriods, selectedCreditors));
+      setError('');
+      setLoading(false);
+      return;
+    }
+
+    let active = true;
+    setLoading(true);
+
+    fetchBaseSummary(system, selectedPeriods, selectedCreditors)
+      .then((result) => {
+        if (!active) return;
+        setData(result ?? EMPTY_BASE_SUMMARY_REPORT);
+        setError('');
+      })
+      .catch((err) => {
+        if (!active) return;
+        setData(EMPTY_BASE_SUMMARY_REPORT);
+        setError(err instanceof Error ? err.message : 'Erro ao carregar resumo das bases.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [enabled, selectedCreditors, selectedPeriods, system]);
+
+  return { baseSummary: data, baseSummaryLoading: loading, baseSummaryError: error };
 }
 
 function getAvailablePeriods(data: DashboardData) {

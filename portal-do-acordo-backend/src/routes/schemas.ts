@@ -29,11 +29,13 @@ export const portfolioQuerySchema = baseQuerySchema.extend({
       : []
   ),
 });
+export const baseSummaryQuerySchema = portfolioQuerySchema;
 
 export type BaseQuery = z.infer<typeof baseQuerySchema>;
 export type CustosQuery = z.infer<typeof custosQuerySchema>;
 export type ActiveBaseQuery = z.infer<typeof activeBaseQuerySchema>;
 export type PortfolioQuery = z.infer<typeof portfolioQuerySchema>;
+export type BaseSummaryQuery = z.infer<typeof baseSummaryQuerySchema>;
 
 
 

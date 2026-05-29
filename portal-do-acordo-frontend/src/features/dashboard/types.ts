@@ -120,6 +120,48 @@ export type ActiveBaseReport = {
   }>;
 };
 
+export type BaseSummaryReport = {
+  generated_at: string;
+  updated_at: string | null;
+  aging_updated_at?: string | null;
+  status: ActiveBaseReport['status'];
+  error?: string;
+  aging_complete: boolean;
+  total_processos: number;
+  total_credores: number;
+  valor_total_carteira: number;
+  total_borderos: number;
+  ticket_medio: number;
+  processos_por_credor: Array<{
+    credor: string;
+    processos: number;
+  }>;
+  entrada_por_credor: Array<{
+    credor: string;
+    borderos: number;
+    valorEntrada: number;
+    recuperado: number;
+    processos: number;
+    titulos: number;
+    importados: number;
+    duplicados: number;
+    acordos: number;
+    percentualRecuperado: number;
+    conversaoCarteira: number;
+  }>;
+  aging: Array<{
+    faixa: string;
+    name: string;
+    processos: number;
+    valorCarteira: number;
+    valorMedio: number;
+    recuperado: number;
+    recuperacao: number;
+    acordos: number;
+    conversao: number;
+  }>;
+};
+
 export type CostsData = {
   periodo: string;
   categories: { name: string; value: number }[];

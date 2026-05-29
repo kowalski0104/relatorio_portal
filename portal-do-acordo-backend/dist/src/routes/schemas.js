@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.portfolioQuerySchema = exports.activeBaseQuerySchema = exports.custosQuerySchema = exports.baseQuerySchema = void 0;
+exports.baseSummaryQuerySchema = exports.portfolioQuerySchema = exports.activeBaseQuerySchema = exports.custosQuerySchema = exports.baseQuerySchema = void 0;
 const zod_1 = require("zod");
 exports.baseQuerySchema = zod_1.z.object({
     periodo: zod_1.z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'periodo deve ser YYYY-MM').optional(),
@@ -25,4 +25,5 @@ exports.portfolioQuerySchema = exports.baseQuerySchema.extend({
             .filter((item) => /^\d{4}-(0[1-9]|1[0-2])$/.test(item))
         : []),
 });
+exports.baseSummaryQuerySchema = exports.portfolioQuerySchema;
 //# sourceMappingURL=schemas.js.map

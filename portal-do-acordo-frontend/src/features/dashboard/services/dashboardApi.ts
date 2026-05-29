@@ -1,4 +1,4 @@
-import type { Access, ActiveBaseReport, ActiveUsersReport, Agreement, CommunicationData, CostsData, DashboardData, EmailClickData, Payment, PortfolioEntry, SystemFilter } from '../types';
+import type { Access, ActiveBaseReport, ActiveUsersReport, Agreement, BaseSummaryReport, CommunicationData, CostsData, DashboardData, EmailClickData, Payment, PortfolioEntry, SystemFilter } from '../types';
 
 export type PresenceHeartbeatPayload = {
   sessionId: string;
@@ -75,6 +75,16 @@ export async function fetchPortfolio(sistema: SystemFilter, periodos: Set<string
   if (!response.ok) throw new Error(`Falha ao carregar /api/carteiras: ${response.status}`);
   const payload = await response.json();
   return Array.isArray(payload.data) ? payload.data : [];
+}
+
+export async function fetchBaseSummary(sistema: SystemFilter, periodos: Set<string>, credores: Set<string>): Promise<BaseSummaryReport> {
+  const params = new URLSearchParams({ sistema });
+  if (periodos.size > 0) params.set('periodos', Array.from(periodos).join(','));
+  if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
+  const response = await fetch(apiUrl(`/api/bases/resumo?${params.toString()}`));
+  if (!response.ok) throw new Error(`Falha ao carregar /api/bases/resumo: ${response.status}`);
+  const payload = await response.json();
+  return payload.data;
 }
 
 export function sendPresenceHeartbeat(payload: PresenceHeartbeatPayload) {
