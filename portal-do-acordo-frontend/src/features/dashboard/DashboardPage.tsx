@@ -305,10 +305,8 @@ function DashboardPage() {
     const factor = businessDays > 0 && consideredBusinessDays > 0 ? businessDays / consideredBusinessDays : 0;
 
     return [
-      { name: 'Total Pago', atual: metrics.totalPago, projetado: metrics.totalPago * factor },
-      { name: 'Capital', atual: metrics.capital, projetado: metrics.capital * factor },
-      { name: 'Honorários', atual: metrics.honorarios, projetado: metrics.honorarios * factor },
-      { name: 'Valor negociado', atual: metrics.totalAcordos, projetado: metrics.totalAcordos * factor },
+      { name: 'Total Recuperado', atual: metrics.totalPago, projetado: metrics.totalPago * factor },
+      { name: 'Total Faturamento', atual: metrics.faturamento, projetado: metrics.faturamento * factor },
     ];
   }, [businessDays, consideredBusinessDays, metrics]);
 
@@ -1176,10 +1174,10 @@ function DashboardPage() {
             </div>
 
             <div className="kpi-row">
-              <MetricCard tone="teal" label="Total Pago" value={compactMoney(metrics.totalPago)} current={metrics.totalPago} previous={previousMetrics?.totalPago} small="Capital + Taxas" summary="Total recuperado no período selecionado." />
-              <MetricCard tone="gold" label="Capital Recuperado" value={compactMoney(metrics.capital)} current={metrics.capital} previous={previousMetrics?.capital} small="Valor capital" summary="Capital recuperado sem juros, multa e honorários." />
-              <MetricCard tone="rust" label="Acordos" value={number(metrics.acordos)} current={metrics.acordos} previous={previousMetrics?.acordos} small="Formalizados" summary="Quantidade de acordos formalizados no período." />
-              <MetricCard tone="sky" label="Credores Atendidos" value={number(metrics.credores)} current={metrics.credores} previous={previousMetrics?.credores} small="Grupos distintos" summary="Quantidade de credores com movimentação no relatório." />
+              <MetricCard tone="teal" label="Total Recuperado" value={compactMoney(metrics.totalPago)} current={metrics.totalPago} previous={previousMetrics?.totalPago} small="Pagamentos no período" summary="Total recuperado no período selecionado." />
+              <MetricCard tone="gold" label="Faturamento" value={compactMoney(metrics.faturamento)} current={metrics.faturamento} previous={previousMetrics?.faturamento} small="Honorários, taxas, juros e multas" summary="Receitas de faturamento vinculadas aos pagamentos do período." />
+              <MetricCard tone="rust" label="Acordos Pagos" value={number(metrics.acordosPagos)} current={metrics.acordosPagos} previous={previousMetrics?.acordosPagos} small="Processos com pagamento" summary="Quantidade de acordos/processos com pagamento no período." />
+              <MetricCard tone="sky" label="Conversão" value={`${metrics.conversao.toFixed(1)}%`} current={metrics.conversao} previous={previousMetrics?.conversao} small={systemLabel(system)} summary="Conversão de acessos em acordos no recorte selecionado." />
               <MetricCard tone="teal" label="Acessos" value={number(metrics.acessos)} current={metrics.acessos} previous={previousMetrics?.acessos} small="Visitantes únicos" summary="Acessos registrados no Portal do Acordo." />
             </div>
           </header>
@@ -1192,39 +1190,23 @@ function DashboardPage() {
             ) : null}
 
             <Section num="01" title="Projeção do Mês">
-              <div className="grid-2">
-                <Panel title="Valores até o final do mês" meta={`${number(projectionBaseDays)} de ${number(businessDays)} dias úteis considerados`}>
-                  <div className="chart-wrap small">
-                    <ResponsiveContainer>
-                      <BarChart data={projectionRows}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                        <YAxis tick={{ fontSize: 10 }} />
-                        <Tooltip formatter={(value: number, name: string) => [money(value), name]} />
-                        <Legend verticalAlign="top" height={28} />
-                        <Bar dataKey="atual" name="Atual" fill={COLORS.sky} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
-                        <Bar dataKey="projetado" name="Projetado" fill={COLORS.green} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Panel>
-                <Panel title="Resumo da projeção">
-                  <table>
-                    <thead>
-                      <tr><th>Indicador</th><th className="right">Atual</th><th className="right">Projetado</th></tr>
-                    </thead>
-                    <tbody>
-                      {projectionRows.map((row) => (
-                        <tr key={row.name}>
-                          <td className="bold">{row.name}</td>
-                          <td className="right">{money(row.atual)}</td>
-                          <td className="right">{money(row.projetado)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </Panel>
-              </div>
+              <Panel title="Resumo da projeção" meta={`${number(projectionBaseDays)} de ${number(businessDays)} dias úteis considerados`}>
+                <table>
+                  <thead>
+                    <tr><th>Indicador</th><th className="right">Realizado</th><th className="right">Projeção final</th><th className="right">A projetar</th></tr>
+                  </thead>
+                  <tbody>
+                    {projectionRows.map((row) => (
+                      <tr key={row.name}>
+                        <td className="bold">{row.name}</td>
+                        <td className="right">{money(row.atual)}</td>
+                        <td className="right">{money(row.projetado)}</td>
+                        <td className="right muted">{money(Math.max(row.projetado - row.atual, 0))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Panel>
             </Section>
 
             <Section num="02" title={isMultiPeriod ? 'Resumo por Mês' : 'Comparativo com Mês Anterior'}>

@@ -78,7 +78,12 @@ export function summarizeDashboardMetrics(rows: DashboardData) {
   const totalPago = rows.baixas.reduce((sum, row) => sum + safeNumber(row.capital_pago) + safeNumber(row.juros_pago) + safeNumber(row.multa_pago) + safeNumber(row.honorarios_pago_portal), 0);
   const capital = rows.baixas.reduce((sum, row) => sum + safeNumber(row.capital_pago), 0);
   const honorarios = rows.baixas.reduce((sum, row) => sum + safeNumber(row.honorarios_pago_portal), 0);
+  const faturamento = rows.baixas.reduce(
+    (sum, row) => sum + safeNumber(row.honorarios_pago_portal) + safeNumber(row.taxa_pago) + safeNumber(row.taxa_adm_pago) + safeNumber(row.multa_pago) + safeNumber(row.juros_pago),
+    0
+  );
   const totalAcordos = rows.acordos.reduce((sum, row) => sum + safeNumber(row.tot_sub_total), 0);
+  const acordosPagos = new Set(rows.baixas.map((row) => row.processo).filter(Boolean)).size;
   const creditors = new Set([...rows.baixas.map((row) => row.credor), ...rows.acordos.map((row) => row.credor)].filter(Boolean));
   const acessosComAcordo = rows.acessos.filter((row) => row.situacao === 'COM ACORDO').length;
 
@@ -86,9 +91,11 @@ export function summarizeDashboardMetrics(rows: DashboardData) {
     totalPago,
     capital,
     honorarios,
+    faturamento,
     totalAcordos,
     credores: creditors.size,
     acordos: rows.acordos.length,
+    acordosPagos,
     acessos: rows.acessos.length,
     acessosComAcordo,
     acessosSemAcordo: rows.acessos.length - acessosComAcordo,
