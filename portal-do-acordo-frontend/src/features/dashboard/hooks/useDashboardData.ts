@@ -22,6 +22,7 @@ const EMPTY_ACTIVE_BASE_REPORT: ActiveBaseReport = {
   aging_complete: false,
   by_credor: [],
   aging: [],
+  aging_by_credor: [],
 };
 
 export function useDashboardData() {

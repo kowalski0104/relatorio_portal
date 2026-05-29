@@ -64,7 +64,7 @@ export async function fetchActiveBase(sistema: SystemFilter, credores: Set<strin
   const response = await fetch(apiUrl(`/api/base-ativa?${params.toString()}`));
   if (!response.ok) throw new Error(`Falha ao carregar /api/base-ativa: ${response.status}`);
   const payload = await response.json();
-  return payload.data ?? { updated_at: null, aging_updated_at: null, status: 'empty', total_processos: 0, total_credores: 0, aging_complete: false, by_credor: [], aging: [] };
+  return payload.data ?? { updated_at: null, aging_updated_at: null, status: 'empty', total_processos: 0, total_credores: 0, aging_complete: false, by_credor: [], aging: [], aging_by_credor: [] };
 }
 
 export async function fetchPortfolio(sistema: SystemFilter, periodos: Set<string>, credores: Set<string>): Promise<PortfolioEntry[]> {

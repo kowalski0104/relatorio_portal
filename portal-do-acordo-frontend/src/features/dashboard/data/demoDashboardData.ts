@@ -201,6 +201,13 @@ export function getDemoActiveBase(sistema: SystemFilter, selectedCreditors: Set<
     processos: Math.round(1420 * creditor.weight + index * 115),
   }));
   const total = byCredor.reduce((sum, row) => sum + row.processos, 0);
+  const agingFactors = [
+    { faixa: '0-90', factor: 0.36 },
+    { faixa: '91-180', factor: 0.27 },
+    { faixa: '181-360', factor: 0.22 },
+    { faixa: '361+', factor: 0.15 },
+    { faixa: 'SEM VENCIMENTO', factor: 0 },
+  ];
 
   return {
     updated_at: '2026-05-21T08:00:00.000Z',
@@ -210,13 +217,8 @@ export function getDemoActiveBase(sistema: SystemFilter, selectedCreditors: Set<
     total_credores: byCredor.length,
     aging_complete: true,
     by_credor: byCredor.sort((a, b) => b.processos - a.processos),
-    aging: [
-      { faixa: '0-90', processos: Math.round(total * 0.36) },
-      { faixa: '91-180', processos: Math.round(total * 0.27) },
-      { faixa: '181-360', processos: Math.round(total * 0.22) },
-      { faixa: '361+', processos: Math.round(total * 0.15) },
-      { faixa: 'SEM VENCIMENTO', processos: 0 },
-    ],
+    aging: agingFactors.map((row) => ({ faixa: row.faixa, processos: Math.round(total * row.factor) })),
+    aging_by_credor: byCredor.flatMap((credor) => agingFactors.map((row) => ({ credor: credor.credor, faixa: row.faixa, processos: Math.round(credor.processos * row.factor) }))),
   };
 }
 

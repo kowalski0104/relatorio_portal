@@ -318,11 +318,16 @@ async function getActiveBase(filter) {
         ['361+', 0],
         ['SEM VENCIMENTO', 0],
     ]);
+    const agingByCreditor = new Map();
     for (const row of creditorRows) {
         byCreditor.set(row.credor, (byCreditor.get(row.credor) ?? 0) + row.processos);
     }
     for (const row of agingRows) {
         aging.set(row.faixa, (aging.get(row.faixa) ?? 0) + row.processos);
+        const key = `${row.credor}::${row.faixa}`;
+        const current = agingByCreditor.get(key) ?? { credor: row.credor, faixa: row.faixa, processos: 0 };
+        current.processos += row.processos;
+        agingByCreditor.set(key, current);
     }
     return {
         data: {
@@ -337,6 +342,7 @@ async function getActiveBase(filter) {
                 .map(([credor, processos]) => ({ credor, processos }))
                 .sort((a, b) => b.processos - a.processos || a.credor.localeCompare(b.credor, 'pt-BR')),
             aging: Array.from(aging.entries()).map(([faixa, processos]) => ({ faixa, processos })),
+            aging_by_credor: Array.from(agingByCreditor.values()).sort((a, b) => a.credor.localeCompare(b.credor, 'pt-BR') || a.faixa.localeCompare(b.faixa)),
         },
     };
 }

@@ -113,6 +113,11 @@ export type ActiveBaseReport = {
     faixa: string;
     processos: number;
   }>;
+  aging_by_credor?: Array<{
+    credor: string;
+    faixa: string;
+    processos: number;
+  }>;
 };
 
 export type CostsData = {

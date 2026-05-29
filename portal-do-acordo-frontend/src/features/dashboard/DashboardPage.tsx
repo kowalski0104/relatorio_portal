@@ -35,13 +35,21 @@ import './styles/dashboard.css';
 const safe = safeNumber;
 const CHART_ANIMATION_ACTIVE = false;
 const PRESENCE_SESSION_KEY = 'portal-presence-session-id';
-const PRESENTATION_TABS: DashboardTab[] = ['relatorio', 'performance', 'carteiras', 'custos', 'base-ativa'];
+const PRESENTATION_TABS: DashboardTab[] = ['relatorio', 'performance', 'base-ativa', 'custos'];
 const TAB_LABELS: Record<DashboardTab, string> = {
   relatorio: 'Resultados',
   custos: 'Custos',
   performance: 'Performance',
   carteiras: 'Carteiras',
   'base-ativa': 'Bases',
+};
+const AGING_ORDER = ['0-90', '91-180', '181-360', '361+', 'SEM VENCIMENTO'];
+const AGING_LABELS: Record<string, string> = {
+  '0-90': '0 a 90 dias',
+  '91-180': '91 a 180 dias',
+  '181-360': '181 a 360 dias',
+  '361+': '361+ dias',
+  'SEM VENCIMENTO': 'Sem vencimento',
 };
 
 function variation(current: number, previous: number | null | undefined) {
@@ -54,7 +62,9 @@ function variationLabel(value: number | null) {
 
 function getInitialTab(): DashboardTab {
   if (typeof window === 'undefined') return 'relatorio';
-  const requestedTab = new URLSearchParams(window.location.search).get('tab') as DashboardTab | null;
+  const requested = new URLSearchParams(window.location.search).get('tab');
+  if (requested === 'carteiras') return 'base-ativa';
+  const requestedTab = requested as DashboardTab | null;
   return requestedTab && TAB_LABELS[requestedTab] ? requestedTab : 'relatorio';
 }
 
@@ -119,7 +129,7 @@ function DashboardPage() {
   const periodFilterRef = useRef<HTMLDivElement>(null);
   const effectivePeriods = useMemo(() => (selectedPeriods.size > 0 ? selectedPeriods : period ? new Set([period]) : new Set<string>()), [period, selectedPeriods]);
   const portfolioPeriods = effectivePeriods;
-  const dateFilterIgnored = tab === 'base-ativa';
+  const dateFilterIgnored = false;
   const visiblePeriods = dateFilterIgnored ? new Set(periods) : effectivePeriods;
   const selectedPeriodList = useMemo(() => Array.from(effectivePeriods).sort().reverse(), [effectivePeriods]);
   const portfolioPeriodList = useMemo(() => Array.from(portfolioPeriods).sort().reverse(), [portfolioPeriods]);
@@ -142,7 +152,7 @@ function DashboardPage() {
   };
   const { costs: custos, communication: comunicacao, emailClicks } = useDashboardSupplementalData(primaryPeriod, system, selectedCredores);
   const { activeBaseReport, activeBaseLoading, activeBaseError } = useActiveBaseData(system, selectedCredores, tab === 'base-ativa');
-  const { portfolioData, portfolioLoading, portfolioError } = usePortfolioData(system, portfolioPeriods, selectedCredores, tab === 'carteiras');
+  const { portfolioData, portfolioLoading, portfolioError } = usePortfolioData(system, portfolioPeriods, selectedCredores, tab === 'base-ativa');
 
   useEffect(() => {
     window.localStorage.setItem('portal-theme', theme);
@@ -904,16 +914,8 @@ function DashboardPage() {
     [activeBaseReport.by_credor]
   );
   const activeBaseAgingRows = useMemo(() => {
-    const order = ['0-90', '91-180', '181-360', '361+', 'SEM VENCIMENTO'];
-    const labels: Record<string, string> = {
-      '0-90': '0 a 90 dias',
-      '91-180': '91 a 180 dias',
-      '181-360': '181 a 360 dias',
-      '361+': '361+ dias',
-      'SEM VENCIMENTO': 'Sem vencimento',
-    };
     const byRange = new Map(activeBaseReport.aging.map((row) => [row.faixa, row.processos]));
-    return order.map((range) => ({ name: labels[range] ?? range, value: byRange.get(range) ?? 0 }));
+    return AGING_ORDER.map((range) => ({ name: AGING_LABELS[range] ?? range, value: byRange.get(range) ?? 0 }));
   }, [activeBaseReport.aging]);
   const activeBaseStatusLabel =
     activeBaseReport.aging_complete || activeBaseReport.status === 'ready'
@@ -996,6 +998,61 @@ function DashboardPage() {
       totalAcordos: byCreditor.reduce((sum, row) => sum + row.acordos, 0),
     };
   }, [filteredPortfolioData, portfolioFiltered.acordos, portfolioFiltered.baixas]);
+  const baseTotalProcessos = portfolioView.totalProcessos || activeBaseReport.total_processos;
+  const baseValorTotal = portfolioView.totalValorEntrada;
+  const baseCredoresAtivos = activeBaseReport.total_credores || portfolioView.byCreditor.length;
+  const baseTicketMedio = baseTotalProcessos > 0 ? baseValorTotal / baseTotalProcessos : 0;
+  const baseRangeRows = useMemo(() => {
+    const overallTicket = portfolioView.totalProcessos > 0 ? portfolioView.totalValorEntrada / portfolioView.totalProcessos : 0;
+    const portfolioByCredor = new Map(portfolioView.byCreditor.map((row) => [row.credor, row]));
+    const recoveredByCredor = groupBy(portfolioFiltered.baixas, (row) => row.credor || 'OUTROS');
+    const agreementsByCredor = groupBy(portfolioFiltered.acordos, (row) => row.credor || 'OUTROS');
+    const activeAgingByCredor = activeBaseReport.aging_by_credor ?? [];
+    const agingByCredor = activeAgingByCredor.length > 0
+      ? activeAgingByCredor
+      : activeBaseReport.aging.flatMap((row) => ({ credor: 'TOTAL', faixa: row.faixa, processos: row.processos }));
+    const totalAgingByCredor = new Map<string, number>();
+
+    agingByCredor.forEach((row) => {
+      totalAgingByCredor.set(row.credor, (totalAgingByCredor.get(row.credor) ?? 0) + safe(row.processos));
+    });
+
+    const byRange = new Map<string, { faixa: string; processos: number; valorCarteira: number; recuperado: number; acordos: number }>();
+
+    AGING_ORDER.forEach((faixa) => byRange.set(faixa, { faixa, processos: 0, valorCarteira: 0, recuperado: 0, acordos: 0 }));
+
+    agingByCredor.forEach((row) => {
+      const processos = safe(row.processos);
+      const current = byRange.get(row.faixa) ?? { faixa: row.faixa, processos: 0, valorCarteira: 0, recuperado: 0, acordos: 0 };
+      const creditorPortfolio = portfolioByCredor.get(row.credor);
+      const creditorTicket = creditorPortfolio && creditorPortfolio.processos > 0 ? creditorPortfolio.valorEntrada / creditorPortfolio.processos : overallTicket;
+      const creditorBaseTotal = totalAgingByCredor.get(row.credor) ?? 0;
+      const share = creditorBaseTotal > 0 ? processos / creditorBaseTotal : 0;
+      const creditorRecovered = row.credor === 'TOTAL'
+        ? portfolioView.totalRecuperado
+        : (recoveredByCredor[row.credor] ?? []).reduce((sum, payment) => sum + safe(payment.total_pago_portal), 0);
+      const creditorAgreements = row.credor === 'TOTAL'
+        ? portfolioView.totalAcordos
+        : (agreementsByCredor[row.credor] ?? []).length;
+
+      current.processos += processos;
+      current.valorCarteira += processos * creditorTicket;
+      current.recuperado += creditorRecovered * share;
+      current.acordos += creditorAgreements * share;
+      byRange.set(row.faixa, current);
+    });
+
+    return AGING_ORDER.map((faixa) => {
+      const row = byRange.get(faixa) ?? { faixa, processos: 0, valorCarteira: 0, recuperado: 0, acordos: 0 };
+      return {
+        ...row,
+        name: AGING_LABELS[faixa] ?? faixa,
+        valorMedio: row.processos > 0 ? row.valorCarteira / row.processos : 0,
+        recuperacao: row.valorCarteira > 0 ? (row.recuperado / row.valorCarteira) * 100 : 0,
+        conversao: row.processos > 0 ? (row.acordos / row.processos) * 100 : 0,
+      };
+    });
+  }, [activeBaseReport.aging, activeBaseReport.aging_by_credor, portfolioFiltered.acordos, portfolioFiltered.baixas, portfolioView]);
 
   function toggleCredor(credor: string) {
     setSelectedCredores((current) => {
@@ -1216,10 +1273,9 @@ function DashboardPage() {
 
       <div className="tab-bar" role="tablist" aria-label="Abas do relatório">
         <button className={tab === 'relatorio' ? 'active' : ''} type="button" role="tab" aria-selected={tab === 'relatorio'} onClick={() => setTab('relatorio')}>Resultados</button>
-        <button className={tab === 'custos' ? 'active' : ''} type="button" role="tab" aria-selected={tab === 'custos'} onClick={() => setTab('custos')}>Custos</button>
         <button className={tab === 'performance' ? 'active' : ''} type="button" role="tab" aria-selected={tab === 'performance'} onClick={() => setTab('performance')}>Performance</button>
-        <button className={tab === 'carteiras' ? 'active' : ''} type="button" role="tab" aria-selected={tab === 'carteiras'} onClick={() => setTab('carteiras')}>Carteiras</button>
         <button className={tab === 'base-ativa' ? 'active' : ''} type="button" role="tab" aria-selected={tab === 'base-ativa'} onClick={() => setTab('base-ativa')}>Bases</button>
+        <button className={tab === 'custos' ? 'active' : ''} type="button" role="tab" aria-selected={tab === 'custos'} onClick={() => setTab('custos')}>Custos</button>
       </div>
 
       {demoMode ? (
@@ -1508,27 +1564,29 @@ function DashboardPage() {
                   <img src={logoUrl} alt="Portal do Acordo" />
                 </div>
                 <p>Bases</p>
-                <h1><span>{systemLabel(system)}</span></h1>
+                <h1><span>{selectedPeriodTitle}</span></h1>
               </div>
               <div className="hero-meta">
-                <strong>{number(activeBaseReport.total_processos)} processos</strong>
+                <strong>{selectedPeriodLabel}</strong>
+                <span>{selectedPeriodRange}</span>
                 <span>{noCreditorSelected ? 'Nenhum credor selecionado' : selectedCredores.size === 0 ? 'Todos os credores' : `${number(selectedCredores.size)} credores selecionados`}</span>
-                <span>{activeBaseStatusLabel}</span>
-                <em>{activeBaseReport.aging_complete ? dateTime(activeBaseReport.aging_updated_at ?? activeBaseReport.updated_at) : dateTime(activeBaseReport.updated_at)}</em>
+                <em>{systemLabel(system)}</em>
               </div>
             </div>
             <div className="kpi-row">
-              <MetricCard tone="teal" label="Processos ativos" value={number(activeBaseReport.total_processos)} current={activeBaseReport.total_processos} small="Ativos no portal" summary="Processos com credor ATIVO e status diferente de devolução, baixado ou quitado." />
-              <MetricCard tone="gold" label="Credores" value={number(activeBaseReport.total_credores)} current={activeBaseReport.total_credores} small="Grupos distintos" summary="Quantidade de grupos de credores na base ativa filtrada." />
-              <MetricCard tone="sky" label="Vencimentos" value={activeBaseReport.aging_complete ? 'OK' : 'Atualizando'} current={activeBaseReport.aging_complete ? 1 : 0} small="Menor vencimento por processo" summary="Processos agrupados pela idade do menor vencimento." />
-              <MetricCard tone="rust" label="Faixa crítica" value={number(activeBaseAgingRows.find((row) => row.name === '361+ dias')?.value ?? 0)} current={activeBaseAgingRows.find((row) => row.name === '361+ dias')?.value ?? 0} small="361+ dias" summary="Processos com menor vencimento acima de 360 dias." />
+              <MetricCard tone="teal" label="Total de Processos" value={number(baseTotalProcessos)} current={baseTotalProcessos} small="Processos na base" summary="Quantidade de processos considerados na carteira/base filtrada." />
+              <MetricCard tone="gold" label="Valor Total da Carteira" value={compactMoney(baseValorTotal)} current={baseValorTotal} small={`${number(portfolioView.totalBorderos)} borderôs`} summary="Soma do valor informado nas importações válidas da carteira." />
+              <MetricCard tone="sky" label="Credores Ativos" value={number(baseCredoresAtivos)} current={baseCredoresAtivos} small={activeBaseStatusLabel} summary="Quantidade de grupos de credores ativos na base filtrada." />
+              <MetricCard tone="rust" label="Ticket Médio" value={money(baseTicketMedio)} current={baseTicketMedio} small="Valor por processo" summary="Valor total da carteira dividido pela quantidade de processos da base." />
             </div>
           </header>
 
           <main className="main-content">
             {activeBaseLoading ? <div className="loading-state">Carregando bases...</div> : null}
             {activeBaseError ? <div className="error-state">{activeBaseError}</div> : null}
-            {!activeBaseLoading && !activeBaseError ? (
+            {portfolioLoading ? <div className="loading-state">Carregando carteiras...</div> : null}
+            {portfolioError ? <div className="error-state">{portfolioError}</div> : null}
+            {!activeBaseLoading && !activeBaseError && !portfolioLoading && !portfolioError ? (
               <>
                 {!activeBaseReport.aging_complete && activeBaseReport.status !== 'ready' ? (
                   <div className={activeBaseReport.status === 'error' ? 'error-state' : 'loading-state'}>
@@ -1538,16 +1596,93 @@ function DashboardPage() {
                         : 'As Bases estão sendo atualizadas em segundo plano. Quando terminar, a tela passa a usar o cache local.')}
                   </div>
                 ) : null}
+                {filteredPortfolioData.length === 0 ? (
+                  <div className="notice">
+                    <strong>Sem importações no período selecionado.</strong> Selecione mais meses, outro sistema ou outros credores para ver o valor total da carteira.
+                  </div>
+                ) : null}
 
-                <Section num="01" title="Bases por Credor">
-                  <Panel title="Distribuição de processos" meta={`Top ${Math.min(activeBaseCredorRows.length, 10)}`}>
-                    {(expanded) => <BarRows rows={expanded ? activeBaseCredorRows : activeBaseCredorRows.slice(0, 10)} color={color} valueLabel="Processos" />}
-                  </Panel>
+                <Section num="01" title="Visão por Credor">
+                  <div className="grid-2">
+                    <Panel title="Processos por Credor" meta={`Top ${Math.min(activeBaseCredorRows.length, 10)}`}>
+                      {(expanded) => <BarRows rows={expanded ? activeBaseCredorRows : activeBaseCredorRows.slice(0, 10)} color={color} valueLabel="Processos" />}
+                    </Panel>
+                    <Panel title="Entrada x Recuperado" meta={`Top ${Math.min(portfolioView.byCreditor.length, 8)}`}>
+                      {(expanded) => (
+                        <table>
+                          <thead>
+                            <tr><th>Credor / Grupo</th><th className="right">Entrada</th><th className="right">Recuperado</th><th className="right">% Rec.</th><th className="right">Proc.</th><th className="right">Acordos</th></tr>
+                          </thead>
+                          <tbody>
+                            {portfolioView.byCreditor.length === 0 ? <tr><td colSpan={6} className="muted">Sem carteiras no período selecionado.</td></tr> : null}
+                            {(expanded ? portfolioView.byCreditor : portfolioView.byCreditor.slice(0, 8)).map((row) => (
+                              <tr key={row.credor}>
+                                <td className="bold">{row.credor}</td>
+                                <td className="right">{money(row.valorEntrada)}</td>
+                                <td className="right">{money(row.recuperado)}</td>
+                                <td className="right">{row.percentualRecuperado.toFixed(2)}%</td>
+                                <td className="right muted">{number(row.processos)}</td>
+                                <td className="right muted">{number(row.acordos)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </Panel>
+                  </div>
                 </Section>
 
-                <Section num="02" title="Vencimentos das Bases">
-                  <Panel title="Processos por faixa de vencimento" meta="Menor vencimento por processo">
-                    <BarRows rows={activeBaseAgingRows} color={color} valueLabel="Processos" showPercent />
+                <Section num="02" title="Envelhecimento">
+                  <div className="grid-2">
+                    <Panel title="Processos por Faixa" meta="Menor vencimento por processo">
+                      <BarRows rows={activeBaseAgingRows} color={color} valueLabel="Processos" showPercent />
+                    </Panel>
+                    <Panel title="Valor Médio por Faixa" meta="Valor da carteira / processos da faixa">
+                      <div className="chart-wrap small">
+                        <ResponsiveContainer>
+                          <BarChart data={baseRangeRows}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                            <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-16} textAnchor="end" height={62} />
+                            <YAxis tickFormatter={(value) => `R$${Math.round(Number(value) / 1000)}k`} tick={{ fontSize: 10 }} />
+                            <Tooltip formatter={(value: number) => money(value)} />
+                            <Bar dataKey="valorMedio" name="Valor médio" fill={chartAccent} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </Panel>
+                  </div>
+                </Section>
+
+                <Section num="03" title="Recuperação por Faixa">
+                  <Panel title="Recuperação e Conversão por Faixa" meta="Valores estimados pela distribuição de processos por credor">
+                    <div className="chart-wrap">
+                      <ResponsiveContainer>
+                        <BarChart data={baseRangeRows} layout="vertical" margin={{ left: 18, right: 24 }}>
+                          <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                          <XAxis type="number" tickFormatter={(value) => `R$${Math.round(Number(value) / 1000)}k`} tick={{ fontSize: 10 }} />
+                          <YAxis type="category" dataKey="name" width={108} tick={{ fontSize: 10 }} />
+                          <Tooltip formatter={(value: number) => money(value)} />
+                          <Legend verticalAlign="top" height={28} />
+                          <Bar dataKey="valorCarteira" name="Valor da faixa" fill={COLORS.sky} radius={[0, 4, 4, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                          <Bar dataKey="recuperado" name="Recuperado" fill={COLORS.green} radius={[0, 4, 4, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <table>
+                      <thead>
+                        <tr><th>Faixa</th><th className="right">Recuperado</th><th className="right">% Recuperação</th><th className="right">Conversão</th></tr>
+                      </thead>
+                      <tbody>
+                        {baseRangeRows.map((row) => (
+                          <tr key={row.faixa}>
+                            <td className="bold">{row.name}</td>
+                            <td className="right">{money(row.recuperado)}</td>
+                            <td className="right">{row.recuperacao.toFixed(2)}%</td>
+                            <td className="right">{row.conversao.toFixed(2)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </Panel>
                 </Section>
               </>
@@ -1842,18 +1977,50 @@ function DashboardPage() {
             </div>
           </Section>
 
-          <Section num="03" title="Indicadores de Conversão">
-            <Panel title="Funil do Canal">
-              <div className="funnel-grid">
-                {funnelRows.map((row, index) => (
-                  <div className="funnel-card" key={row.name}>
-                    <span>{row.name}</span>
-                    <strong>{row.value.toFixed(1)}%</strong>
-                    <div className="bar-track"><div className="bar-fill" style={{ width: `${Math.min(row.value, 100)}%`, background: CHART_PALETTE[index % CHART_PALETTE.length] }} /></div>
-                  </div>
-                ))}
-              </div>
-            </Panel>
+          <Section num="03" title="Conversão e Horários">
+            <div className="grid-2">
+              <Panel title="Funil do Canal">
+                <div className="funnel-grid">
+                  {funnelRows.map((row, index) => (
+                    <div className="funnel-card" key={row.name}>
+                      <span>{row.name}</span>
+                      <strong>{row.value.toFixed(1)}%</strong>
+                      <div className="bar-track"><div className="bar-fill" style={{ width: `${Math.min(row.value, 100)}%`, background: CHART_PALETTE[index % CHART_PALETTE.length] }} /></div>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+              <Panel title="Melhores horários" meta="Ordem cronológica; melhor conversão destacada">
+                {(expanded) => {
+                  const rows = expanded
+                    ? hourlyConversionRows
+                    : [...hourlyConversionRows]
+                      .filter((row) => row.acessos > 0 || row.acordos > 0)
+                      .sort((a, b) => b.conversao - a.conversao || b.acordos - a.acordos || b.acessos - a.acessos)
+                      .slice(0, 5)
+                      .sort((a, b) => a.hour - b.hour);
+
+                  return (
+                    <table>
+                      <thead>
+                        <tr><th>Horário</th><th className="right">Acessos</th><th className="right">Acordos</th><th className="right">Conversão</th></tr>
+                      </thead>
+                      <tbody>
+                        {rows.length === 0 ? <tr><td colSpan={4} className="muted">Sem horário nos dados carregados.</td></tr> : null}
+                        {rows.map((row) => (
+                          <tr key={row.hour} className={bestHourlyRow?.hour === row.hour ? 'highlight-row' : ''}>
+                            <td className="bold">{row.label}</td>
+                            <td className="right">{number(row.acessos)}</td>
+                            <td className="right">{number(row.acordos)}</td>
+                            <td className="right">{row.conversao.toFixed(1)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  );
+                }}
+              </Panel>
+            </div>
           </Section>
 
           <Section num="04" title="Comparativo Mensal">
@@ -1894,40 +2061,7 @@ function DashboardPage() {
             </div>
           </Section>
 
-          <Section num="05" title="Performance por Horário">
-            <Panel title="Melhores horários" meta="Ordem cronológica; melhor conversão destacada">
-              {(expanded) => {
-                const rows = expanded
-                  ? hourlyConversionRows
-                  : [...hourlyConversionRows]
-                    .filter((row) => row.acessos > 0 || row.acordos > 0)
-                    .sort((a, b) => b.conversao - a.conversao || b.acordos - a.acordos || b.acessos - a.acessos)
-                    .slice(0, 5)
-                    .sort((a, b) => a.hour - b.hour);
-
-                return (
-                  <table>
-                    <thead>
-                      <tr><th>Horário</th><th className="right">Acessos</th><th className="right">Acordos</th><th className="right">Conversão</th></tr>
-                    </thead>
-                    <tbody>
-                      {rows.length === 0 ? <tr><td colSpan={4} className="muted">Sem horário nos dados carregados.</td></tr> : null}
-                      {rows.map((row) => (
-                        <tr key={row.hour} className={bestHourlyRow?.hour === row.hour ? 'highlight-row' : ''}>
-                          <td className="bold">{row.label}</td>
-                          <td className="right">{number(row.acessos)}</td>
-                          <td className="right">{number(row.acordos)}</td>
-                          <td className="right">{row.conversao.toFixed(1)}%</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                );
-              }}
-            </Panel>
-          </Section>
-
-          <Section num="06" title="Custo por Canal">
+          <Section num="05" title="Custo por Canal">
             <div className="grid-2">
               <Panel title="Custo por acesso e por acordo" meta="Acesso/acordo usam o total do período">
                 <table>
@@ -1965,7 +2099,7 @@ function DashboardPage() {
             </div>
           </Section>
 
-          <Section num="07" title="Pagamentos por Negociador">
+          <Section num="06" title="Pagamentos por Negociador">
             <div className="neg-grid">
               {negociadores.length === 0 ? <div className="empty-state">Sem dados no período.</div> : null}
               {negociadores.map((row, index) => (
