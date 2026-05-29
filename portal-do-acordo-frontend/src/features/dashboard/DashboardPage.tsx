@@ -1816,7 +1816,7 @@ function DashboardPage() {
               </Panel>
               <Panel title="Últimos cliques" meta="WhatsApp e e-mail">
                 {(expanded) => {
-                  const rows = expanded ? recentClickRows : recentClickRows.slice(0, 8);
+                  const rows = expanded ? recentClickRows : recentClickRows.slice(0, 5);
                   return (
                     <table>
                       <thead>
@@ -1896,22 +1896,34 @@ function DashboardPage() {
 
           <Section num="05" title="Performance por Horário">
             <Panel title="Melhores horários" meta="Ordem cronológica; melhor conversão destacada">
-              <table>
-                <thead>
-                  <tr><th>Horário</th><th className="right">Acessos</th><th className="right">Acordos</th><th className="right">Conversão</th></tr>
-                </thead>
-                <tbody>
-                  {hourlyConversionRows.length === 0 ? <tr><td colSpan={4} className="muted">Sem horário nos dados carregados.</td></tr> : null}
-                  {hourlyConversionRows.map((row) => (
-                    <tr key={row.hour} className={bestHourlyRow?.hour === row.hour ? 'highlight-row' : ''}>
-                      <td className="bold">{row.label}</td>
-                      <td className="right">{number(row.acessos)}</td>
-                      <td className="right">{number(row.acordos)}</td>
-                      <td className="right">{row.conversao.toFixed(1)}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {(expanded) => {
+                const rows = expanded
+                  ? hourlyConversionRows
+                  : [...hourlyConversionRows]
+                    .filter((row) => row.acessos > 0 || row.acordos > 0)
+                    .sort((a, b) => b.conversao - a.conversao || b.acordos - a.acordos || b.acessos - a.acessos)
+                    .slice(0, 5)
+                    .sort((a, b) => a.hour - b.hour);
+
+                return (
+                  <table>
+                    <thead>
+                      <tr><th>Horário</th><th className="right">Acessos</th><th className="right">Acordos</th><th className="right">Conversão</th></tr>
+                    </thead>
+                    <tbody>
+                      {rows.length === 0 ? <tr><td colSpan={4} className="muted">Sem horário nos dados carregados.</td></tr> : null}
+                      {rows.map((row) => (
+                        <tr key={row.hour} className={bestHourlyRow?.hour === row.hour ? 'highlight-row' : ''}>
+                          <td className="bold">{row.label}</td>
+                          <td className="right">{number(row.acessos)}</td>
+                          <td className="right">{number(row.acordos)}</td>
+                          <td className="right">{row.conversao.toFixed(1)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              }}
             </Panel>
           </Section>
 
@@ -1954,19 +1966,17 @@ function DashboardPage() {
           </Section>
 
           <Section num="07" title="Pagamentos por Negociador">
-            <Panel title="Pagamentos por Negociador">
-              <div className="neg-grid panel-neg-grid">
-                {negociadores.length === 0 ? <div className="empty-state">Sem dados no período.</div> : null}
-                {negociadores.map((row, index) => (
-                  <div className="neg-card" key={row.name}>
-                    <span>{row.name}</span>
-                    <strong>{compactMoney(row.total)}</strong>
-                    <small>{number(row.qtd)} pagamento{row.qtd === 1 ? '' : 's'}</small>
-                    <div style={{ width: `${(row.total / Math.max(negociadores[0]?.total || 1, 1)) * 100}%`, background: CHART_PALETTE[index % CHART_PALETTE.length] }} />
-                  </div>
-                ))}
-              </div>
-            </Panel>
+            <div className="neg-grid">
+              {negociadores.length === 0 ? <div className="empty-state">Sem dados no período.</div> : null}
+              {negociadores.map((row, index) => (
+                <div className="neg-card" key={row.name}>
+                  <span>{row.name}</span>
+                  <strong>{compactMoney(row.total)}</strong>
+                  <small>{number(row.qtd)} pagamento{row.qtd === 1 ? '' : 's'}</small>
+                  <div style={{ width: `${(row.total / Math.max(negociadores[0]?.total || 1, 1)) * 100}%`, background: CHART_PALETTE[index % CHART_PALETTE.length] }} />
+                </div>
+              ))}
+            </div>
           </Section>
           </main>
         </>

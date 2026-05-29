@@ -904,10 +904,6 @@ tfoot td {
   gap: 16px;
 }
 
-.panel-neg-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
 .neg-card,
 .metric-card {
   position: relative;
