@@ -44,6 +44,7 @@ const TAB_LABELS: Record<DashboardTab, string> = {
   'base-ativa': 'Bases',
 };
 const AGING_ORDER = ['0-90', '91-180', '181-360', '361+', 'SEM VENCIMENTO'];
+const VISIBLE_AGING_ORDER = AGING_ORDER.filter((range) => range !== 'SEM VENCIMENTO');
 const AGING_LABELS: Record<string, string> = {
   '0-90': '0 a 90 dias',
   '91-180': '91 a 180 dias',
@@ -305,9 +306,10 @@ function DashboardPage() {
     () => filterDashboardData({ data, system, period: primaryPeriod, periods: effectivePeriods, selectedCreditors: selectedCredores, businessDayMap, selectedBusinessDayLimit }),
     [businessDayMap, data, effectivePeriods, primaryPeriod, selectedBusinessDayLimit, selectedCredores, system]
   );
+  const portfolioBusinessDayLimit = tab === 'base-ativa' ? null : selectedBusinessDayLimit;
   const portfolioFiltered = useMemo(
-    () => filterDashboardData({ data, system, period: primaryPortfolioPeriod, periods: portfolioPeriods, selectedCreditors: selectedCredores, businessDayMap, selectedBusinessDayLimit }),
-    [businessDayMap, data, portfolioPeriods, primaryPortfolioPeriod, selectedBusinessDayLimit, selectedCredores, system]
+    () => filterDashboardData({ data, system, period: primaryPortfolioPeriod, periods: portfolioPeriods, selectedCreditors: selectedCredores, businessDayMap, selectedBusinessDayLimit: portfolioBusinessDayLimit }),
+    [businessDayMap, data, portfolioBusinessDayLimit, portfolioPeriods, primaryPortfolioPeriod, selectedCredores, system]
   );
   const consideredBusinessDays = selectedBusinessDayLimit
     ? selectedPeriodList.reduce((sum, item) => sum + Math.min(selectedBusinessDayLimit, businessDaysInPeriod(item)), 0)
@@ -915,7 +917,7 @@ function DashboardPage() {
   );
   const activeBaseAgingRows = useMemo(() => {
     const byRange = new Map(activeBaseReport.aging.map((row) => [row.faixa, row.processos]));
-    return AGING_ORDER.map((range) => ({ name: AGING_LABELS[range] ?? range, value: byRange.get(range) ?? 0 }));
+    return VISIBLE_AGING_ORDER.map((range) => ({ name: AGING_LABELS[range] ?? range, value: byRange.get(range) ?? 0 }));
   }, [activeBaseReport.aging]);
   const activeBaseStatusLabel =
     activeBaseReport.aging_complete || activeBaseReport.status === 'ready'
@@ -928,8 +930,10 @@ function DashboardPage() {
             ? 'Falha ao atualizar'
           : 'Cache ainda não gerado';
   const filteredPortfolioData = useMemo(
-    () => portfolioData.filter((row) => matchesSelectedBusinessDays(row.data, portfolioPeriods)),
-    [matchesSelectedBusinessDays, portfolioData, portfolioPeriods]
+    () => tab === 'base-ativa'
+      ? portfolioData
+      : portfolioData.filter((row) => matchesSelectedBusinessDays(row.data, portfolioPeriods)),
+    [matchesSelectedBusinessDays, portfolioData, portfolioPeriods, tab]
   );
   const portfolioDailyComparisonRows = useMemo(() => {
     const rowsByBusinessDay = new Map<number, Record<string, string | number>>();
@@ -998,7 +1002,7 @@ function DashboardPage() {
       totalAcordos: byCreditor.reduce((sum, row) => sum + row.acordos, 0),
     };
   }, [filteredPortfolioData, portfolioFiltered.acordos, portfolioFiltered.baixas]);
-  const baseTotalProcessos = portfolioView.totalProcessos || activeBaseReport.total_processos;
+  const baseTotalProcessos = activeBaseReport.total_processos || portfolioView.totalProcessos;
   const baseValorTotal = portfolioView.totalValorEntrada;
   const baseCredoresAtivos = activeBaseReport.total_credores || portfolioView.byCreditor.length;
   const baseTicketMedio = baseTotalProcessos > 0 ? baseValorTotal / baseTotalProcessos : 0;
@@ -1019,9 +1023,10 @@ function DashboardPage() {
 
     const byRange = new Map<string, { faixa: string; processos: number; valorCarteira: number; recuperado: number; acordos: number }>();
 
-    AGING_ORDER.forEach((faixa) => byRange.set(faixa, { faixa, processos: 0, valorCarteira: 0, recuperado: 0, acordos: 0 }));
+    VISIBLE_AGING_ORDER.forEach((faixa) => byRange.set(faixa, { faixa, processos: 0, valorCarteira: 0, recuperado: 0, acordos: 0 }));
 
     agingByCredor.forEach((row) => {
+      if (row.faixa === 'SEM VENCIMENTO') return;
       const processos = safe(row.processos);
       const current = byRange.get(row.faixa) ?? { faixa: row.faixa, processos: 0, valorCarteira: 0, recuperado: 0, acordos: 0 };
       const creditorPortfolio = portfolioByCredor.get(row.credor);
@@ -1042,7 +1047,7 @@ function DashboardPage() {
       byRange.set(row.faixa, current);
     });
 
-    return AGING_ORDER.map((faixa) => {
+    return VISIBLE_AGING_ORDER.map((faixa) => {
       const row = byRange.get(faixa) ?? { faixa, processos: 0, valorCarteira: 0, recuperado: 0, acordos: 0 };
       return {
         ...row,
@@ -1604,30 +1609,28 @@ function DashboardPage() {
 
                 <Section num="01" title="Visão por Credor">
                   <div className="grid-2">
-                    <Panel title="Processos por Credor" meta={`Top ${Math.min(activeBaseCredorRows.length, 10)}`}>
-                      {(expanded) => <BarRows rows={expanded ? activeBaseCredorRows : activeBaseCredorRows.slice(0, 10)} color={color} valueLabel="Processos" />}
+                    <Panel title="Processos por Credor" meta={`Top ${Math.min(activeBaseCredorRows.length, 5)}`} expandable={false}>
+                      <BarRows rows={activeBaseCredorRows.slice(0, 5)} color={color} valueLabel="Processos" />
                     </Panel>
-                    <Panel title="Entrada x Recuperado" meta={`Top ${Math.min(portfolioView.byCreditor.length, 8)}`}>
-                      {(expanded) => (
-                        <table>
-                          <thead>
-                            <tr><th>Credor / Grupo</th><th className="right">Entrada</th><th className="right">Recuperado</th><th className="right">% Rec.</th><th className="right">Proc.</th><th className="right">Acordos</th></tr>
-                          </thead>
-                          <tbody>
-                            {portfolioView.byCreditor.length === 0 ? <tr><td colSpan={6} className="muted">Sem carteiras no período selecionado.</td></tr> : null}
-                            {(expanded ? portfolioView.byCreditor : portfolioView.byCreditor.slice(0, 8)).map((row) => (
-                              <tr key={row.credor}>
-                                <td className="bold">{row.credor}</td>
-                                <td className="right">{money(row.valorEntrada)}</td>
-                                <td className="right">{money(row.recuperado)}</td>
-                                <td className="right">{row.percentualRecuperado.toFixed(2)}%</td>
-                                <td className="right muted">{number(row.processos)}</td>
-                                <td className="right muted">{number(row.acordos)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      )}
+                    <Panel title="Entrada x Recuperado" meta={`Top ${Math.min(portfolioView.byCreditor.length, 5)}`} expandable={false}>
+                      <table>
+                        <thead>
+                          <tr><th>Credor / Grupo</th><th className="right">Entrada</th><th className="right">Recuperado</th><th className="right">% Rec.</th><th className="right">Proc.</th><th className="right">Acordos</th></tr>
+                        </thead>
+                        <tbody>
+                          {portfolioView.byCreditor.length === 0 ? <tr><td colSpan={6} className="muted">Sem carteiras no período selecionado.</td></tr> : null}
+                          {portfolioView.byCreditor.slice(0, 5).map((row) => (
+                            <tr key={row.credor}>
+                              <td className="bold">{row.credor}</td>
+                              <td className="right">{money(row.valorEntrada)}</td>
+                              <td className="right">{money(row.recuperado)}</td>
+                              <td className="right">{row.percentualRecuperado.toFixed(2)}%</td>
+                              <td className="right muted">{number(row.processos)}</td>
+                              <td className="right muted">{number(row.acordos)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </Panel>
                   </div>
                 </Section>
