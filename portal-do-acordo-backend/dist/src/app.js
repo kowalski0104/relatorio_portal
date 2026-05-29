@@ -47,6 +47,7 @@ const accessRoutes_1 = __importDefault(require("./routes/accessRoutes"));
 const creditorRoutes_1 = __importDefault(require("./routes/creditorRoutes"));
 const costRoutes_1 = __importDefault(require("./routes/costRoutes"));
 const communicationRoutes_1 = __importDefault(require("./routes/communicationRoutes"));
+const dashboardSummaryRoutes_1 = __importDefault(require("./routes/dashboardSummaryRoutes"));
 const activeBaseRoutes_1 = __importDefault(require("./routes/activeBaseRoutes"));
 const portfolioRoutes_1 = __importDefault(require("./routes/portfolioRoutes"));
 const baseSummaryRoutes_1 = __importDefault(require("./routes/baseSummaryRoutes"));
@@ -94,6 +95,7 @@ function createApp() {
     app.use('/api/credores', creditorRoutes_1.default);
     app.use('/api/custos', costRoutes_1.default);
     app.use('/api/comunicacao', communicationRoutes_1.default);
+    app.use('/api/dashboard', dashboardSummaryRoutes_1.default);
     app.use('/api/base-ativa', activeBaseRoutes_1.default);
     app.use('/api/carteiras', portfolioRoutes_1.default);
     app.use('/api/bases', baseSummaryRoutes_1.default);

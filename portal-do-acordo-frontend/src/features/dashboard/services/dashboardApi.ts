@@ -39,6 +39,15 @@ export async function fetchPeriods(sistema: SystemFilter, signal?: AbortSignal):
   return Array.isArray(payload.data) ? payload.data : [];
 }
 
+export async function fetchCreditors(periodo: string, sistema: SystemFilter, signal?: AbortSignal): Promise<string[]> {
+  const params = new URLSearchParams({ sistema });
+  if (periodo) params.set('periodo', periodo);
+  const response = await fetch(apiUrl(`/api/credores?${params.toString()}`), { signal });
+  if (!response.ok) return [];
+  const payload = await response.json();
+  return Array.isArray(payload.data) ? payload.data : [];
+}
+
 export async function fetchCosts(periodo: string, sistema: SystemFilter, signal?: AbortSignal): Promise<CostsData | null> {
   const params = new URLSearchParams({ periodo, sistema });
   const response = await fetch(apiUrl(`/api/custos?${params.toString()}`), { signal });

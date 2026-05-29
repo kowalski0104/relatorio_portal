@@ -23,12 +23,12 @@ import { Section } from './components/Section';
 import { CHART_PALETTE, COLORS, FIXED_EMAIL_COST } from './config/constants';
 import { DEMO_WHATSAPP_CAMPAIGN_DATA, isDemoMode } from './data/demoDashboardData';
 import { WHATSAPP_CAMPAIGN_DATA, type WhatsappCampaignCredor } from './data/whatsappCampaigns';
-import { useBaseSummaryData, useDashboardData, useDashboardSupplementalData, usePortfolioData } from './hooks/useDashboardData';
+import { useBaseSummaryData, useCreditorsData, useDashboardData, useDashboardSupplementalData, usePortfolioData } from './hooks/useDashboardData';
 import { fetchActiveUsers, sendPresenceHeartbeat } from './services/dashboardApi';
 import type { Access, ActiveUsersReport, Agreement, CostsData, DashboardTab, PortfolioEntry, SystemFilter, ThemeMode } from './types';
 import { groupBy, isNoCreditorSelection, NO_CREDITOR_SELECTION, normalizeCreditorGroup } from './utils/creditors';
 import { businessDayIndexMap, businessDaysInPeriod, dayLabel, monthKey, periodLabel, periodRangeLabel, previousPeriod } from './utils/dates';
-import { countBusinessDaysWithData, filterDashboardData, getAvailableCreditors, matchesSystem, summarizeDashboardMetrics } from './utils/dashboardMetrics';
+import { countBusinessDaysWithData, filterDashboardData, matchesSystem, summarizeDashboardMetrics } from './utils/dashboardMetrics';
 import { compactMoney, dateTime, money, number, percent, safeNumber, systemLabel } from './utils/formatters';
 import './styles/dashboard.css';
 
@@ -156,6 +156,7 @@ function DashboardPage() {
   });
   const { baseSummary, baseSummaryLoading, baseSummaryError } = useBaseSummaryData(system, portfolioPeriods, selectedCredores, tab === 'base-ativa');
   const { portfolioData, portfolioLoading, portfolioError } = usePortfolioData(system, portfolioPeriods, selectedCredores, tab === 'carteiras');
+  const creditorOptions = useCreditorsData(primaryPeriod, system);
 
   useEffect(() => {
     window.localStorage.setItem('portal-theme', theme);
@@ -279,9 +280,9 @@ function DashboardPage() {
   }, [presentationMode]);
 
   const allCredores = useMemo(() => {
-    const values = [...getAvailableCreditors(data), ...baseSummary.processos_por_credor.map((row) => row.credor)];
+    const values = [...creditorOptions, ...baseSummary.processos_por_credor.map((row) => row.credor)];
     return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  }, [baseSummary.processos_por_credor, data]);
+  }, [baseSummary.processos_por_credor, creditorOptions]);
   const noCreditorSelected = isNoCreditorSelection(selectedCredores);
 
   const color = COLORS[system];

@@ -8,6 +8,7 @@ import accessRouter from './routes/accessRoutes';
 import creditorRouter from './routes/creditorRoutes';
 import costRouter from './routes/costRoutes';
 import communicationRouter from './routes/communicationRoutes';
+import dashboardSummaryRouter from './routes/dashboardSummaryRoutes';
 import activeBaseRouter from './routes/activeBaseRoutes';
 import portfolioRouter from './routes/portfolioRoutes';
 import baseSummaryRouter from './routes/baseSummaryRoutes';
@@ -63,6 +64,7 @@ export function createApp() {
   app.use('/api/credores', creditorRouter);
   app.use('/api/custos', costRouter);
   app.use('/api/comunicacao', communicationRouter);
+  app.use('/api/dashboard', dashboardSummaryRouter);
   app.use('/api/base-ativa', activeBaseRouter);
   app.use('/api/carteiras', portfolioRouter);
   app.use('/api/bases', baseSummaryRouter);

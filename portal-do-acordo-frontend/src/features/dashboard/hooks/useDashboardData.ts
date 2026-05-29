@@ -9,7 +9,7 @@ import {
   getDemoPortfolio,
   isDemoMode,
 } from '../data/demoDashboardData';
-import { fetchActiveBase, fetchBaseSummary, fetchCommunication, fetchCosts, fetchDashboardData, fetchEmailClicks, fetchPeriods, fetchPortfolio } from '../services/dashboardApi';
+import { fetchActiveBase, fetchBaseSummary, fetchCommunication, fetchCosts, fetchCreditors, fetchDashboardData, fetchEmailClicks, fetchPeriods, fetchPortfolio } from '../services/dashboardApi';
 import type { ActiveBaseReport, BaseSummaryReport, CommunicationData, CostsData, DashboardData, EmailClickData, PortfolioEntry, SystemFilter } from '../types';
 import { monthKey, previousPeriod } from '../utils/dates';
 
@@ -174,6 +174,30 @@ export function useDashboardSupplementalData(period: string, system: SystemFilte
   }, [communicationEnabled, costsEnabled, emailClicksEnabled, period, selectedCreditors, system]);
 
   return { costs, communication, emailClicks };
+}
+
+export function useCreditorsData(period: string, system: SystemFilter) {
+  const [creditors, setCreditors] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!period) return;
+    if (isDemoMode()) {
+      setCreditors(getDemoActiveBase(system, new Set()).by_credor.map((row) => row.credor));
+      return;
+    }
+
+    const controller = new AbortController();
+    fetchCreditors(period, system, controller.signal)
+      .then(setCreditors)
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setCreditors([]);
+      });
+
+    return () => controller.abort();
+  }, [period, system]);
+
+  return creditors;
 }
 
 function filterDataByPeriod(data: DashboardData, period: string) {

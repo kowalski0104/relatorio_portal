@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getCreditors = getCreditors;
 const prismaClients_1 = require("../db/prismaClients");
 const reportFilters_1 = require("../utils/reportFilters");
+const cache_1 = require("../utils/cache");
 async function queryCreditors(prisma, empresaId, periodo) {
     const range = (0, reportFilters_1.getPeriodRange)(periodo);
     const params = [empresaId, range.start, range.end];
@@ -50,12 +51,14 @@ async function queryCreditors(prisma, empresaId, periodo) {
     return prisma.$queryRawUnsafe(query, ...params);
 }
 async function getCreditors(filter) {
-    const results = await Promise.all((0, prismaClients_1.getLiveClients)(filter.sistema).map(({ empresaId, query }) => query((prisma) => queryCreditors(prisma, empresaId, filter.periodo))));
-    const set = new Set();
-    results.flat().forEach((item) => {
-        if (item.credor)
-            set.add(String(item.credor));
+    return (0, cache_1.getCached)((0, cache_1.cacheKey)('creditors', filter), 5 * 60 * 1000, async () => {
+        const results = await Promise.all((0, prismaClients_1.getLiveClients)(filter.sistema).map(({ empresaId, query }) => query((prisma) => queryCreditors(prisma, empresaId, filter.periodo))));
+        const set = new Set();
+        results.flat().forEach((item) => {
+            if (item.credor)
+                set.add(String(item.credor));
+        });
+        return Array.from(set).sort();
     });
-    return Array.from(set).sort();
 }
 //# sourceMappingURL=creditorService.js.map

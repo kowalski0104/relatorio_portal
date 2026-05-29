@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getPeriods = getPeriods;
 const prismaClients_1 = require("../db/prismaClients");
 const reportFilters_1 = require("../utils/reportFilters");
+const cache_1 = require("../utils/cache");
 async function queryPeriods(prisma, empresaId) {
     const range = (0, reportFilters_1.getPeriodRange)();
     const rows = await prisma.$queryRawUnsafe(`
@@ -48,9 +49,11 @@ async function queryPeriods(prisma, empresaId) {
     return rows.map((row) => row.periodo).filter(Boolean);
 }
 async function getPeriods(filter) {
-    const results = await Promise.all((0, prismaClients_1.getLiveClients)(filter.sistema).map(({ empresaId, query }) => query((prisma) => queryPeriods(prisma, empresaId))));
-    return {
-        data: Array.from(new Set(results.flat())).sort().reverse(),
-    };
+    return (0, cache_1.getCached)((0, cache_1.cacheKey)('periods', filter), 5 * 60 * 1000, async () => {
+        const results = await Promise.all((0, prismaClients_1.getLiveClients)(filter.sistema).map(({ empresaId, query }) => query((prisma) => queryPeriods(prisma, empresaId))));
+        return {
+            data: Array.from(new Set(results.flat())).sort().reverse(),
+        };
+    });
 }
 //# sourceMappingURL=periodService.js.map

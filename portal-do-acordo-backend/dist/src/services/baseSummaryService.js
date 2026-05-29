@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getBaseSummary = getBaseSummary;
 const prismaClients_1 = require("../db/prismaClients");
 const reportFilters_1 = require("../utils/reportFilters");
+const cache_1 = require("../utils/cache");
 const activeBaseService_1 = require("./activeBaseService");
 const VISIBLE_AGING_ORDER = ['0-90', '91-180', '181-360', '361+'];
 const AGING_LABELS = {
@@ -155,6 +156,9 @@ function sumByCreditor(rows, value) {
     return totals;
 }
 async function getBaseSummary(filter) {
+    return (0, cache_1.getCached)((0, cache_1.cacheKey)('base-summary', filter), 2 * 60 * 1000, () => buildBaseSummary(filter));
+}
+async function buildBaseSummary(filter) {
     const [activeBaseResult, liveResults] = await Promise.all([
         (0, activeBaseService_1.getActiveBase)(filter),
         Promise.all((0, prismaClients_1.getLiveClients)(filter.sistema).map(({ empresaId, query }) => query(async (prisma) => ({

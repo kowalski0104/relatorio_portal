@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { getLiveClients } from '../db/prismaClients';
 import { getPeriodRange, SystemFilter } from '../utils/reportFilters';
+import { cacheKey, getCached } from '../utils/cache';
 
 type PeriodRow = {
   periodo: string | null;
@@ -59,11 +60,13 @@ async function queryPeriods(prisma: PrismaClient, empresaId: number) {
 }
 
 export async function getPeriods(filter: { sistema?: SystemFilter }) {
-  const results = await Promise.all(
-    getLiveClients(filter.sistema).map(({ empresaId, query }) => query((prisma) => queryPeriods(prisma, empresaId)))
-  );
+  return getCached(cacheKey('periods', filter), 5 * 60 * 1000, async () => {
+    const results = await Promise.all(
+      getLiveClients(filter.sistema).map(({ empresaId, query }) => query((prisma) => queryPeriods(prisma, empresaId)))
+    );
 
-  return {
-    data: Array.from(new Set(results.flat())).sort().reverse(),
-  };
+    return {
+      data: Array.from(new Set(results.flat())).sort().reverse(),
+    };
+  });
 }
