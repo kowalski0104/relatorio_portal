@@ -891,11 +891,36 @@ tfoot td {
   font-style: normal;
 }
 
+.week-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.week-summary span {
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.week-summary strong {
+  color: var(--ink);
+}
+
 .neg-grid,
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
+}
+
+.panel-neg-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .neg-card,

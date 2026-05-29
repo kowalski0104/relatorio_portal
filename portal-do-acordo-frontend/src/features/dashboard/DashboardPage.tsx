@@ -8,8 +8,7 @@ import {
   Line,
   LineChart,
   Legend,
-  Pie,
-  PieChart,
+  ReferenceArea,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -352,16 +351,36 @@ function DashboardPage() {
   }, [filtered.acessos]);
 
   const acordosRows = useMemo(() => {
-    const groups = groupBy(filtered.acordos, (row) => row.credor || 'OUTROS');
-    return Object.entries(groups).map(([name, rows]) => ({ name, value: rows.length })).sort((a, b) => b.value - a.value);
-  }, [filtered.acordos]);
+    const formalizadosByCredor = groupBy(filtered.acordos, (row) => row.credor || 'OUTROS');
+    const pagosByCredor = groupBy(filtered.baixas, (row) => row.credor || 'OUTROS');
+    const names = new Set([...Object.keys(formalizadosByCredor), ...Object.keys(pagosByCredor)]);
+
+    return Array.from(names)
+      .map((name) => {
+        const acordos = formalizadosByCredor[name]?.length ?? 0;
+        const pagosRows = pagosByCredor[name] ?? [];
+        const processosPagos = new Set(pagosRows.map((row) => row.processo).filter(Boolean));
+        const pagos = processosPagos.size || pagosRows.length;
+
+        return {
+          name,
+          value: acordos,
+          acordos,
+          pagos,
+          conversaoPago: acordos > 0 ? (pagos / acordos) * 100 : 0,
+        };
+      })
+      .sort((a, b) => b.acordos - a.acordos || b.pagos - a.pagos || a.name.localeCompare(b.name));
+  }, [filtered.acordos, filtered.baixas]);
 
   const ticketRows = useMemo(() => {
     const groups = groupBy(filtered.baixas, (row) => row.credor || 'OUTROS');
     return Object.entries(groups)
       .map(([name, rows]) => {
         const total = rows.reduce((sum, row) => sum + safe(row.total_pago_portal), 0);
-        return { name, total, qtd: rows.length, ticket: rows.length > 0 ? total / rows.length : 0 };
+        const processosPagos = new Set(rows.map((row) => row.processo).filter(Boolean));
+        const qtd = processosPagos.size || rows.length;
+        return { name, total, qtd, ticket: qtd > 0 ? total / qtd : 0 };
       })
       .sort((a, b) => b.total - a.total);
   }, [filtered.baixas]);
@@ -373,6 +392,35 @@ function DashboardPage() {
       .filter((row) => row.businessDay > 0)
       .sort((a, b) => a.businessDay - b.businessDay || a.date.localeCompare(b.date));
   }, [businessDayMap, filtered.baixas]);
+
+  const weeklyRevenueBlocks = useMemo(() => {
+    if (isMultiPeriod) return [];
+
+    const weeks = new Map<number, { week: number; label: string; x1: string; x2: string; total: number }>();
+    receitaDiaria.forEach((row) => {
+      const day = Number(row.date.slice(8, 10));
+      const week = Math.max(1, Math.ceil(day / 7));
+      const current = weeks.get(week) ?? { week, label: `S${week}`, x1: row.label, x2: row.label, total: 0 };
+      current.x2 = row.label;
+      current.total += row.receita;
+      weeks.set(week, current);
+    });
+
+    let previousTotal: number | null = null;
+    return Array.from(weeks.values())
+      .sort((a, b) => a.week - b.week)
+      .map((row, index) => {
+        const currentVariation = variation(row.total, previousTotal);
+        previousTotal = row.total;
+
+        return {
+          ...row,
+          fill: CHART_PALETTE[index % CHART_PALETTE.length],
+          variation: currentVariation,
+          note: index === 0 ? 'base' : `${variationLabel(currentVariation)} vs S${row.week - 1}`,
+        };
+      });
+  }, [isMultiPeriod, receitaDiaria]);
 
   const acordosDiarios = useMemo(() => {
     const groups = groupBy(filtered.acordos, (row) => row.data);
@@ -1147,25 +1195,8 @@ function DashboardPage() {
               </div>
             ) : null}
 
-            <Section num="01" title="Projeção e Comparativo">
+            <Section num="01" title="Indicadores e Detalhamento">
               <div className="grid-2">
-                <Panel title="Projeção do mês" meta={`${number(projectionBaseDays)} de ${number(businessDays)} dias úteis considerados`}>
-                  <table>
-                    <thead>
-                      <tr><th>Indicador</th><th className="right">Realizado</th><th className="right">Projeção final</th><th className="right">A projetar</th></tr>
-                    </thead>
-                    <tbody>
-                      {projectionRows.map((row) => (
-                        <tr key={row.name}>
-                          <td className="bold">{row.name}</td>
-                          <td className="right">{money(row.atual)}</td>
-                          <td className="right">{money(row.projetado)}</td>
-                          <td className="right muted">{money(Math.max(row.projetado - row.atual, 0))}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </Panel>
                 <Panel title="Indicadores principais" meta={selectedBusinessDayLimit ? `${selectedBusinessDayLimit} primeiros dias úteis` : 'Período completo'}>
                   <table>
                     <thead>
@@ -1183,12 +1214,7 @@ function DashboardPage() {
                     </tbody>
                   </table>
                 </Panel>
-              </div>
-            </Section>
-
-            <Section num="02" title="Remuneração">
-              <div className="grid-2">
-                <Panel title="Detalhamento por Componente">
+                <Panel title="DETALHAMENTO">
                   <table>
                     <thead>
                       <tr><th>Componente</th><th className="right">Valor</th><th className="right">%</th></tr>
@@ -1203,83 +1229,82 @@ function DashboardPage() {
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr><td>Total Pago</td><td className="right">{money(metrics.totalPago)}</td><td className="right">100%</td></tr>
+                      <tr><td>Total Recuperado</td><td className="right">{money(metrics.totalPago)}</td><td className="right">100%</td></tr>
                     </tfoot>
                   </table>
                 </Panel>
-                <Panel title="Composição da Remuneração" meta="Valores por componente">
-                  <div className="chart-wrap">
-                    <ResponsiveContainer>
-                      <PieChart>
-                        <Pie data={componentRows} dataKey="value" nameKey="name" innerRadius={68} outerRadius={96} paddingAngle={2} isAnimationActive={CHART_ANIMATION_ACTIVE}>
-                          {componentRows.map((row) => <Cell key={row.name} fill={row.color} />)}
-                        </Pie>
-                        <Tooltip formatter={(value: number, name: string) => [money(value), name]} />
-                        <Legend verticalAlign="bottom" height={36} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Panel>
               </div>
+            </Section>
+
+            <Section num="02" title="Projeção do Mês">
+              <Panel title="Projeção do mês" meta={`${number(projectionBaseDays)} de ${number(businessDays)} dias úteis considerados`}>
+                <table>
+                  <thead>
+                    <tr><th>Indicador</th><th className="right">Realizado</th><th className="right">Projeção final</th><th className="right">A projetar</th></tr>
+                  </thead>
+                  <tbody>
+                    {projectionRows.map((row) => (
+                      <tr key={row.name}>
+                        <td className="bold">{row.name}</td>
+                        <td className="right">{money(row.atual)}</td>
+                        <td className="right">{money(row.projetado)}</td>
+                        <td className="right muted">{money(Math.max(row.projetado - row.atual, 0))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Panel>
             </Section>
 
             <Section num="03" title="Acordos Formalizados">
-              <div className="grid-2">
-                <Panel title="Acordos por Credor / Grupo" meta={`Top 5 de ${number(metrics.acordos)} processos`}>
-                  {(expanded) => <BarRows rows={expanded ? acordosRows : acordosRows.slice(0, 5)} color={color} valueLabel="Qtd." showPercent />}
-                </Panel>
-                <Panel title="Distribuição Visual" summary="Clique para expandir e ver todos os credores do sistema selecionado.">
-                  {(expanded) => {
-                    const rows = expanded ? acordosRows : acordosRows.slice(0, 5);
-                    return (
-                      <div className="chart-wrap">
-                        <ResponsiveContainer>
-                          <BarChart data={rows}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                            <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-20} textAnchor="end" height={70} />
-                            <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
-                            <Tooltip formatter={(value: number) => [`${value} acordos`, 'Quantidade']} />
-                            <Legend verticalAlign="top" height={28} />
-                            <Bar dataKey="value" name="Quantidade de acordos" fill={chartAccent} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE}>
-                              {rows.map((row, index) => <Cell key={row.name} fill={CHART_PALETTE[index % CHART_PALETTE.length]} />)}
-                            </Bar>
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    );
-                  }}
-                </Panel>
-              </div>
-            </Section>
-
-            <Section num="04" title="Ticket Médio por Credor">
-              <div className="grid-2">
-                <Panel title="Ranking - Ticket Médio" className="ticket-panel">
-                  {(expanded) => (
-                    <BarRows rows={(expanded ? ticketRows : ticketRows.slice(0, 5)).map((row) => ({ name: row.name, value: row.total }))} color={color} valueFormatter={money} valueLabel="Total Pago" />
-                  )}
-                </Panel>
-                <Panel title="Detalhamento">
-                  {(expanded) => (
+              <Panel title="Detalhamento por Credor" meta={`Top 5 de ${number(metrics.acordos)} formalizados`}>
+                {(expanded) => {
+                  const rows = expanded ? acordosRows : acordosRows.slice(0, 5);
+                  return (
                     <table>
                       <thead>
-                        <tr><th>#</th><th>Credor / Grupo</th><th className="right">Total Pago</th><th className="right">Qtd.</th><th className="right">Ticket Médio</th></tr>
+                        <tr><th>#</th><th>Credor / Grupo</th><th className="right">Acordos</th><th className="right">Acordos Pagos</th><th className="right">% Pagos</th></tr>
                       </thead>
                       <tbody>
-                        {(expanded ? ticketRows : ticketRows.slice(0, 5)).map((row, index) => (
+                        {rows.length === 0 ? <tr><td colSpan={5} className="muted">Sem dados no período.</td></tr> : null}
+                        {rows.map((row, index) => (
                           <tr key={row.name}>
                             <td><span className="rank-badge">{index + 1}</span></td>
                             <td className="bold">{row.name}</td>
-                            <td className="right">{money(row.total)}</td>
-                            <td className="right muted">{number(row.qtd)}</td>
-                            <td className="right bold">{money(row.ticket)}</td>
+                            <td className="right">{number(row.acordos)}</td>
+                            <td className="right">{number(row.pagos)}</td>
+                            <td className="right muted">{row.conversaoPago.toFixed(1)}%</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                  )}
-                </Panel>
-              </div>
+                  );
+                }}
+              </Panel>
+            </Section>
+
+            <Section num="04" title="Ticket Médio por Credor">
+              <Panel title="Detalhamento">
+                {(expanded) => (
+                  <table>
+                    <thead>
+                      <tr><th>#</th><th>Credor / Grupo</th><th className="right">Total Recuperado</th><th className="right">Qtd Pagos</th><th className="right">Ticket Médio</th></tr>
+                    </thead>
+                    <tbody>
+                      {ticketRows.length === 0 ? <tr><td colSpan={5} className="muted">Sem dados no período.</td></tr> : null}
+                      {(expanded ? ticketRows : ticketRows.slice(0, 5)).map((row, index) => (
+                        <tr key={row.name}>
+                          <td><span className="rank-badge">{index + 1}</span></td>
+                          <td className="bold">{row.name}</td>
+                          <td className="right">{money(row.total)}</td>
+                          <td className="right muted">{number(row.qtd)}</td>
+                          <td className="right bold">{money(row.ticket)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </Panel>
             </Section>
 
             <Section num="05" title="Evolução Diária">
@@ -1289,6 +1314,18 @@ function DashboardPage() {
                     <ResponsiveContainer>
                       <LineChart data={isMultiPeriod ? dailyRevenueComparisonRows : receitaDiaria}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        {!isMultiPeriod ? weeklyRevenueBlocks.map((row) => (
+                          <ReferenceArea
+                            key={row.label}
+                            x1={row.x1}
+                            x2={row.x2}
+                            fill={row.fill}
+                            fillOpacity={0.08}
+                            stroke={row.fill}
+                            strokeOpacity={0.18}
+                            label={{ value: `${row.label} ${row.note}`, position: 'insideTop', fill: row.fill, fontSize: 10, fontWeight: 700 }}
+                          />
+                        )) : null}
                         <XAxis dataKey="label" tick={{ fontSize: 10 }} />
                         <YAxis tickFormatter={(value) => `R$${Math.round(Number(value) / 1000)}k`} tick={{ fontSize: 10 }} />
                         <Tooltip formatter={(value: number, name: string, item) => [money(value), isMultiPeriod ? comparisonTooltipName(name, item) : name]} />
@@ -1301,6 +1338,15 @@ function DashboardPage() {
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
+                  {!isMultiPeriod && weeklyRevenueBlocks.length > 0 ? (
+                    <div className="week-summary">
+                      {weeklyRevenueBlocks.map((row) => (
+                        <span key={row.label} style={{ borderColor: row.fill }}>
+                          <strong>{row.label}</strong> {compactMoney(row.total)} · {row.note}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                 </Panel>
                 <Panel title="Acordos por Dia Útil">
                   <div className="chart-wrap small">
@@ -1322,37 +1368,6 @@ function DashboardPage() {
                     </ResponsiveContainer>
                   </div>
                 </Panel>
-              </div>
-            </Section>
-
-            <Section num="06" title="Top Dias de Conversão">
-              <Panel title="Maiores volumes de acordos no período" meta={`Top ${topDays.length}`}>
-                <div className="topdays-list">
-                  {topDays.length === 0 ? <div className="empty-state">Sem dados no período.</div> : null}
-                  {topDays.map((row, index) => (
-                    <div className="topday-row" key={row.date}>
-                      <span className={`rank-badge ${index < 3 ? 'featured' : ''}`}>{index + 1}</span>
-                      <span>{row.label}</span>
-                      <div className="bar-track"><div className="bar-fill" style={{ width: `${(row.acordos / Math.max(topDays[0]?.acordos || 1, 1)) * 100}%`, background: CHART_PALETTE[index % CHART_PALETTE.length] }} /></div>
-                      <strong>{number(row.acordos)} acordos</strong>
-                      <em>{row.conversao.toFixed(1)}% conv.</em>
-                    </div>
-                  ))}
-                </div>
-              </Panel>
-            </Section>
-
-            <Section num="07" title="Pagamentos por Negociador">
-              <div className="neg-grid">
-                {negociadores.length === 0 ? <div className="empty-state">Sem dados no período.</div> : null}
-                {negociadores.map((row, index) => (
-                  <div className="neg-card" key={row.name}>
-                    <span>{row.name}</span>
-                    <strong>{compactMoney(row.total)}</strong>
-                    <small>{number(row.qtd)} pagamento{row.qtd === 1 ? '' : 's'}</small>
-                    <div style={{ width: `${(row.total / Math.max(negociadores[0]?.total || 1, 1)) * 100}%`, background: CHART_PALETTE[index % CHART_PALETTE.length] }} />
-                  </div>
-                ))}
               </div>
             </Section>
 
@@ -1903,48 +1918,79 @@ function DashboardPage() {
           </Section>
 
           <Section num="08" title="Custo por Canal">
-            <Panel title="Custo por acesso e por acordo" meta="Acesso/acordo usam o total do período">
-              <table>
-                <thead>
-                  <tr><th>Canal</th><th className="right">Envios</th><th className="right">Custo</th><th className="right">Custo/envio</th><th className="right">Custo/acesso</th><th className="right">Custo/acordo</th></tr>
-                </thead>
-                <tbody>
-                  {channelCostRows.map((row) => (
-                    <tr key={row.canal}>
-                      <td className="bold">{row.canal}</td>
-                      <td className="right">{number(row.envios)}</td>
-                      <td className="right">{money(row.custo)}</td>
-                      <td className="right muted">{money(row.custoPorEnvio)}</td>
-                      <td className="right">{money(row.custoPorAcesso)}</td>
-                      <td className="right">{money(row.custoPorAcordo)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </Panel>
-          </Section>
-
-          <Section num="09" title="Credores por Conversão">
-            <Panel title="Top credores por taxa de conversão" meta="Acordos / acessos">
-              {(expanded) => (
+            <div className="grid-2">
+              <Panel title="Custo por acesso e por acordo" meta="Acesso/acordo usam o total do período">
                 <table>
                   <thead>
-                    <tr><th>Credor / Grupo</th><th className="right">Acessos</th><th className="right">Acordos</th><th className="right">Conversão</th></tr>
+                    <tr><th>Canal</th><th className="right">Envios</th><th className="right">Custo</th><th className="right">Custo/envio</th><th className="right">Custo/acesso</th><th className="right">Custo/acordo</th></tr>
                   </thead>
                   <tbody>
-                    {conversionCredorRows.length === 0 ? <tr><td colSpan={4} className="muted">Sem dados no período.</td></tr> : null}
-                    {(expanded ? conversionCredorRows : conversionCredorRows.slice(0, 5)).map((row) => (
-                      <tr key={row.name}>
-                        <td className="bold">{row.name}</td>
-                        <td className="right">{number(row.acessos)}</td>
-                        <td className="right">{number(row.acordos)}</td>
-                        <td className="right">{row.conversao.toFixed(1)}%</td>
+                    {channelCostRows.map((row) => (
+                      <tr key={row.canal}>
+                        <td className="bold">{row.canal}</td>
+                        <td className="right">{number(row.envios)}</td>
+                        <td className="right">{money(row.custo)}</td>
+                        <td className="right muted">{money(row.custoPorEnvio)}</td>
+                        <td className="right">{money(row.custoPorAcesso)}</td>
+                        <td className="right">{money(row.custoPorAcordo)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              )}
-            </Panel>
+              </Panel>
+              <Panel title="Top Dias de Conversão" meta={`Top ${topDays.length}`}>
+                <div className="topdays-list">
+                  {topDays.length === 0 ? <div className="empty-state">Sem dados no período.</div> : null}
+                  {topDays.map((row, index) => (
+                    <div className="topday-row" key={row.date}>
+                      <span className={`rank-badge ${index < 3 ? 'featured' : ''}`}>{index + 1}</span>
+                      <span>{row.label}</span>
+                      <div className="bar-track"><div className="bar-fill" style={{ width: `${(row.acordos / Math.max(topDays[0]?.acordos || 1, 1)) * 100}%`, background: CHART_PALETTE[index % CHART_PALETTE.length] }} /></div>
+                      <strong>{number(row.acordos)} acordos</strong>
+                      <em>{row.conversao.toFixed(1)}% conv.</em>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+            </div>
+          </Section>
+
+          <Section num="09" title="Pagamentos e Conversão">
+            <div className="grid-2">
+              <Panel title="Pagamentos por Negociador">
+                <div className="neg-grid panel-neg-grid">
+                  {negociadores.length === 0 ? <div className="empty-state">Sem dados no período.</div> : null}
+                  {negociadores.map((row, index) => (
+                    <div className="neg-card" key={row.name}>
+                      <span>{row.name}</span>
+                      <strong>{compactMoney(row.total)}</strong>
+                      <small>{number(row.qtd)} pagamento{row.qtd === 1 ? '' : 's'}</small>
+                      <div style={{ width: `${(row.total / Math.max(negociadores[0]?.total || 1, 1)) * 100}%`, background: CHART_PALETTE[index % CHART_PALETTE.length] }} />
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+              <Panel title="Top credores por taxa de conversão" meta="Acordos / acessos">
+                {(expanded) => (
+                  <table>
+                    <thead>
+                      <tr><th>Credor / Grupo</th><th className="right">Acessos</th><th className="right">Acordos</th><th className="right">Conversão</th></tr>
+                    </thead>
+                    <tbody>
+                      {conversionCredorRows.length === 0 ? <tr><td colSpan={4} className="muted">Sem dados no período.</td></tr> : null}
+                      {(expanded ? conversionCredorRows : conversionCredorRows.slice(0, 5)).map((row) => (
+                        <tr key={row.name}>
+                          <td className="bold">{row.name}</td>
+                          <td className="right">{number(row.acessos)}</td>
+                          <td className="right">{number(row.acordos)}</td>
+                          <td className="right">{row.conversao.toFixed(1)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </Panel>
+            </div>
           </Section>
           </main>
         </>
