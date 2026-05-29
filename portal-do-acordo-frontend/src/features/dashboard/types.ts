@@ -79,6 +79,25 @@ export type DashboardData = {
   acessos: Access[];
 };
 
+export type DashboardResultSummaryMetric = {
+  total_recuperado: number;
+  capital_recuperado: number;
+  faturamento: number;
+  acordos: number;
+  valor_acordos: number;
+  acordos_pagos: number;
+  acessos: number;
+  acessos_com_acordo: number;
+  conversao: number;
+};
+
+export type DashboardResultSummary = {
+  periodo: string | null;
+  periodo_anterior: string;
+  atual: DashboardResultSummaryMetric;
+  anterior: DashboardResultSummaryMetric;
+};
+
 export type PortfolioEntry = {
   id: string;
   sistema: Exclude<SystemFilter, 'total'>;

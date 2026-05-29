@@ -60,6 +60,7 @@ async function queryAgreementSummary(prisma, empresaId, filter) {
 async function queryAccessSummary(prisma, empresaId, filter) {
     const range = (0, reportFilters_1.getPeriodRange)(filter.periodo);
     const params = [empresaId, range.start, range.end];
+    const negociadores = reportFilters_1.NEGOTIATORS.map((negociador) => (0, reportFilters_1.addSqlParam)(params, negociador)).join(', ');
     const credorFilter = (0, reportFilters_1.buildSqlInFilter)("TRIM(COALESCE(b.credor, 'OUTROS'))", filter.credores, params);
     const rows = await prisma.$queryRawUnsafe(`
       SELECT
@@ -74,6 +75,7 @@ async function queryAccessSummary(prisma, empresaId, filter) {
         WHERE tb_baixas.totalpago > 0
           AND tb_baixas.databaixa >= $2
           AND tb_baixas.databaixa < $3
+          AND tb_baixas.negociador IN (${negociadores})
           AND tb_baixas.idcredor IS NOT NULL
           AND TRIM(COALESCE(tb_credor.grupo, '')) != ''
       ) b ON b.processo = a.processo AND b.idempresa = a.idempresa

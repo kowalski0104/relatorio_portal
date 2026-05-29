@@ -1,4 +1,4 @@
-import type { Access, ActiveBaseReport, ActiveUsersReport, Agreement, BaseSummaryReport, CommunicationData, CostsData, DashboardData, EmailClickData, Payment, PortfolioEntry, SystemFilter } from '../types';
+import type { Access, ActiveBaseReport, ActiveUsersReport, Agreement, BaseSummaryReport, CommunicationData, CostsData, DashboardData, DashboardResultSummary, EmailClickData, Payment, PortfolioEntry, SystemFilter } from '../types';
 
 export type PresenceHeartbeatPayload = {
   sessionId: string;
@@ -46,6 +46,15 @@ export async function fetchCreditors(periodo: string, sistema: SystemFilter, sig
   if (!response.ok) return [];
   const payload = await response.json();
   return Array.isArray(payload.data) ? payload.data : [];
+}
+
+export async function fetchDashboardResultSummary(periodo: string, sistema: SystemFilter, credores: Set<string>, signal?: AbortSignal): Promise<DashboardResultSummary | null> {
+  const params = new URLSearchParams({ periodo, sistema });
+  if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
+  const response = await fetch(apiUrl(`/api/dashboard/resultados/resumo?${params.toString()}`), { signal });
+  if (!response.ok) return null;
+  const payload = await response.json();
+  return payload.data ?? null;
 }
 
 export async function fetchCosts(periodo: string, sistema: SystemFilter, signal?: AbortSignal): Promise<CostsData | null> {

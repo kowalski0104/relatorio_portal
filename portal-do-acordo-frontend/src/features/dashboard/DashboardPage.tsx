@@ -23,7 +23,7 @@ import { Section } from './components/Section';
 import { CHART_PALETTE, COLORS, FIXED_EMAIL_COST } from './config/constants';
 import { DEMO_WHATSAPP_CAMPAIGN_DATA, isDemoMode } from './data/demoDashboardData';
 import { WHATSAPP_CAMPAIGN_DATA, type WhatsappCampaignCredor } from './data/whatsappCampaigns';
-import { useBaseSummaryData, useCreditorsData, useDashboardData, useDashboardSupplementalData, usePortfolioData } from './hooks/useDashboardData';
+import { useBaseSummaryData, useCreditorsData, useDashboardData, useDashboardResultSummary, useDashboardSupplementalData, usePortfolioData } from './hooks/useDashboardData';
 import { fetchActiveUsers, sendPresenceHeartbeat } from './services/dashboardApi';
 import type { Access, ActiveUsersReport, Agreement, CostsData, DashboardTab, PortfolioEntry, SystemFilter, ThemeMode } from './types';
 import { groupBy, isNoCreditorSelection, NO_CREDITOR_SELECTION, normalizeCreditorGroup } from './utils/creditors';
@@ -123,9 +123,11 @@ function DashboardPage() {
   const [periodFilterOpen, setPeriodFilterOpen] = useState(false);
   const [presentationMode, setPresentationMode] = useState(false);
   const [presentationPaused, setPresentationPaused] = useState(false);
+  const [forceRawPreviousForResults, setForceRawPreviousForResults] = useState(false);
   const creditorFilterRef = useRef<HTMLDivElement>(null);
   const periodFilterRef = useRef<HTMLDivElement>(null);
-  const { data, loading, error, period, setPeriod, periods } = useDashboardData(selectedPeriods, system, tab !== 'base-ativa');
+  const includePreviousRawPeriod = tab !== 'relatorio' || businessDayLimit !== 'all' || forceRawPreviousForResults;
+  const { data, loading, error, period, setPeriod, periods } = useDashboardData(selectedPeriods, system, tab !== 'base-ativa', includePreviousRawPeriod);
   const effectivePeriods = useMemo(() => (selectedPeriods.size > 0 ? selectedPeriods : period ? new Set([period]) : new Set<string>()), [period, selectedPeriods]);
   const portfolioPeriods = effectivePeriods;
   const dateFilterIgnored = false;
@@ -300,6 +302,16 @@ function DashboardPage() {
   const businessDaySelectValue = dateFilterIgnored || businessDayLimit === 'all' || maxBusinessDaysInSelectedPeriods === 0
     ? 'all'
     : String(Math.min(Number(businessDayLimit), maxBusinessDaysInSelectedPeriods));
+  const resultSummaryEnabled = tab === 'relatorio' && selectedPeriodList.length === 1 && !selectedBusinessDayLimit;
+  const { resultSummary, resultSummaryError } = useDashboardResultSummary(primaryPeriod, system, selectedCredores, resultSummaryEnabled);
+
+  useEffect(() => {
+    setForceRawPreviousForResults(false);
+  }, [businessDayLimit, primaryPeriod, selectedCredores, system, tab]);
+
+  useEffect(() => {
+    if (resultSummaryEnabled && resultSummaryError) setForceRawPreviousForResults(true);
+  }, [resultSummaryEnabled, resultSummaryError]);
   const matchesSelectedBusinessDays = useCallback((date: string, periodSet = effectivePeriods) => {
     const datePeriod = monthKey(date);
     if (periodSet.size > 0 && !periodSet.has(datePeriod)) return false;
@@ -351,14 +363,49 @@ function DashboardPage() {
     });
   }, [data, previousBusinessDayMap, previousPeriodKey, selectedBusinessDayLimit, selectedCredores, system]);
   const previousMetrics = useMemo(() => previousFiltered ? summarizeDashboardMetrics(previousFiltered) : null, [previousFiltered]);
+  const resultMetrics = useMemo(() => {
+    if (!resultSummaryEnabled || !resultSummary) return metrics;
+    return {
+      ...metrics,
+      totalPago: resultSummary.atual.total_recuperado,
+      capital: resultSummary.atual.capital_recuperado,
+      faturamento: resultSummary.atual.faturamento,
+      totalAcordos: resultSummary.atual.valor_acordos,
+      acordos: resultSummary.atual.acordos,
+      acordosPagos: resultSummary.atual.acordos_pagos,
+      acessos: resultSummary.atual.acessos,
+      acessosComAcordo: resultSummary.atual.acessos_com_acordo,
+      acessosSemAcordo: Math.max(resultSummary.atual.acessos - resultSummary.atual.acessos_com_acordo, 0),
+      conversao: resultSummary.atual.conversao,
+      ticketPorAcordo: resultSummary.atual.acordos > 0 ? resultSummary.atual.total_recuperado / resultSummary.atual.acordos : 0,
+    };
+  }, [metrics, resultSummary, resultSummaryEnabled]);
+  const resultPreviousMetrics = useMemo(() => {
+    if (!resultSummaryEnabled || !resultSummary) return previousMetrics;
+    const base = previousMetrics ?? metrics;
+    return {
+      ...base,
+      totalPago: resultSummary.anterior.total_recuperado,
+      capital: resultSummary.anterior.capital_recuperado,
+      faturamento: resultSummary.anterior.faturamento,
+      totalAcordos: resultSummary.anterior.valor_acordos,
+      acordos: resultSummary.anterior.acordos,
+      acordosPagos: resultSummary.anterior.acordos_pagos,
+      acessos: resultSummary.anterior.acessos,
+      acessosComAcordo: resultSummary.anterior.acessos_com_acordo,
+      acessosSemAcordo: Math.max(resultSummary.anterior.acessos - resultSummary.anterior.acessos_com_acordo, 0),
+      conversao: resultSummary.anterior.conversao,
+      ticketPorAcordo: resultSummary.anterior.acordos > 0 ? resultSummary.anterior.total_recuperado / resultSummary.anterior.acordos : 0,
+    };
+  }, [metrics, previousMetrics, resultSummary, resultSummaryEnabled]);
   const resultComparisonRows = useMemo(() => [
-    { name: 'TOTAL RECUPERADO', atual: metrics.totalPago, anterior: previousMetrics?.totalPago, variation: variation(metrics.totalPago, previousMetrics?.totalPago), formatter: money },
-    { name: 'CAPITAL RECUPERADO', atual: metrics.capital, anterior: previousMetrics?.capital, variation: variation(metrics.capital, previousMetrics?.capital), formatter: money },
-    { name: 'FATURAMENTO', atual: metrics.faturamento, anterior: previousMetrics?.faturamento, variation: variation(metrics.faturamento, previousMetrics?.faturamento), formatter: money },
-    { name: 'ACORDOS', atual: metrics.acordos, anterior: previousMetrics?.acordos, variation: variation(metrics.acordos, previousMetrics?.acordos), formatter: number },
-    { name: 'ACESSO', atual: metrics.acessos, anterior: previousMetrics?.acessos, variation: variation(metrics.acessos, previousMetrics?.acessos), formatter: number },
-    { name: 'CONVERSÃO', atual: metrics.conversao, anterior: previousMetrics?.conversao, variation: variation(metrics.conversao, previousMetrics?.conversao), formatter: (value: number) => `${value.toFixed(1)}%` },
-  ], [metrics, previousMetrics]);
+    { name: 'TOTAL RECUPERADO', atual: resultMetrics.totalPago, anterior: resultPreviousMetrics?.totalPago, variation: variation(resultMetrics.totalPago, resultPreviousMetrics?.totalPago), formatter: money },
+    { name: 'CAPITAL RECUPERADO', atual: resultMetrics.capital, anterior: resultPreviousMetrics?.capital, variation: variation(resultMetrics.capital, resultPreviousMetrics?.capital), formatter: money },
+    { name: 'FATURAMENTO', atual: resultMetrics.faturamento, anterior: resultPreviousMetrics?.faturamento, variation: variation(resultMetrics.faturamento, resultPreviousMetrics?.faturamento), formatter: money },
+    { name: 'ACORDOS', atual: resultMetrics.acordos, anterior: resultPreviousMetrics?.acordos, variation: variation(resultMetrics.acordos, resultPreviousMetrics?.acordos), formatter: number },
+    { name: 'ACESSO', atual: resultMetrics.acessos, anterior: resultPreviousMetrics?.acessos, variation: variation(resultMetrics.acessos, resultPreviousMetrics?.acessos), formatter: number },
+    { name: 'CONVERSÃO', atual: resultMetrics.conversao, anterior: resultPreviousMetrics?.conversao, variation: variation(resultMetrics.conversao, resultPreviousMetrics?.conversao), formatter: (value: number) => `${value.toFixed(1)}%` },
+  ], [resultMetrics, resultPreviousMetrics]);
 
   const componentRows = useMemo(() => {
     const rows = [
@@ -1268,11 +1315,11 @@ function DashboardPage() {
             </div>
 
             <div className="kpi-row">
-              <MetricCard tone="teal" label="Total Recuperado" value={compactMoney(metrics.totalPago)} current={metrics.totalPago} previous={previousMetrics?.totalPago} small="Pagamentos no período" summary="Total recuperado no período selecionado." />
-              <MetricCard tone="gold" label="Faturamento" value={compactMoney(metrics.faturamento)} current={metrics.faturamento} previous={previousMetrics?.faturamento} small="Honorários, taxas, juros e multas" summary="Receitas de faturamento vinculadas aos pagamentos do período." />
-              <MetricCard tone="rust" label="Acordos Pagos" value={number(metrics.acordosPagos)} current={metrics.acordosPagos} previous={previousMetrics?.acordosPagos} small="Processos com pagamento" summary="Quantidade de acordos/processos com pagamento no período." />
-              <MetricCard tone="sky" label="Conversão" value={`${metrics.conversao.toFixed(1)}%`} current={metrics.conversao} previous={previousMetrics?.conversao} small={systemLabel(system)} summary="Conversão de acessos em acordos no recorte selecionado." />
-              <MetricCard tone="teal" label="Acessos" value={number(metrics.acessos)} current={metrics.acessos} previous={previousMetrics?.acessos} small="Visitantes únicos" summary="Acessos registrados no Portal do Acordo." />
+              <MetricCard tone="teal" label="Total Recuperado" value={compactMoney(resultMetrics.totalPago)} current={resultMetrics.totalPago} previous={resultPreviousMetrics?.totalPago} small="Pagamentos no período" summary="Total recuperado no período selecionado." />
+              <MetricCard tone="gold" label="Faturamento" value={compactMoney(resultMetrics.faturamento)} current={resultMetrics.faturamento} previous={resultPreviousMetrics?.faturamento} small="Honorários, taxas, juros e multas" summary="Receitas de faturamento vinculadas aos pagamentos do período." />
+              <MetricCard tone="rust" label="Acordos Pagos" value={number(resultMetrics.acordosPagos)} current={resultMetrics.acordosPagos} previous={resultPreviousMetrics?.acordosPagos} small="Processos com pagamento" summary="Quantidade de acordos/processos com pagamento no período." />
+              <MetricCard tone="sky" label="Conversão" value={`${resultMetrics.conversao.toFixed(1)}%`} current={resultMetrics.conversao} previous={resultPreviousMetrics?.conversao} small={systemLabel(system)} summary="Conversão de acessos em acordos no recorte selecionado." />
+              <MetricCard tone="teal" label="Acessos" value={number(resultMetrics.acessos)} current={resultMetrics.acessos} previous={resultPreviousMetrics?.acessos} small="Visitantes únicos" summary="Acessos registrados no Portal do Acordo." />
             </div>
           </header>
 

@@ -9,8 +9,8 @@ import {
   getDemoPortfolio,
   isDemoMode,
 } from '../data/demoDashboardData';
-import { fetchActiveBase, fetchBaseSummary, fetchCommunication, fetchCosts, fetchCreditors, fetchDashboardData, fetchEmailClicks, fetchPeriods, fetchPortfolio } from '../services/dashboardApi';
-import type { ActiveBaseReport, BaseSummaryReport, CommunicationData, CostsData, DashboardData, EmailClickData, PortfolioEntry, SystemFilter } from '../types';
+import { fetchActiveBase, fetchBaseSummary, fetchCommunication, fetchCosts, fetchCreditors, fetchDashboardData, fetchDashboardResultSummary, fetchEmailClicks, fetchPeriods, fetchPortfolio } from '../services/dashboardApi';
+import type { ActiveBaseReport, BaseSummaryReport, CommunicationData, CostsData, DashboardData, DashboardResultSummary, EmailClickData, PortfolioEntry, SystemFilter } from '../types';
 import { monthKey, previousPeriod } from '../utils/dates';
 
 const EMPTY_DASHBOARD_DATA: DashboardData = { baixas: [], acordos: [], acessos: [] };
@@ -41,7 +41,7 @@ const EMPTY_BASE_SUMMARY_REPORT: BaseSummaryReport = {
   aging: [],
 };
 
-export function useDashboardData(selectedPeriods: Set<string>, system: SystemFilter, enabled: boolean) {
+export function useDashboardData(selectedPeriods: Set<string>, system: SystemFilter, enabled: boolean, includePreviousPeriod = true) {
   const [cache, setCache] = useState<Record<string, DashboardData>>({});
   const [periods, setPeriods] = useState<string[]>(() => isDemoMode() ? getAvailablePeriods(DEMO_DASHBOARD_DATA) : [getCurrentPeriodKey()]);
   const [loading, setLoading] = useState(false);
@@ -76,8 +76,8 @@ export function useDashboardData(selectedPeriods: Set<string>, system: SystemFil
 
   const requestedPeriods = useMemo(() => {
     const basePeriods = selectedPeriods.size > 0 ? Array.from(selectedPeriods) : period ? [period] : [];
-    return basePeriods.length === 1 ? Array.from(new Set([...basePeriods, previousPeriod(basePeriods[0])])) : basePeriods;
-  }, [period, selectedPeriods]);
+    return basePeriods.length === 1 && includePreviousPeriod ? Array.from(new Set([...basePeriods, previousPeriod(basePeriods[0])])) : basePeriods;
+  }, [includePreviousPeriod, period, selectedPeriods]);
 
   useEffect(() => {
     if (!enabled || isDemoMode()) {
@@ -198,6 +198,48 @@ export function useCreditorsData(period: string, system: SystemFilter) {
   }, [period, system]);
 
   return creditors;
+}
+
+export function useDashboardResultSummary(period: string, system: SystemFilter, selectedCreditors: Set<string>, enabled: boolean) {
+  const [data, setData] = useState<DashboardResultSummary | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!enabled || !period || isDemoMode()) {
+      setData(null);
+      setLoading(false);
+      setError('');
+      return undefined;
+    }
+
+    let active = true;
+    const controller = new AbortController();
+    setLoading(true);
+    setError('');
+    setData(null);
+
+    fetchDashboardResultSummary(period, system, selectedCreditors, controller.signal)
+      .then((result) => {
+        if (!active) return;
+        setData(result);
+      })
+      .catch((err) => {
+        if (!active || (err instanceof DOMException && err.name === 'AbortError')) return;
+        setData(null);
+        setError(err instanceof Error ? err.message : 'Erro ao carregar resumo de resultados.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [enabled, period, selectedCreditors, system]);
+
+  return { resultSummary: data, resultSummaryLoading: loading, resultSummaryError: error };
 }
 
 function filterDataByPeriod(data: DashboardData, period: string) {
