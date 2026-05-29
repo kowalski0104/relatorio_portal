@@ -14,74 +14,81 @@ export type PresenceHeartbeatPayload = {
   screen: { width: number; height: number };
 };
 
-export async function fetchDataset<T>(url: string): Promise<T[]> {
-  const response = await fetch(apiUrl(url));
+export async function fetchDataset<T>(url: string, signal?: AbortSignal): Promise<T[]> {
+  const response = await fetch(apiUrl(url), { signal });
   if (!response.ok) throw new Error(`Falha ao carregar ${url}: ${response.status}`);
   const payload = await response.json();
   return Array.isArray(payload.data) ? payload.data : [];
 }
 
-export async function fetchDashboardData(periodo?: string): Promise<DashboardData> {
+export async function fetchDashboardData(periodo?: string, signal?: AbortSignal): Promise<DashboardData> {
   const query = periodo ? `?${new URLSearchParams({ periodo }).toString()}` : '';
   const [baixas, acordos, acessos] = await Promise.all([
-    fetchDataset<Payment>(`/api/baixas${query}`),
-    fetchDataset<Agreement>(`/api/acordos${query}`),
-    fetchDataset<Access>(`/api/acessos${query}`),
+    fetchDataset<Payment>(`/api/baixas${query}`, signal),
+    fetchDataset<Agreement>(`/api/acordos${query}`, signal),
+    fetchDataset<Access>(`/api/acessos${query}`, signal),
   ]);
 
   return { baixas, acordos, acessos };
 }
 
-export async function fetchCosts(periodo: string, sistema: SystemFilter): Promise<CostsData | null> {
+export async function fetchPeriods(sistema: SystemFilter, signal?: AbortSignal): Promise<string[]> {
+  const response = await fetch(apiUrl(`/api/periodos?${new URLSearchParams({ sistema }).toString()}`), { signal });
+  if (!response.ok) return [];
+  const payload = await response.json();
+  return Array.isArray(payload.data) ? payload.data : [];
+}
+
+export async function fetchCosts(periodo: string, sistema: SystemFilter, signal?: AbortSignal): Promise<CostsData | null> {
   const params = new URLSearchParams({ periodo, sistema });
-  const response = await fetch(apiUrl(`/api/custos?${params.toString()}`));
+  const response = await fetch(apiUrl(`/api/custos?${params.toString()}`), { signal });
   if (!response.ok) return null;
   const payload = await response.json();
   return payload.data ?? null;
 }
 
-export async function fetchCommunication(periodo: string, sistema: SystemFilter, credores: Set<string>): Promise<CommunicationData | null> {
-  const params = new URLSearchParams({ periodo, sistema });
-  if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
-  const response = await fetch(apiUrl(`/api/comunicacao?${params.toString()}`));
-  if (!response.ok) return null;
-  const payload = await response.json();
-  return payload.data ?? null;
-}
-
-export async function fetchEmailClicks(periodo: string, sistema: SystemFilter, credores: Set<string>): Promise<EmailClickData | null> {
+export async function fetchCommunication(periodo: string, sistema: SystemFilter, credores: Set<string>, signal?: AbortSignal): Promise<CommunicationData | null> {
   const params = new URLSearchParams({ periodo, sistema });
   if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
-  const response = await fetch(apiUrl(`/api/mailgrid/cliques?${params.toString()}`));
+  const response = await fetch(apiUrl(`/api/comunicacao?${params.toString()}`), { signal });
   if (!response.ok) return null;
   const payload = await response.json();
   return payload.data ?? null;
 }
 
-export async function fetchActiveBase(sistema: SystemFilter, credores: Set<string>): Promise<ActiveBaseReport> {
+export async function fetchEmailClicks(periodo: string, sistema: SystemFilter, credores: Set<string>, signal?: AbortSignal): Promise<EmailClickData | null> {
+  const params = new URLSearchParams({ periodo, sistema });
+  if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
+  const response = await fetch(apiUrl(`/api/mailgrid/cliques?${params.toString()}`), { signal });
+  if (!response.ok) return null;
+  const payload = await response.json();
+  return payload.data ?? null;
+}
+
+export async function fetchActiveBase(sistema: SystemFilter, credores: Set<string>, signal?: AbortSignal): Promise<ActiveBaseReport> {
   const params = new URLSearchParams({ sistema });
   if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
-  const response = await fetch(apiUrl(`/api/base-ativa?${params.toString()}`));
+  const response = await fetch(apiUrl(`/api/base-ativa?${params.toString()}`), { signal });
   if (!response.ok) throw new Error(`Falha ao carregar /api/base-ativa: ${response.status}`);
   const payload = await response.json();
   return payload.data ?? { updated_at: null, aging_updated_at: null, status: 'empty', total_processos: 0, total_credores: 0, aging_complete: false, by_credor: [], aging: [], aging_by_credor: [] };
 }
 
-export async function fetchPortfolio(sistema: SystemFilter, periodos: Set<string>, credores: Set<string>): Promise<PortfolioEntry[]> {
+export async function fetchPortfolio(sistema: SystemFilter, periodos: Set<string>, credores: Set<string>, signal?: AbortSignal): Promise<PortfolioEntry[]> {
   const params = new URLSearchParams({ sistema });
   if (periodos.size > 0) params.set('periodos', Array.from(periodos).join(','));
   if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
-  const response = await fetch(apiUrl(`/api/carteiras?${params.toString()}`));
+  const response = await fetch(apiUrl(`/api/carteiras?${params.toString()}`), { signal });
   if (!response.ok) throw new Error(`Falha ao carregar /api/carteiras: ${response.status}`);
   const payload = await response.json();
   return Array.isArray(payload.data) ? payload.data : [];
 }
 
-export async function fetchBaseSummary(sistema: SystemFilter, periodos: Set<string>, credores: Set<string>): Promise<BaseSummaryReport> {
+export async function fetchBaseSummary(sistema: SystemFilter, periodos: Set<string>, credores: Set<string>, signal?: AbortSignal): Promise<BaseSummaryReport> {
   const params = new URLSearchParams({ sistema });
   if (periodos.size > 0) params.set('periodos', Array.from(periodos).join(','));
   if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
-  const response = await fetch(apiUrl(`/api/bases/resumo?${params.toString()}`));
+  const response = await fetch(apiUrl(`/api/bases/resumo?${params.toString()}`), { signal });
   if (!response.ok) throw new Error(`Falha ao carregar /api/bases/resumo: ${response.status}`);
   const payload = await response.json();
   return payload.data;

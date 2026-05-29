@@ -109,7 +109,6 @@ function DashboardPage() {
   const [activeUsers, setActiveUsers] = useState<ActiveUsersReport | null>(null);
   const [activeUsersError, setActiveUsersError] = useState('');
   const demoMode = isDemoMode();
-  const { data, loading, error, period, setPeriod, periods } = useDashboardData();
   const [system, setSystem] = useState<SystemFilter>(() => demoMode ? 'total' : 'consulth');
   const [theme, setTheme] = useState<ThemeMode>(() => {
     if (typeof window === 'undefined') return 'night';
@@ -126,6 +125,7 @@ function DashboardPage() {
   const [presentationPaused, setPresentationPaused] = useState(false);
   const creditorFilterRef = useRef<HTMLDivElement>(null);
   const periodFilterRef = useRef<HTMLDivElement>(null);
+  const { data, loading, error, period, setPeriod, periods } = useDashboardData(selectedPeriods, system, tab !== 'base-ativa');
   const effectivePeriods = useMemo(() => (selectedPeriods.size > 0 ? selectedPeriods : period ? new Set([period]) : new Set<string>()), [period, selectedPeriods]);
   const portfolioPeriods = effectivePeriods;
   const dateFilterIgnored = false;
@@ -149,7 +149,11 @@ function DashboardPage() {
     const date = series ? item.payload?.[`${series.key}_date`] : null;
     return date ? `${name} (${date})` : name;
   };
-  const { costs: custos, communication: comunicacao, emailClicks } = useDashboardSupplementalData(primaryPeriod, system, selectedCredores);
+  const { costs: custos, communication: comunicacao, emailClicks } = useDashboardSupplementalData(primaryPeriod, system, selectedCredores, {
+    costs: tab === 'performance' || tab === 'custos',
+    communication: tab === 'performance' || tab === 'custos',
+    emailClicks: tab === 'performance',
+  });
   const { baseSummary, baseSummaryLoading, baseSummaryError } = useBaseSummaryData(system, portfolioPeriods, selectedCredores, tab === 'base-ativa');
   const { portfolioData, portfolioLoading, portfolioError } = usePortfolioData(system, portfolioPeriods, selectedCredores, tab === 'carteiras');
 
@@ -274,7 +278,10 @@ function DashboardPage() {
     return () => document.removeEventListener('keydown', handlePresentationKeys);
   }, [presentationMode]);
 
-  const allCredores = useMemo(() => getAvailableCreditors(data), [data]);
+  const allCredores = useMemo(() => {
+    const values = [...getAvailableCreditors(data), ...baseSummary.processos_por_credor.map((row) => row.credor)];
+    return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [baseSummary.processos_por_credor, data]);
   const noCreditorSelected = isNoCreditorSelection(selectedCredores);
 
   const color = COLORS[system];

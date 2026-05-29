@@ -10,8 +10,13 @@ const schemas_1 = require("./schemas");
 const reportFilters_1 = require("../utils/reportFilters");
 exports.clickRouter = (0, express_1.Router)();
 const webhookRouter = (0, express_1.Router)();
+const EMAIL_TRACKING_DEBUG = process.env.EMAIL_TRACKING_DEBUG === 'true';
 // Pool de conexão reutilizável
 let pool = null;
+function debugLog(...args) {
+    if (EMAIL_TRACKING_DEBUG)
+        console.log(...args);
+}
 async function getConnection() {
     if (pool && pool.connected) {
         return pool;
@@ -32,7 +37,7 @@ async function getConnection() {
             connectTimeout: 30000,
         },
     };
-    console.log('Criando nova pool de conexão...');
+    debugLog('Criando nova pool de conexão...');
     pool = new mssql_1.default.ConnectionPool(config);
     pool.on('error', (err) => {
         console.error('Erro na pool:', err);
@@ -40,7 +45,7 @@ async function getConnection() {
     });
     try {
         await pool.connect();
-        console.log('✅ Pool conectada com sucesso');
+        debugLog('Pool conectada com sucesso');
     }
     catch (err) {
         console.error('❌ Erro ao conectar:', err);
@@ -185,10 +190,7 @@ async function getEmailClickReport(filter) {
 // TESTE DE CONEXÃO
 exports.clickRouter.get('/test/connection', async (req, res) => {
     try {
-        console.log('Testando conexão ao Azure SQL...');
-        console.log('Server:', process.env.AZURE_SQL_SERVER);
-        console.log('Database:', process.env.AZURE_SQL_DATABASE);
-        console.log('User:', process.env.AZURE_SQL_USER);
+        debugLog('Testando conexão ao Azure SQL...');
         const pool = await getConnection();
         const result = await pool.request().query('SELECT TOP 1 * FROM email_envios');
         res.json({
@@ -218,7 +220,7 @@ webhookRouter.get('/cliques', async (req, res) => {
 exports.clickRouter.get('/:token', async (req, res) => {
     try {
         const token = req.params.token;
-        console.log('📧 Clique recebido - Token:', token);
+        debugLog('Clique recebido - Token:', token);
         const pool = await getConnection();
         // Buscar envio
         const result = await pool
@@ -230,9 +232,9 @@ exports.clickRouter.get('/:token', async (req, res) => {
             console.warn('⚠️ Token não encontrado:', token);
             return res.status(404).send('Link não encontrado.');
         }
-        console.log('✅ Envio encontrado:', envio.url_destino);
+        debugLog('Envio encontrado:', envio.url_destino);
         // Salvar clique
-        console.log('Tentando salvar clique com dados:', {
+        debugLog('Tentando salvar clique com dados:', {
             token,
             processo: envio.processo,
             email_destinatario: envio.email_destinatario,
@@ -274,7 +276,7 @@ exports.clickRouter.get('/:token', async (req, res) => {
           @user_agent
         )
       `);
-        console.log('💾 Clique salvo com sucesso. Rows affected:', insertResult.rowsAffected);
+        debugLog('Clique salvo com sucesso. Rows affected:', insertResult.rowsAffected);
         // Redirecionar
         return res.redirect(envio.url_destino);
     }
@@ -349,7 +351,7 @@ webhookRouter.post('/webhook', async (req, res) => {
           @payload_json
         )
       `);
-        console.log(`✅ Evento ${tipoEvento} salvo:`, evento.email_para);
+        debugLog(`Evento ${tipoEvento} salvo:`, evento.email_para);
         return res.status(200).json({ success: true });
     }
     catch (error) {

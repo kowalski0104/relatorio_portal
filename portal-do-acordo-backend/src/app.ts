@@ -11,6 +11,7 @@ import communicationRouter from './routes/communicationRoutes';
 import activeBaseRouter from './routes/activeBaseRoutes';
 import portfolioRouter from './routes/portfolioRoutes';
 import baseSummaryRouter from './routes/baseSummaryRoutes';
+import periodRouter from './routes/periodRoutes';
 import emailWebhookRouter, { clickRouter } from './routes/emailTrackingRoutes';
 import presenceRouter, { activeUsersAdminRouter } from './routes/activeUsersRoutes';
 import { authMiddleware } from './middleware/auth';
@@ -65,6 +66,7 @@ export function createApp() {
   app.use('/api/base-ativa', activeBaseRouter);
   app.use('/api/carteiras', portfolioRouter);
   app.use('/api/bases', baseSummaryRouter);
+  app.use('/api/periodos', periodRouter);
   app.use('/api/mailgrid', emailWebhookRouter);
   app.use('/api/presenca', presenceRouter);
   app.use('/api/admin', activeUsersAdminRouter);
