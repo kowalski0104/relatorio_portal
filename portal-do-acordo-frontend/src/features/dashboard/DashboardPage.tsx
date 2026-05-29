@@ -84,6 +84,13 @@ function formatDuration(seconds: number) {
   return `${hours}h ${minutes % 60}min`;
 }
 
+function calendarWeekOfMonth(date: string) {
+  const [year, month, day] = date.split('-').map(Number);
+  const firstDay = new Date(year, month - 1, 1).getDay();
+  const mondayBasedOffset = (firstDay + 6) % 7;
+  return Math.floor((day + mondayBasedOffset - 1) / 7) + 1;
+}
+
 function viewportLabel(value: { width: number | null; height: number | null }) {
   return value.width && value.height ? `${value.width} x ${value.height}` : '-';
 }
@@ -398,8 +405,7 @@ function DashboardPage() {
 
     const weeks = new Map<number, { week: number; label: string; x1: string; x2: string; total: number }>();
     receitaDiaria.forEach((row) => {
-      const day = Number(row.date.slice(8, 10));
-      const week = Math.max(1, Math.ceil(day / 7));
+      const week = calendarWeekOfMonth(row.date);
       const current = weeks.get(week) ?? { week, label: `S${week}`, x1: row.label, x2: row.label, total: 0 };
       current.x2 = row.label;
       current.total += row.receita;
@@ -425,10 +431,9 @@ function DashboardPage() {
   const acordosDiarios = useMemo(() => {
     const groups = groupBy(filtered.acordos, (row) => row.data);
     return Object.entries(groups)
-      .map(([date, rows]) => ({ date, label: dayLabel(date), businessDay: businessDayMap.get(date) ?? 0, acordos: rows.length }))
-      .filter((row) => row.businessDay > 0)
-      .sort((a, b) => a.businessDay - b.businessDay || a.date.localeCompare(b.date));
-  }, [businessDayMap, filtered.acordos]);
+      .map(([date, rows]) => ({ date, label: dayLabel(date), acordos: rows.length }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [filtered.acordos]);
 
   const dailyRevenueComparisonRows = useMemo(() => {
     const rowsByBusinessDay = new Map<number, Record<string, string | number>>();
@@ -450,23 +455,22 @@ function DashboardPage() {
   }, [businessDayMap, filtered.baixas, periodSeries]);
 
   const dailyAgreementComparisonRows = useMemo(() => {
-    const rowsByBusinessDay = new Map<number, Record<string, string | number>>();
+    const rowsByDay = new Map<number, Record<string, string | number>>();
 
     filtered.acordos.forEach((row) => {
-      const businessDay = businessDayMap.get(row.data);
-      if (!businessDay) return;
       const periodKey = monthKey(row.data);
       const series = periodSeries.find((item) => item.period === periodKey);
       if (!series) return;
 
-      const current = rowsByBusinessDay.get(businessDay) ?? { businessDay, label: `${businessDay}º dia útil` };
+      const day = Number(row.data.slice(8, 10));
+      const current = rowsByDay.get(day) ?? { day, label: String(day).padStart(2, '0') };
       current[series.key] = safe(current[series.key] as number) + 1;
       current[`${series.key}_date`] = dayLabel(row.data);
-      rowsByBusinessDay.set(businessDay, current);
+      rowsByDay.set(day, current);
     });
 
-    return Array.from(rowsByBusinessDay.values()).sort((a, b) => Number(a.businessDay) - Number(b.businessDay));
-  }, [businessDayMap, filtered.acordos, periodSeries]);
+    return Array.from(rowsByDay.values()).sort((a, b) => Number(a.day) - Number(b.day));
+  }, [filtered.acordos, periodSeries]);
 
   const topDays = useMemo(() => {
     const acessosByDay = groupBy(filtered.acessos, (row) => row.data);
@@ -1256,58 +1260,57 @@ function DashboardPage() {
               </Panel>
             </Section>
 
-            <Section num="03" title="Acordos Formalizados">
-              <Panel title="Detalhamento por Credor" meta={`Top 5 de ${number(metrics.acordos)} formalizados`}>
-                {(expanded) => {
-                  const rows = expanded ? acordosRows : acordosRows.slice(0, 5);
-                  return (
+            <Section num="03" title="Acordos e Ticket Médio">
+              <div className="grid-2">
+                <Panel title="Acordos Formalizados" meta={`Top 5 de ${number(metrics.acordos)} formalizados`}>
+                  {(expanded) => {
+                    const rows = expanded ? acordosRows : acordosRows.slice(0, 5);
+                    return (
+                      <table>
+                        <thead>
+                          <tr><th>#</th><th>Credor / Grupo</th><th className="right">Acordos</th><th className="right">Acordos Pagos</th><th className="right">% Pagos</th></tr>
+                        </thead>
+                        <tbody>
+                          {rows.length === 0 ? <tr><td colSpan={5} className="muted">Sem dados no período.</td></tr> : null}
+                          {rows.map((row, index) => (
+                            <tr key={row.name}>
+                              <td><span className="rank-badge">{index + 1}</span></td>
+                              <td className="bold">{row.name}</td>
+                              <td className="right">{number(row.acordos)}</td>
+                              <td className="right">{number(row.pagos)}</td>
+                              <td className="right muted">{row.conversaoPago.toFixed(1)}%</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    );
+                  }}
+                </Panel>
+                <Panel title="Ticket Médio por Credor">
+                  {(expanded) => (
                     <table>
                       <thead>
-                        <tr><th>#</th><th>Credor / Grupo</th><th className="right">Acordos</th><th className="right">Acordos Pagos</th><th className="right">% Pagos</th></tr>
+                        <tr><th>#</th><th>Credor / Grupo</th><th className="right">Total Recuperado</th><th className="right">Qtd Pagos</th><th className="right">Ticket Médio</th></tr>
                       </thead>
                       <tbody>
-                        {rows.length === 0 ? <tr><td colSpan={5} className="muted">Sem dados no período.</td></tr> : null}
-                        {rows.map((row, index) => (
+                        {ticketRows.length === 0 ? <tr><td colSpan={5} className="muted">Sem dados no período.</td></tr> : null}
+                        {(expanded ? ticketRows : ticketRows.slice(0, 5)).map((row, index) => (
                           <tr key={row.name}>
                             <td><span className="rank-badge">{index + 1}</span></td>
                             <td className="bold">{row.name}</td>
-                            <td className="right">{number(row.acordos)}</td>
-                            <td className="right">{number(row.pagos)}</td>
-                            <td className="right muted">{row.conversaoPago.toFixed(1)}%</td>
+                            <td className="right">{money(row.total)}</td>
+                            <td className="right muted">{number(row.qtd)}</td>
+                            <td className="right bold">{money(row.ticket)}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                  );
-                }}
-              </Panel>
+                  )}
+                </Panel>
+              </div>
             </Section>
 
-            <Section num="04" title="Ticket Médio por Credor">
-              <Panel title="Detalhamento">
-                {(expanded) => (
-                  <table>
-                    <thead>
-                      <tr><th>#</th><th>Credor / Grupo</th><th className="right">Total Recuperado</th><th className="right">Qtd Pagos</th><th className="right">Ticket Médio</th></tr>
-                    </thead>
-                    <tbody>
-                      {ticketRows.length === 0 ? <tr><td colSpan={5} className="muted">Sem dados no período.</td></tr> : null}
-                      {(expanded ? ticketRows : ticketRows.slice(0, 5)).map((row, index) => (
-                        <tr key={row.name}>
-                          <td><span className="rank-badge">{index + 1}</span></td>
-                          <td className="bold">{row.name}</td>
-                          <td className="right">{money(row.total)}</td>
-                          <td className="right muted">{number(row.qtd)}</td>
-                          <td className="right bold">{money(row.ticket)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </Panel>
-            </Section>
-
-            <Section num="05" title="Evolução Diária">
+            <Section num="04" title="Evolução Diária">
               <div className="grid-2">
                 <Panel title="Receita Diária" meta="Por data de baixa">
                   <div className="chart-wrap small">
@@ -1338,17 +1341,8 @@ function DashboardPage() {
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
-                  {!isMultiPeriod && weeklyRevenueBlocks.length > 0 ? (
-                    <div className="week-summary">
-                      {weeklyRevenueBlocks.map((row) => (
-                        <span key={row.label} style={{ borderColor: row.fill }}>
-                          <strong>{row.label}</strong> {compactMoney(row.total)} · {row.note}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
                 </Panel>
-                <Panel title="Acordos por Dia Útil">
+                <Panel title="Acordos por Dia">
                   <div className="chart-wrap small">
                     <ResponsiveContainer>
                       <BarChart data={isMultiPeriod ? dailyAgreementComparisonRows : acordosDiarios}>
@@ -1360,7 +1354,7 @@ function DashboardPage() {
                         {isMultiPeriod ? periodSeries.map((item) => (
                           <Bar key={item.key} dataKey={item.key} name={item.label} fill={item.color} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
                         )) : (
-                          <Bar dataKey="acordos" name="Acordos por dia útil" fill={chartAccent} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE}>
+                          <Bar dataKey="acordos" name="Acordos por dia" fill={chartAccent} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE}>
                             {acordosDiarios.map((row, index) => <Cell key={row.date} fill={CHART_PALETTE[index % CHART_PALETTE.length]} />)}
                           </Bar>
                         )}
