@@ -9,8 +9,8 @@ import {
   getDemoPortfolio,
   isDemoMode,
 } from '../data/demoDashboardData';
-import { fetchActiveBase, fetchBaseSummary, fetchCommunication, fetchCosts, fetchCreditors, fetchDashboardData, fetchDashboardResultSummary, fetchEmailClicks, fetchPeriods, fetchPortfolio } from '../services/dashboardApi';
-import type { ActiveBaseReport, BaseSummaryReport, CommunicationData, CostsData, DashboardData, DashboardResultSummary, EmailClickData, PortfolioEntry, SystemFilter } from '../types';
+import { fetchActiveBase, fetchBaseSummary, fetchCommunication, fetchCosts, fetchCreditors, fetchDashboardData, fetchDashboardPerformanceSummary, fetchDashboardResultGraphs, fetchDashboardResultSummary, fetchEmailClicks, fetchPeriods, fetchPortfolio } from '../services/dashboardApi';
+import type { ActiveBaseReport, BaseSummaryReport, CommunicationData, CostsData, DashboardData, DashboardPerformanceSummary, DashboardResultGraphs, DashboardResultSummary, EmailClickData, PortfolioEntry, SystemFilter } from '../types';
 import { monthKey, previousPeriod } from '../utils/dates';
 
 const EMPTY_DASHBOARD_DATA: DashboardData = { baixas: [], acordos: [], acessos: [] };
@@ -240,6 +240,90 @@ export function useDashboardResultSummary(period: string, system: SystemFilter, 
   }, [enabled, period, selectedCreditors, system]);
 
   return { resultSummary: data, resultSummaryLoading: loading, resultSummaryError: error };
+}
+
+export function useDashboardResultGraphs(period: string, system: SystemFilter, selectedCreditors: Set<string>, enabled: boolean) {
+  const [data, setData] = useState<DashboardResultGraphs | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!enabled || !period || isDemoMode()) {
+      setData(null);
+      setLoading(false);
+      setError('');
+      return undefined;
+    }
+
+    let active = true;
+    const controller = new AbortController();
+    setLoading(true);
+    setError('');
+    setData(null);
+
+    fetchDashboardResultGraphs(period, system, selectedCreditors, controller.signal)
+      .then((result) => {
+        if (!active) return;
+        setData(result);
+      })
+      .catch((err) => {
+        if (!active || (err instanceof DOMException && err.name === 'AbortError')) return;
+        setData(null);
+        setError(err instanceof Error ? err.message : 'Erro ao carregar graficos de resultados.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [enabled, period, selectedCreditors, system]);
+
+  return { resultGraphs: data, resultGraphsLoading: loading, resultGraphsError: error };
+}
+
+export function useDashboardPerformanceSummary(period: string, system: SystemFilter, selectedCreditors: Set<string>, enabled: boolean) {
+  const [data, setData] = useState<DashboardPerformanceSummary | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!enabled || !period || isDemoMode()) {
+      setData(null);
+      setLoading(false);
+      setError('');
+      return undefined;
+    }
+
+    let active = true;
+    const controller = new AbortController();
+    setLoading(true);
+    setError('');
+    setData(null);
+
+    fetchDashboardPerformanceSummary(period, system, selectedCreditors, controller.signal)
+      .then((result) => {
+        if (!active) return;
+        setData(result);
+      })
+      .catch((err) => {
+        if (!active || (err instanceof DOMException && err.name === 'AbortError')) return;
+        setData(null);
+        setError(err instanceof Error ? err.message : 'Erro ao carregar resumo de performance.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [enabled, period, selectedCreditors, system]);
+
+  return { performanceSummary: data, performanceSummaryLoading: loading, performanceSummaryError: error };
 }
 
 function filterDataByPeriod(data: DashboardData, period: string) {

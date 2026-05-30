@@ -1,7 +1,7 @@
 ﻿import { PrismaClient } from '@prisma/client';
 import { getLiveClients } from '../db/prismaClients';
 import { getPeriodRange, SystemFilter } from '../utils/reportFilters';
-import { cacheKey, getCached } from '../utils/cache';
+import { CACHE_TTL, cacheKey, getCached } from '../utils/cache';
 
 type CredorRow = {
   credor: string | null;
@@ -57,7 +57,7 @@ async function queryCreditors(prisma: PrismaClient, empresaId: number, periodo?:
 }
 
 export async function getCreditors(filter: { periodo?: string; sistema?: SystemFilter }) {
-  return getCached(cacheKey('creditors', filter), 5 * 60 * 1000, async () => {
+  return getCached(cacheKey('creditors', filter), CACHE_TTL.CREDITORS, async () => {
     const results = await Promise.all(
       getLiveClients(filter.sistema).map(({ empresaId, query }) => query((prisma) => queryCreditors(prisma, empresaId, filter.periodo)))
     );

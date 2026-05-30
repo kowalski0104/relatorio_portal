@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.clickRouter = void 0;
+exports.getEmailClickReport = getEmailClickReport;
 const express_1 = require("express");
 const mssql_1 = __importDefault(require("mssql"));
 const schemas_1 = require("./schemas");
@@ -13,6 +14,7 @@ const webhookRouter = (0, express_1.Router)();
 const EMAIL_TRACKING_DEBUG = process.env.EMAIL_TRACKING_DEBUG === 'true';
 // Pool de conexão reutilizável
 let pool = null;
+let poolPromise = null;
 function debugLog(...args) {
     if (EMAIL_TRACKING_DEBUG)
         console.log(...args);
@@ -21,6 +23,8 @@ async function getConnection() {
     if (pool && pool.connected) {
         return pool;
     }
+    if (poolPromise)
+        return poolPromise;
     const config = {
         server: process.env.AZURE_SQL_SERVER || '',
         database: process.env.AZURE_SQL_DATABASE || '',
@@ -38,21 +42,32 @@ async function getConnection() {
         },
     };
     debugLog('Criando nova pool de conexão...');
-    pool = new mssql_1.default.ConnectionPool(config);
-    pool.on('error', (err) => {
+    const nextPool = new mssql_1.default.ConnectionPool(config);
+    nextPool.on('error', (err) => {
         console.error('Erro na pool:', err);
         pool = null;
+        poolPromise = null;
     });
-    try {
-        await pool.connect();
+    poolPromise = nextPool.connect()
+        .then((connectedPool) => {
+        pool = connectedPool;
         debugLog('Pool conectada com sucesso');
-    }
-    catch (err) {
-        console.error('❌ Erro ao conectar:', err);
+        return connectedPool;
+    })
+        .catch((err) => {
+        console.error('Erro ao conectar:', err);
         pool = null;
         throw err;
-    }
-    return pool;
+    })
+        .finally(() => {
+        poolPromise = null;
+    });
+    return poolPromise;
+    /*
+      console.error('❌ Erro ao conectar:', err);
+  }
+  
+    */
 }
 function toIso(value) {
     if (!value)

@@ -51,7 +51,7 @@ async function queryCreditors(prisma, empresaId, periodo) {
     return prisma.$queryRawUnsafe(query, ...params);
 }
 async function getCreditors(filter) {
-    return (0, cache_1.getCached)((0, cache_1.cacheKey)('creditors', filter), 5 * 60 * 1000, async () => {
+    return (0, cache_1.getCached)((0, cache_1.cacheKey)('creditors', filter), cache_1.CACHE_TTL.CREDITORS, async () => {
         const results = await Promise.all((0, prismaClients_1.getLiveClients)(filter.sistema).map(({ empresaId, query }) => query((prisma) => queryCreditors(prisma, empresaId, filter.periodo))));
         const set = new Set();
         results.flat().forEach((item) => {

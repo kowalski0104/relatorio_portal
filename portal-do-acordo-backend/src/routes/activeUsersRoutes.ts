@@ -1,5 +1,6 @@
 import { Router, Request } from 'express';
 import { getActiveUsersReport, recordActiveUserHeartbeat } from '../services/activeUsersService';
+import { clearCache } from '../utils/cache';
 
 const presenceRouter = Router();
 export const activeUsersAdminRouter = Router();
@@ -15,6 +16,17 @@ activeUsersAdminRouter.get('/active-users', (req, res) => {
   }
 
   res.json({ data: getActiveUsersReport() });
+});
+
+activeUsersAdminRouter.post('/cache/clear', (req, res) => {
+  const expectedToken = process.env.CACHE_ADMIN_TOKEN || process.env.ADMIN_TOKEN;
+  const token = typeof req.query.token === 'string' ? req.query.token : '';
+
+  if (!expectedToken || token !== expectedToken) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  res.json({ ok: true, cleared: clearCache() });
 });
 
 function isAdminRequest(req: Request) {

@@ -49,7 +49,7 @@ async function queryPeriods(prisma, empresaId) {
     return rows.map((row) => row.periodo).filter(Boolean);
 }
 async function getPeriods(filter) {
-    return (0, cache_1.getCached)((0, cache_1.cacheKey)('periods', filter), 5 * 60 * 1000, async () => {
+    return (0, cache_1.getCached)((0, cache_1.cacheKey)('periods', filter), cache_1.CACHE_TTL.PERIODS, async () => {
         const results = await Promise.all((0, prismaClients_1.getLiveClients)(filter.sistema).map(({ empresaId, query }) => query((prisma) => queryPeriods(prisma, empresaId))));
         return {
             data: Array.from(new Set(results.flat())).sort().reverse(),

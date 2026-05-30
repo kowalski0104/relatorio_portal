@@ -23,7 +23,7 @@ import { Section } from './components/Section';
 import { CHART_PALETTE, COLORS, FIXED_EMAIL_COST } from './config/constants';
 import { DEMO_WHATSAPP_CAMPAIGN_DATA, isDemoMode } from './data/demoDashboardData';
 import { WHATSAPP_CAMPAIGN_DATA, type WhatsappCampaignCredor } from './data/whatsappCampaigns';
-import { useBaseSummaryData, useCreditorsData, useDashboardData, useDashboardResultSummary, useDashboardSupplementalData, usePortfolioData } from './hooks/useDashboardData';
+import { useBaseSummaryData, useCreditorsData, useDashboardData, useDashboardPerformanceSummary, useDashboardResultGraphs, useDashboardResultSummary, useDashboardSupplementalData, usePortfolioData } from './hooks/useDashboardData';
 import { fetchActiveUsers, sendPresenceHeartbeat } from './services/dashboardApi';
 import type { Access, ActiveUsersReport, Agreement, CostsData, DashboardTab, PortfolioEntry, SystemFilter, ThemeMode } from './types';
 import { groupBy, isNoCreditorSelection, NO_CREDITOR_SELECTION, normalizeCreditorGroup } from './utils/creditors';
@@ -126,7 +126,7 @@ function DashboardPage() {
   const [forceRawPreviousForResults, setForceRawPreviousForResults] = useState(false);
   const creditorFilterRef = useRef<HTMLDivElement>(null);
   const periodFilterRef = useRef<HTMLDivElement>(null);
-  const includePreviousRawPeriod = tab !== 'relatorio' || businessDayLimit !== 'all' || forceRawPreviousForResults;
+  const includePreviousRawPeriod = (tab !== 'relatorio' && !(tab === 'performance' && businessDayLimit === 'all')) || businessDayLimit !== 'all' || forceRawPreviousForResults;
   const { data, loading, error, period, setPeriod, periods } = useDashboardData(selectedPeriods, system, tab !== 'base-ativa', includePreviousRawPeriod);
   const effectivePeriods = useMemo(() => (selectedPeriods.size > 0 ? selectedPeriods : period ? new Set([period]) : new Set<string>()), [period, selectedPeriods]);
   const portfolioPeriods = effectivePeriods;
@@ -304,6 +304,9 @@ function DashboardPage() {
     : String(Math.min(Number(businessDayLimit), maxBusinessDaysInSelectedPeriods));
   const resultSummaryEnabled = tab === 'relatorio' && selectedPeriodList.length === 1 && !selectedBusinessDayLimit;
   const { resultSummary, resultSummaryError } = useDashboardResultSummary(primaryPeriod, system, selectedCredores, resultSummaryEnabled);
+  const { resultGraphs } = useDashboardResultGraphs(primaryPeriod, system, selectedCredores, resultSummaryEnabled);
+  const performanceSummaryEnabled = tab === 'performance' && selectedPeriodList.length === 1 && !selectedBusinessDayLimit;
+  const { performanceSummary } = useDashboardPerformanceSummary(primaryPeriod, system, selectedCredores, performanceSummaryEnabled);
 
   useEffect(() => {
     setForceRawPreviousForResults(false);
@@ -416,6 +419,16 @@ function DashboardPage() {
     ];
     return rows.filter((row) => row.value > 0);
   }, [color, filtered.baixas]);
+  const resultComponentRows = useMemo(() => {
+    if (!resultSummaryEnabled || !resultGraphs) return componentRows;
+    const rows = [
+      { name: 'Capital Pago', value: resultGraphs.componentes.capital, color },
+      { name: 'Juros', value: resultGraphs.componentes.juros, color: COLORS.gold },
+      { name: 'Multa', value: resultGraphs.componentes.multa, color: COLORS.rust },
+      { name: 'Honorários', value: resultGraphs.componentes.honorarios, color: COLORS.sky },
+    ];
+    return rows.filter((row) => row.value > 0);
+  }, [color, componentRows, resultGraphs, resultSummaryEnabled]);
 
   const acessosCredorRows = useMemo(() => {
     const groups = groupBy(filtered.acessos.filter((row) => row.situacao === 'COM ACORDO' && row.credor && row.credor !== 'OUTROS'), (row) => row.credor || 'OUTROS');
@@ -423,6 +436,18 @@ function DashboardPage() {
   }, [filtered.acessos]);
 
   const acordosRows = useMemo(() => {
+    if (resultSummaryEnabled && resultGraphs) {
+      return resultGraphs.porCredor
+        .map((row) => ({
+          name: row.credor,
+          value: row.acordos,
+          acordos: row.acordos,
+          pagos: row.pagos,
+          conversaoPago: row.conversaoPago,
+        }))
+        .sort((a, b) => b.acordos - a.acordos || b.pagos - a.pagos || a.name.localeCompare(b.name));
+    }
+
     const formalizadosByCredor = groupBy(filtered.acordos, (row) => row.credor || 'OUTROS');
     const pagosByCredor = groupBy(filtered.baixas, (row) => row.credor || 'OUTROS');
     const names = new Set([...Object.keys(formalizadosByCredor), ...Object.keys(pagosByCredor)]);
@@ -443,9 +468,15 @@ function DashboardPage() {
         };
       })
       .sort((a, b) => b.acordos - a.acordos || b.pagos - a.pagos || a.name.localeCompare(b.name));
-  }, [filtered.acordos, filtered.baixas]);
+  }, [filtered.acordos, filtered.baixas, resultGraphs, resultSummaryEnabled]);
 
   const ticketRows = useMemo(() => {
+    if (resultSummaryEnabled && resultGraphs) {
+      return resultGraphs.porCredor
+        .map((row) => ({ name: row.credor, total: row.recuperado, qtd: row.pagos, ticket: row.ticket }))
+        .sort((a, b) => b.total - a.total);
+    }
+
     const groups = groupBy(filtered.baixas, (row) => row.credor || 'OUTROS');
     return Object.entries(groups)
       .map(([name, rows]) => {
@@ -455,15 +486,22 @@ function DashboardPage() {
         return { name, total, qtd, ticket: qtd > 0 ? total / qtd : 0 };
       })
       .sort((a, b) => b.total - a.total);
-  }, [filtered.baixas]);
+  }, [filtered.baixas, resultGraphs, resultSummaryEnabled]);
 
   const receitaDiaria = useMemo(() => {
+    if (resultSummaryEnabled && resultGraphs) {
+      return resultGraphs.evolucaoDiaria
+        .map((row) => ({ date: row.dia, label: dayLabel(row.dia), businessDay: businessDayMap.get(row.dia) ?? 0, receita: row.recuperado }))
+        .filter((row) => row.businessDay > 0)
+        .sort((a, b) => a.businessDay - b.businessDay || a.date.localeCompare(b.date));
+    }
+
     const groups = groupBy(filtered.baixas, (row) => row.data);
     return Object.entries(groups)
       .map(([date, rows]) => ({ date, label: dayLabel(date), businessDay: businessDayMap.get(date) ?? 0, receita: rows.reduce((sum, row) => sum + safe(row.total_pago_portal), 0) }))
       .filter((row) => row.businessDay > 0)
       .sort((a, b) => a.businessDay - b.businessDay || a.date.localeCompare(b.date));
-  }, [businessDayMap, filtered.baixas]);
+  }, [businessDayMap, filtered.baixas, resultGraphs, resultSummaryEnabled]);
 
   const weeklyRevenueBlocks = useMemo(() => {
     if (isMultiPeriod) return [];
@@ -494,11 +532,18 @@ function DashboardPage() {
   }, [isMultiPeriod, receitaDiaria]);
 
   const acordosDiarios = useMemo(() => {
+    if (resultSummaryEnabled && resultGraphs) {
+      return resultGraphs.evolucaoDiaria
+        .filter((row) => row.acordos > 0)
+        .map((row) => ({ date: row.dia, label: dayLabel(row.dia), acordos: row.acordos }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+    }
+
     const groups = groupBy(filtered.acordos, (row) => row.data);
     return Object.entries(groups)
       .map(([date, rows]) => ({ date, label: dayLabel(date), acordos: rows.length }))
       .sort((a, b) => a.date.localeCompare(b.date));
-  }, [filtered.acordos]);
+  }, [filtered.acordos, resultGraphs, resultSummaryEnabled]);
 
   const dailyRevenueComparisonRows = useMemo(() => {
     const rowsByBusinessDay = new Map<number, Record<string, string | number>>();
@@ -538,6 +583,17 @@ function DashboardPage() {
   }, [filtered.acordos, periodSeries]);
 
   const topDays = useMemo(() => {
+    if (performanceSummaryEnabled && performanceSummary) {
+      return performanceSummary.topDias.map((row) => ({
+        date: row.dia,
+        label: dayLabel(row.dia),
+        acordos: row.acordos,
+        recuperado: row.recuperado,
+        acessos: row.acessos,
+        conversao: row.conversao,
+      }));
+    }
+
     const acessosByDay = groupBy(filtered.acessos, (row) => row.data);
     return acordosDiarios
       .map((row) => ({
@@ -546,9 +602,19 @@ function DashboardPage() {
       }))
       .sort((a, b) => b.acordos - a.acordos)
       .slice(0, 5);
-  }, [acordosDiarios, filtered.acessos]);
+  }, [acordosDiarios, filtered.acessos, performanceSummary, performanceSummaryEnabled]);
 
   const hourlyConversionRows = useMemo(() => {
+    if (performanceSummaryEnabled && performanceSummary) {
+      return performanceSummary.acordosPorHora.map((row) => ({
+        hour: row.hora,
+        label: row.label,
+        acessos: row.acessos,
+        acordos: row.acordos,
+        conversao: row.conversao,
+      }));
+    }
+
     const hasRealHour = [...filtered.acessos, ...filtered.acordos].some((row) => Number(row.hora) > 0);
     if (!hasRealHour) return [];
 
@@ -572,7 +638,7 @@ function DashboardPage() {
 
     return hours
       .map((row) => ({ ...row, conversao: row.acessos > 0 ? (row.acordos / row.acessos) * 100 : 0 }));
-  }, [filtered.acessos, filtered.acordos]);
+  }, [filtered.acessos, filtered.acordos, performanceSummary, performanceSummaryEnabled]);
 
   const bestHourlyRow = useMemo(
     () => hourlyConversionRows
@@ -582,6 +648,14 @@ function DashboardPage() {
   );
 
   const negociadores = useMemo(() => {
+    if (performanceSummaryEnabled && performanceSummary) {
+      return performanceSummary.porNegociador.map((row) => ({
+        name: row.negociador,
+        total: row.recuperado,
+        qtd: row.acordosPagos,
+      }));
+    }
+
     const groups = groupBy(filtered.baixas, (row) => row.negociador || 'Sem negociador');
     return Object.entries(groups)
       .map(([name, rows]) => ({
@@ -590,7 +664,7 @@ function DashboardPage() {
         qtd: rows.length,
       }))
       .sort((a, b) => b.total - a.total);
-  }, [filtered.baixas]);
+  }, [filtered.baixas, performanceSummary, performanceSummaryEnabled]);
 
   const fallbackCustos = useMemo<CostsData>(() => {
     const categories = componentRows.map((row) => ({ name: row.name, value: row.value }));
@@ -783,8 +857,12 @@ function DashboardPage() {
   const storedWhatsappEnvios = hasCommunicationDailyData
     ? communicationDailyRows.reduce((sum, row) => sum + row.mensagens_wati, 0)
     : comunicacaoView.envios.whatsapp;
-  const cliquesPortal = whatsappCampaignEnabled ? whatsappCampaignTotals.clicked : metrics.acessos;
-  const acessosPortal = metrics.acessos;
+  const performanceFunil = performanceSummaryEnabled && performanceSummary ? performanceSummary.funil : null;
+  const acessosPortal = performanceFunil?.acessos ?? metrics.acessos;
+  const acordosPortal = performanceFunil?.acordos ?? metrics.acordos;
+  const conversaoPortal = performanceFunil?.conversaoAcesso ?? metrics.conversao;
+  const previousPerformanceMetrics = performanceSummaryEnabled && performanceSummary ? performanceSummary.anterior : previousMetrics;
+  const cliquesPortal = whatsappCampaignEnabled ? whatsappCampaignTotals.clicked : acessosPortal;
   const whatsappEnvios = whatsappCampaignEnabled ? whatsappCampaignTotals.envios : storedWhatsappEnvios;
   const whatsappCusto = whatsappCampaignEnabled ? whatsappCampaignTotals.custo : storedWhatsappEnvios * 0.05;
   const totalEnviosCanal = emailEnvios + whatsappEnvios;
@@ -867,14 +945,15 @@ function DashboardPage() {
   const funnelRows = [
     { name: 'Envio -> clique no link', value: totalEnviosCanal > 0 ? (totalCliquesLink / totalEnviosCanal) * 100 : 0 },
     { name: 'Clique -> acesso', value: totalCliquesLink > 0 ? (acessosPortal / totalCliquesLink) * 100 : 0 },
-    { name: 'Acesso -> acordo', value: acessosPortal > 0 ? (metrics.acordos / acessosPortal) * 100 : 0 },
-    { name: 'Envio -> acordo', value: totalEnviosCanal > 0 ? (metrics.acordos / totalEnviosCanal) * 100 : 0 },
+    { name: 'Acesso -> acordo', value: acessosPortal > 0 ? (acordosPortal / acessosPortal) * 100 : 0 },
+    { name: 'Envio -> acordo', value: totalEnviosCanal > 0 ? (acordosPortal / totalEnviosCanal) * 100 : 0 },
   ];
+  const accessFunnelAccesses = performanceFunil?.acessos ?? metrics.acessos;
   const accessFunnelRows = [
-    { name: 'Acessos', value: number(metrics.acessos), fill: 100 },
-    { name: 'Acessos com acordo', value: number(metrics.acessosComAcordo), fill: metrics.acessos > 0 ? (metrics.acessosComAcordo / metrics.acessos) * 100 : 0 },
-    { name: 'Acordos', value: number(metrics.acordos), fill: metrics.acessos > 0 ? (metrics.acordos / metrics.acessos) * 100 : 0 },
-    { name: 'Conversão', value: `${metrics.conversao.toFixed(1)}%`, fill: metrics.conversao },
+    { name: 'Acessos', value: number(accessFunnelAccesses), fill: 100 },
+    { name: 'Acessos com acordo', value: number(performanceFunil?.acessosComAcordo ?? metrics.acessosComAcordo), fill: accessFunnelAccesses > 0 ? ((performanceFunil?.acessosComAcordo ?? metrics.acessosComAcordo) / accessFunnelAccesses) * 100 : 0 },
+    { name: 'Acordos', value: number(performanceFunil?.acordos ?? metrics.acordos), fill: accessFunnelAccesses > 0 ? ((performanceFunil?.acordos ?? metrics.acordos) / accessFunnelAccesses) * 100 : 0 },
+    { name: 'Conversão', value: `${(performanceFunil?.conversaoAcesso ?? metrics.conversao).toFixed(1)}%`, fill: performanceFunil?.conversaoAcesso ?? metrics.conversao },
   ];
   const channelCostRows = useMemo(() => {
     const emailCost = communicationCosts.emailCost;
@@ -884,11 +963,11 @@ function DashboardPage() {
       { canal: 'WhatsApp', envios: whatsappEnvios, custo: whatsappCost },
     ].map((row) => ({
       ...row,
-      custoPorAcesso: metrics.acessos > 0 ? row.custo / metrics.acessos : 0,
-      custoPorAcordo: metrics.acordos > 0 ? row.custo / metrics.acordos : 0,
+      custoPorAcesso: acessosPortal > 0 ? row.custo / acessosPortal : 0,
+      custoPorAcordo: acordosPortal > 0 ? row.custo / acordosPortal : 0,
       custoPorEnvio: row.envios > 0 ? row.custo / row.envios : 0,
     }));
-  }, [communicationCosts.emailCost, emailEnvios, metrics.acessos, metrics.acordos, whatsappCusto, whatsappEnvios]);
+  }, [acessosPortal, acordosPortal, communicationCosts.emailCost, emailEnvios, whatsappCusto, whatsappEnvios]);
   const monthlyEvolution = useMemo(() => {
     const byMonth = new Map<string, {
       mes: string;
@@ -914,24 +993,35 @@ function DashboardPage() {
       });
     });
 
-    data.acessos
-      .filter((row) => matchesSystem(row, system))
-      .forEach((row) => {
-        const key = monthKey(row.data);
+    if (performanceSummaryEnabled && performanceSummary) {
+      performanceSummary.evolucaoMensal.forEach((row) => {
+        const key = row.mes;
         const current = byMonth.get(key) ?? { mes: key, envios: 0, emails: 0, whatsapp: 0, cliques: 0, acessos: 0, acordos: 0, conversao: 0 };
-        current.cliques += 1;
-        current.acessos += 1;
+        current.cliques += row.acessos;
+        current.acessos += row.acessos;
+        current.acordos += row.acordos;
         byMonth.set(key, current);
       });
+    } else {
+      data.acessos
+        .filter((row) => matchesSystem(row, system))
+        .forEach((row) => {
+          const key = monthKey(row.data);
+          const current = byMonth.get(key) ?? { mes: key, envios: 0, emails: 0, whatsapp: 0, cliques: 0, acessos: 0, acordos: 0, conversao: 0 };
+          current.cliques += 1;
+          current.acessos += 1;
+          byMonth.set(key, current);
+        });
 
-    data.acordos
-      .filter((row) => matchesSystem(row, system))
-      .forEach((row) => {
-        const key = monthKey(row.data);
-        const current = byMonth.get(key) ?? { mes: key, envios: 0, emails: 0, whatsapp: 0, cliques: 0, acessos: 0, acordos: 0, conversao: 0 };
-        current.acordos += 1;
-        byMonth.set(key, current);
-      });
+      data.acordos
+        .filter((row) => matchesSystem(row, system))
+        .forEach((row) => {
+          const key = monthKey(row.data);
+          const current = byMonth.get(key) ?? { mes: key, envios: 0, emails: 0, whatsapp: 0, cliques: 0, acessos: 0, acordos: 0, conversao: 0 };
+          current.acordos += 1;
+          byMonth.set(key, current);
+        });
+    }
 
     if (whatsappCampaignEnabled) {
       const current = byMonth.get(primaryPeriod) ?? {
@@ -954,7 +1044,7 @@ function DashboardPage() {
     return Array.from(byMonth.values())
       .map((row) => ({ ...row, label: periodLabel(row.mes), conversao: row.acessos > 0 ? (row.acordos / row.acessos) * 100 : 0 }))
       .sort((a, b) => a.mes.localeCompare(b.mes));
-  }, [comunicacaoView.envios.emails, comunicacaoView.mensal, data.acessos, data.acordos, primaryPeriod, system, whatsappCampaignEnabled, whatsappCampaignTotals.clicked, whatsappCampaignTotals.envios]);
+  }, [comunicacaoView.envios.emails, comunicacaoView.mensal, data.acessos, data.acordos, performanceSummary, performanceSummaryEnabled, primaryPeriod, system, whatsappCampaignEnabled, whatsappCampaignTotals.clicked, whatsappCampaignTotals.envios]);
   const selectedLabel = noCreditorSelected ? 'Nenhum' : selectedCredores.size === 0 || selectedCredores.size === allCredores.length ? 'Todos' : `${selectedCredores.size}/${allCredores.length}`;
   const selectedPeriodLabel = selectedPeriodList.length === 1 ? periodLabel(primaryPeriod) : `${selectedPeriodList.length} meses`;
   const selectedPeriodTitle = selectedPeriodList.length === 1 ? periodLabel(primaryPeriod, true) : `${selectedPeriodList.length} meses selecionados`;
@@ -1355,16 +1445,16 @@ function DashboardPage() {
                       <tr><th>Componente</th><th className="right">Valor</th><th className="right">%</th></tr>
                     </thead>
                     <tbody>
-                      {componentRows.map((row) => (
+                      {resultComponentRows.map((row) => (
                         <tr key={row.name}>
                           <td className="with-swatch"><span style={{ background: row.color }} />{row.name}</td>
                           <td className="right">{money(row.value)}</td>
-                          <td className="right muted">{percent(row.value, metrics.totalPago)}</td>
+                          <td className="right muted">{percent(row.value, resultMetrics.totalPago)}</td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr><td>Total Recuperado</td><td className="right">{money(metrics.totalPago)}</td><td className="right">100%</td></tr>
+                      <tr><td>Total Recuperado</td><td className="right">{money(resultMetrics.totalPago)}</td><td className="right">100%</td></tr>
                     </tfoot>
                   </table>
                 </Panel>
@@ -1848,9 +1938,9 @@ function DashboardPage() {
             <div className="kpi-row">
               <MetricCard tone="teal" label="Envios" value={number(totalEnviosCanal)} current={totalEnviosCanal} small={`${number(emailEnvios)} e-mails - ${number(whatsappEnvios)} WhatsApp`} summary="Total de comunicações enviadas no período." />
               <MetricCard tone="gold" label="CLIQUES NO LINK" value={number(totalCliquesLink)} current={totalCliquesLink} small={`${number(cliquesPortal)} WhatsApp - ${number(emailClickTotal)} e-mail`} summary="Cliques no link de WhatsApp e e-mail somados no período." />
-              <MetricCard tone="sky" label="Acessos" value={number(acessosPortal)} current={acessosPortal} previous={previousMetrics?.acessos} small="Acessos no site" summary="Acessos registrados no Portal do Acordo." />
-              <MetricCard tone="teal" label="Quantidade de Acordos" value={number(metrics.acordos)} current={metrics.acordos} previous={previousMetrics?.acordos} small="Acordos formalizados" summary="Quantidade de acordos formalizados no período." />
-              <MetricCard tone="rust" label="Conversão" value={`${metrics.conversao.toFixed(1)}%`} current={metrics.conversao} previous={previousMetrics?.conversao} small={`${number(metrics.acordos)} acordos`} summary="Conversão de acessos em acordos no período." />
+              <MetricCard tone="sky" label="Acessos" value={number(acessosPortal)} current={acessosPortal} previous={previousPerformanceMetrics?.acessos} small="Acessos no site" summary="Acessos registrados no Portal do Acordo." />
+              <MetricCard tone="teal" label="Quantidade de Acordos" value={number(acordosPortal)} current={acordosPortal} previous={previousPerformanceMetrics?.acordos} small="Acordos formalizados" summary="Quantidade de acordos formalizados no período." />
+              <MetricCard tone="rust" label="Conversão" value={`${conversaoPortal.toFixed(1)}%`} current={conversaoPortal} previous={previousPerformanceMetrics?.conversao} small={`${number(acordosPortal)} acordos`} summary="Conversão de acessos em acordos no período." />
             </div>
           </header>
 

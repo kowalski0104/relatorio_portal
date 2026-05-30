@@ -1,4 +1,4 @@
-import type { Access, ActiveBaseReport, ActiveUsersReport, Agreement, BaseSummaryReport, CommunicationData, CostsData, DashboardData, DashboardResultSummary, EmailClickData, Payment, PortfolioEntry, SystemFilter } from '../types';
+import type { Access, ActiveBaseReport, ActiveUsersReport, Agreement, BaseSummaryReport, CommunicationData, CostsData, DashboardData, DashboardPerformanceSummary, DashboardResultGraphs, DashboardResultSummary, EmailClickData, Payment, PortfolioEntry, SystemFilter } from '../types';
 
 export type PresenceHeartbeatPayload = {
   sessionId: string;
@@ -52,6 +52,33 @@ export async function fetchDashboardResultSummary(periodo: string, sistema: Syst
   const params = new URLSearchParams({ periodo, sistema });
   if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
   const response = await fetch(apiUrl(`/api/dashboard/resultados/resumo?${params.toString()}`), { signal });
+  if (!response.ok) return null;
+  const payload = await response.json();
+  return payload.data ?? null;
+}
+
+export async function fetchDashboardResultGraphs(periodo: string, sistema: SystemFilter, credores: Set<string>, signal?: AbortSignal): Promise<DashboardResultGraphs | null> {
+  const params = new URLSearchParams({ periodo, sistema });
+  if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
+  const response = await fetch(apiUrl(`/api/dashboard/resultados/graficos?${params.toString()}`), { signal });
+  if (!response.ok) return null;
+  const payload = await response.json();
+  return payload.data ?? null;
+}
+
+export async function fetchDashboardPerformanceSummary(periodo: string, sistema: SystemFilter, credores: Set<string>, signal?: AbortSignal): Promise<DashboardPerformanceSummary | null> {
+  const params = new URLSearchParams({ periodo, sistema });
+  if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
+  const response = await fetch(apiUrl(`/api/dashboard/performance/resumo?${params.toString()}`), { signal });
+  if (!response.ok) return null;
+  const payload = await response.json();
+  return payload.data ?? null;
+}
+
+export async function fetchDashboardPerformanceGraphs(periodo: string, sistema: SystemFilter, credores: Set<string>, signal?: AbortSignal): Promise<DashboardPerformanceSummary | null> {
+  const params = new URLSearchParams({ periodo, sistema });
+  if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
+  const response = await fetch(apiUrl(`/api/dashboard/performance/graficos?${params.toString()}`), { signal });
   if (!response.ok) return null;
   const payload = await response.json();
   return payload.data ?? null;

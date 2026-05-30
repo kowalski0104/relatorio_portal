@@ -156,7 +156,7 @@ function sumByCreditor(rows, value) {
     return totals;
 }
 async function getBaseSummary(filter) {
-    return (0, cache_1.getCached)((0, cache_1.cacheKey)('base-summary', filter), 2 * 60 * 1000, () => buildBaseSummary(filter));
+    return (0, cache_1.getCached)((0, cache_1.cacheKey)('base-summary', filter), cache_1.CACHE_TTL.BASES, () => buildBaseSummary(filter));
 }
 async function buildBaseSummary(filter) {
     const [activeBaseResult, liveResults] = await Promise.all([

@@ -117,7 +117,7 @@ async function buildResultSummary(filter) {
     return mergeSummary(rows);
 }
 async function getDashboardResultSummary(filter) {
-    return (0, cache_1.getCached)((0, cache_1.cacheKey)('dashboard-result-summary', filter), 2 * 60 * 1000, async () => {
+    return (0, cache_1.getCached)((0, cache_1.cacheKey)('dashboard-result-summary', filter), cache_1.CACHE_TTL.RESULTS, async () => {
         const periodoAnterior = previousPeriod(filter.periodo);
         const [atual, anterior] = await Promise.all([
             buildResultSummary(filter),

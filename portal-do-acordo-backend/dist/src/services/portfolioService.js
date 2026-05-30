@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getPortfolio = getPortfolio;
 const prismaClients_1 = require("../db/prismaClients");
 const reportFilters_1 = require("../utils/reportFilters");
+const cache_1 = require("../utils/cache");
 const CREDITOR_MAP_401 = {
     29399: 'GEAP',
     30706: 'SOUZA CRUZ',
@@ -93,9 +94,11 @@ async function queryPortfolio(prisma, empresaId, filter) {
     }));
 }
 async function getPortfolio(filter) {
-    const rows = (await Promise.all((0, prismaClients_1.getLiveClients)(filter.sistema).map(({ empresaId, query }) => query((prisma) => queryPortfolio(prisma, empresaId, filter))))).flat();
-    const selectedCreditors = new Set((filter.credores ?? []).map((creditor) => creditor.trim()).filter(Boolean));
-    const filteredRows = rows.filter((row) => selectedCreditors.size === 0 || selectedCreditors.has(row.credor));
-    return { data: filteredRows };
+    return (0, cache_1.getCached)((0, cache_1.cacheKey)('portfolio', filter), cache_1.CACHE_TTL.PORTFOLIO, async () => {
+        const rows = (await Promise.all((0, prismaClients_1.getLiveClients)(filter.sistema).map(({ empresaId, query }) => query((prisma) => queryPortfolio(prisma, empresaId, filter))))).flat();
+        const selectedCreditors = new Set((filter.credores ?? []).map((creditor) => creditor.trim()).filter(Boolean));
+        const filteredRows = rows.filter((row) => selectedCreditors.size === 0 || selectedCreditors.has(row.credor));
+        return { data: filteredRows };
+    });
 }
 //# sourceMappingURL=portfolioService.js.map

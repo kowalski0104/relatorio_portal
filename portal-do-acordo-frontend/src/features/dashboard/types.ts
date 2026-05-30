@@ -98,6 +98,121 @@ export type DashboardResultSummary = {
   anterior: DashboardResultSummaryMetric;
 };
 
+export type DashboardResultGraphs = {
+  periodo: string | null;
+  access_credor_source: string;
+  evolucaoDiaria: Array<{
+    dia: string;
+    recuperado: number;
+    acordos: number;
+    acessos: number;
+  }>;
+  porNegociador: Array<{
+    negociador: string;
+    recuperado: number;
+    pagamentos: number;
+    acordos: number;
+    conversao: number;
+  }>;
+  porCredor: Array<{
+    credor: string;
+    recuperado: number;
+    acordos: number;
+    pagos: number;
+    ticket: number;
+    conversaoPago: number;
+  }>;
+  componentes: {
+    capital: number;
+    juros: number;
+    multa: number;
+    honorarios: number;
+  };
+  ticketMedio: number;
+  acordosPorHora: Array<{
+    hora: number;
+    acordos: number;
+  }>;
+  funil: {
+    acessos: number;
+    acessosComAcordo: number;
+    negociacoes: number;
+    acordos: number;
+    pagos: number;
+  };
+};
+
+export type DashboardPerformanceSummary = {
+  periodo: string | null;
+  porNegociador: Array<{
+    negociador: string;
+    acordos: number;
+    acordosPagos: number;
+    recuperado: number;
+    conversao: number;
+    acessos: number;
+    ticketMedio: number;
+  }>;
+  evolucaoMensal: Array<{
+    mes: string;
+    recuperado: number;
+    acordos: number;
+    acessos: number;
+    conversao: number;
+  }>;
+  topDias: Array<{
+    dia: string;
+    recuperado: number;
+    acordos: number;
+    acessos: number;
+    conversao: number;
+  }>;
+  acordosPorHora: Array<{
+    hora: number;
+    label: string;
+    acessos: number;
+    acordos: number;
+    conversao: number;
+  }>;
+  funil: {
+    acessos: number;
+    negociacoes: number;
+    acordos: number;
+    pagos: number;
+    conversaoAcesso: number;
+    conversaoPagamento: number;
+  };
+  anterior: {
+    acordos: number;
+    recuperado: number;
+    acessos: number;
+    conversao: number;
+  };
+  graficos: {
+    evolucaoDiaria: Array<{
+      dia: string;
+      recuperado: number;
+      acordos: number;
+      acessos: number;
+      conversao: number;
+    }>;
+    evolucaoMensal: Array<{
+      mes: string;
+      recuperado: number;
+      acordos: number;
+      acessos: number;
+      conversao: number;
+    }>;
+    distribuicaoHorario: Array<{
+      hora: number;
+      label: string;
+      acessos: number;
+      acordos: number;
+      conversao: number;
+    }>;
+  };
+};
+
 export type PortfolioEntry = {
   id: string;
   sistema: Exclude<SystemFilter, 'total'>;

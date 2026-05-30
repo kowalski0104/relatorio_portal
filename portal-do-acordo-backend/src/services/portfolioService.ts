@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { getLiveClients } from '../db/prismaClients';
 import { getPeriodRange, monthKey } from '../utils/reportFilters';
 import type { PortfolioQuery } from '../routes/schemas';
+import { CACHE_TTL, cacheKey, getCached } from '../utils/cache';
 
 type BorderoRawRow = {
   id: number | string;
@@ -116,9 +117,11 @@ async function queryPortfolio(prisma: PrismaClient, empresaId: number, filter: P
 }
 
 export async function getPortfolio(filter: PortfolioQuery) {
-  const rows = (await Promise.all(getLiveClients(filter.sistema).map(({ empresaId, query }) => query((prisma) => queryPortfolio(prisma, empresaId, filter))))).flat();
-  const selectedCreditors = new Set((filter.credores ?? []).map((creditor) => creditor.trim()).filter(Boolean));
-  const filteredRows = rows.filter((row) => selectedCreditors.size === 0 || selectedCreditors.has(row.credor));
+  return getCached(cacheKey('portfolio', filter), CACHE_TTL.PORTFOLIO, async () => {
+    const rows = (await Promise.all(getLiveClients(filter.sistema).map(({ empresaId, query }) => query((prisma) => queryPortfolio(prisma, empresaId, filter))))).flat();
+    const selectedCreditors = new Set((filter.credores ?? []).map((creditor) => creditor.trim()).filter(Boolean));
+    const filteredRows = rows.filter((row) => selectedCreditors.size === 0 || selectedCreditors.has(row.credor));
 
-  return { data: filteredRows };
+    return { data: filteredRows };
+  });
 }

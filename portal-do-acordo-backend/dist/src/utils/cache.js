@@ -1,8 +1,19 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.CACHE_TTL = void 0;
 exports.getCached = getCached;
 exports.cacheKey = cacheKey;
+exports.clearCache = clearCache;
 const cacheStore = new Map();
+exports.CACHE_TTL = {
+    RESULTS: 10 * 60 * 1000,
+    PERFORMANCE: 10 * 60 * 1000,
+    COMMUNICATION: 15 * 60 * 1000,
+    BASES: 10 * 60 * 1000,
+    PERIODS: 30 * 60 * 1000,
+    CREDITORS: 30 * 60 * 1000,
+    PORTFOLIO: 10 * 60 * 1000,
+};
 async function getCached(key, ttlMs, producer) {
     const now = Date.now();
     const current = cacheStore.get(key);
@@ -14,5 +25,10 @@ async function getCached(key, ttlMs, producer) {
 }
 function cacheKey(prefix, input) {
     return `${prefix}:${JSON.stringify(input)}`;
+}
+function clearCache() {
+    const size = cacheStore.size;
+    cacheStore.clear();
+    return size;
 }
 //# sourceMappingURL=cache.js.map

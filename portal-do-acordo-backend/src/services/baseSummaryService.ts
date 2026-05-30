@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { getLiveClients } from '../db/prismaClients';
 import type { PortfolioQuery } from '../routes/schemas';
 import { addSqlParam, getPeriodRange, NEGOTIATORS } from '../utils/reportFilters';
-import { cacheKey, getCached } from '../utils/cache';
+import { CACHE_TTL, cacheKey, getCached } from '../utils/cache';
 import { getActiveBase } from './activeBaseService';
 
 type AgingRange = '0-90' | '91-180' | '181-360' | '361+' | 'SEM VENCIMENTO';
@@ -198,7 +198,7 @@ function sumByCreditor<T extends { credor: string }>(rows: T[], value: (row: T) 
 }
 
 export async function getBaseSummary(filter: PortfolioQuery) {
-  return getCached(cacheKey('base-summary', filter), 2 * 60 * 1000, () => buildBaseSummary(filter));
+  return getCached(cacheKey('base-summary', filter), CACHE_TTL.BASES, () => buildBaseSummary(filter));
 }
 
 async function buildBaseSummary(filter: PortfolioQuery) {

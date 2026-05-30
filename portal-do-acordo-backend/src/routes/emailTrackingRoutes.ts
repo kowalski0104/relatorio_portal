@@ -35,6 +35,7 @@ type EmailClickRecentRow = {
 
 // Pool de conexão reutilizável
 let pool: sql.ConnectionPool | null = null;
+let poolPromise: Promise<sql.ConnectionPool> | null = null;
 
 function debugLog(...args: unknown[]) {
   if (EMAIL_TRACKING_DEBUG) console.log(...args);
@@ -44,6 +45,7 @@ async function getConnection(): Promise<sql.ConnectionPool> {
   if (pool && pool.connected) {
     return pool;
   }
+  if (poolPromise) return poolPromise;
 
   const config: sql.config = {
     server: process.env.AZURE_SQL_SERVER || '',
@@ -63,23 +65,35 @@ async function getConnection(): Promise<sql.ConnectionPool> {
   };
 
   debugLog('Criando nova pool de conexão...');
-  pool = new sql.ConnectionPool(config);
+  const nextPool = new sql.ConnectionPool(config);
 
-  pool.on('error', (err) => {
+  nextPool.on('error', (err) => {
     console.error('Erro na pool:', err);
     pool = null;
+    poolPromise = null;
   });
 
-  try {
-    await pool.connect();
-    debugLog('Pool conectada com sucesso');
-  } catch (err) {
-    console.error('❌ Erro ao conectar:', err);
-    pool = null;
-    throw err;
-  }
+  poolPromise = nextPool.connect()
+    .then((connectedPool) => {
+      pool = connectedPool;
+      debugLog('Pool conectada com sucesso');
+      return connectedPool;
+    })
+    .catch((err) => {
+      console.error('Erro ao conectar:', err);
+      pool = null;
+      throw err;
+    })
+    .finally(() => {
+      poolPromise = null;
+    });
 
-  return pool;
+  return poolPromise;
+  /*
+    console.error('❌ Erro ao conectar:', err);
+}
+
+  */
 }
 
 function toIso(value: Date | string | null) {
@@ -133,7 +147,7 @@ function createEmailClickBaseSql() {
   `;
 }
 
-async function getEmailClickReport(filter: ReportFilter) {
+export async function getEmailClickReport(filter: ReportFilter) {
   const range = getPeriodRange(filter.periodo);
   const connection = await getConnection();
 

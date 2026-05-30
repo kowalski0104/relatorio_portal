@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { getLiveClients } from '../db/prismaClients';
 import type { BaseQuery } from '../routes/schemas';
 import { addSqlParam, buildSqlInFilter, getPeriodRange, NEGOTIATORS } from '../utils/reportFilters';
-import { cacheKey, getCached } from '../utils/cache';
+import { CACHE_TTL, cacheKey, getCached } from '../utils/cache';
 
 type PaymentSummaryRow = {
   total_recuperado: number | string | null;
@@ -177,7 +177,7 @@ async function buildResultSummary(filter: BaseQuery) {
 }
 
 export async function getDashboardResultSummary(filter: BaseQuery) {
-  return getCached(cacheKey('dashboard-result-summary', filter), 2 * 60 * 1000, async () => {
+  return getCached(cacheKey('dashboard-result-summary', filter), CACHE_TTL.RESULTS, async () => {
     const periodoAnterior = previousPeriod(filter.periodo);
     const [atual, anterior] = await Promise.all([
       buildResultSummary(filter),

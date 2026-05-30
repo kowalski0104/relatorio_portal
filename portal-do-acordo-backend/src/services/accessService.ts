@@ -15,6 +15,39 @@ type AcessoRow = {
 async function queryAccesses(prisma: PrismaClient, empresaId: number, filter: ReportFilter) {
   const periodo = getPeriodRange(filter.periodo);
   const params: unknown[] = [empresaId, periodo.start, periodo.end];
+  const hasCreditorFilter = (filter.credores ?? []).some((credor) => credor.trim());
+
+  if (!hasCreditorFilter) {
+    const query = `
+      SELECT
+          a.id, a.idempresa, a.data_cad::date AS data,
+          CASE
+            WHEN TRIM(COALESCE(a.hora_cad, '')) ~ '^[0-9]{1,2}'
+            THEN LEAST(SUBSTRING(TRIM(a.hora_cad) FROM '^[0-9]{1,2}')::int, 23)
+            ELSE 0
+          END AS hora,
+          TRIM(COALESCE(c.grupo, 'OUTROS')) AS credor,
+          a.processo,
+          CASE
+              WHEN ac_status.id IS NOT NULL THEN 'COM ACORDO'
+              ELSE 'SEM ACORDO'
+          END AS situacao
+      FROM tb_portal_neg_acessos a
+      LEFT JOIN tb_acordo ac_credor ON ac_credor.id = a.idacordo
+          AND ac_credor.idempresa = a.idempresa
+      LEFT JOIN tb_credor c ON c.id = ac_credor.idcredor
+      LEFT JOIN tb_acordo ac_status ON ac_status.processo = a.processo
+          AND ac_status.idempresa = a.idempresa
+          AND ac_status.status = 'ANDAMENTO'
+      WHERE a.idempresa = $1
+        AND a.data_cad >= $2
+        AND a.data_cad < $3
+      ORDER BY a.data_cad DESC
+    `;
+
+    return prisma.$queryRawUnsafe<AcessoRow[]>(query, ...params);
+  }
+
   const negociadores = NEGOTIATORS.map((negociador) => addSqlParam(params, negociador)).join(', ');
   const credorFilter = buildSqlInFilter("TRIM(COALESCE(b.credor, 'OUTROS'))", filter.credores, params);
 
