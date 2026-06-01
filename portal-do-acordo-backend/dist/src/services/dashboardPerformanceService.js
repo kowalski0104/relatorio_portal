@@ -46,7 +46,8 @@ function accessCreditorSubquery(params, filter, startParam = '$2', endParam = '$
            TRIM(COALESCE(tb_baixas.negociador, 'SEM NEGOCIADOR')) AS negociador
     FROM tb_baixas
     LEFT JOIN tb_credor ON tb_credor.id = tb_baixas.idcredor
-    WHERE tb_baixas.totalpago > 0
+    WHERE tb_baixas.idempresa = $1
+      AND tb_baixas.totalpago > 0
       AND tb_baixas.databaixa >= ${startParam}
       AND tb_baixas.databaixa < ${endParam}
       AND tb_baixas.negociador IN (${negociadores})
@@ -185,6 +186,23 @@ async function queryAgreementsByNegotiator(prisma, empresaId, filter) {
 async function queryAccessesByNegotiator(prisma, empresaId, filter) {
     const range = (0, reportFilters_1.getPeriodRange)(filter.periodo);
     const params = [empresaId, range.start, range.end];
+    const hasCreditorFilter = filter.credores.length > 0;
+    if (!hasCreditorFilter) {
+        const negociadores = buildNegotiatorList(params, filter);
+        return prisma.$queryRawUnsafe(`
+        SELECT
+          TRIM(COALESCE(ac_credor.negociador, 'SEM NEGOCIADOR')) AS negociador,
+          COUNT(*)::bigint AS acessos
+        FROM tb_portal_neg_acessos a
+        LEFT JOIN tb_acordo ac_credor ON ac_credor.id = a.idacordo
+          AND ac_credor.idempresa = a.idempresa
+        WHERE a.idempresa = $1
+          AND a.data_cad >= $2
+          AND a.data_cad < $3
+          AND ac_credor.negociador IN (${negociadores})
+        GROUP BY TRIM(COALESCE(ac_credor.negociador, 'SEM NEGOCIADOR'))
+      `, ...params);
+    }
     const baixaSubquery = accessCreditorSubquery(params, filter);
     const credorFilter = buildCredorFilter(params, filter, "TRIM(COALESCE(b.credor, 'OUTROS'))");
     const negociadorFilter = filter.negociador ? 'AND b.negociador IS NOT NULL' : '';
@@ -588,6 +606,6 @@ async function getDashboardPerformanceSummary(filter) {
     return (0, cache_1.getCached)((0, cache_1.cacheKey)('dashboard-performance-summary', filter), cache_1.CACHE_TTL.PERFORMANCE, () => buildPerformance(filter));
 }
 async function getDashboardPerformanceGraphs(filter) {
-    return (0, cache_1.getCached)((0, cache_1.cacheKey)('dashboard-performance-graphs', filter), cache_1.CACHE_TTL.PERFORMANCE, () => buildPerformance(filter));
+    return getDashboardPerformanceSummary(filter);
 }
 //# sourceMappingURL=dashboardPerformanceService.js.map

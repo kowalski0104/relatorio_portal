@@ -40,6 +40,27 @@ const EMPTY_BASE_SUMMARY_REPORT: BaseSummaryReport = {
   entrada_por_credor: [],
   aging: [],
 };
+const DASHBOARD_RESPONSE_CACHE_TTL_MS = 10 * 60 * 1000;
+const dashboardResponseCache = new Map<string, { data: unknown; expiresAt: number }>();
+
+function responseCacheKey(prefix: string, period: string, system: SystemFilter, selectedCreditors: Set<string>) {
+  return `${prefix}:${period}:${system}:${Array.from(selectedCreditors).sort().join('|')}`;
+}
+
+function getCachedResponse<T>(key: string) {
+  const cached = dashboardResponseCache.get(key);
+  if (!cached) return undefined;
+  if (cached.expiresAt <= Date.now()) {
+    dashboardResponseCache.delete(key);
+    return undefined;
+  }
+
+  return cached.data as T;
+}
+
+function setCachedResponse<T>(key: string, data: T) {
+  dashboardResponseCache.set(key, { data, expiresAt: Date.now() + DASHBOARD_RESPONSE_CACHE_TTL_MS });
+}
 
 export function useDashboardData(selectedPeriods: Set<string>, system: SystemFilter, enabled: boolean, includePreviousPeriod = true) {
   const [cache, setCache] = useState<Record<string, DashboardData>>({});
@@ -86,7 +107,10 @@ export function useDashboardData(selectedPeriods: Set<string>, system: SystemFil
     }
 
     const missingPeriods = requestedPeriods.filter((item) => !cache[item]);
-    if (missingPeriods.length === 0) return undefined;
+    if (missingPeriods.length === 0) {
+      setLoading(false);
+      return undefined;
+    }
 
     const controller = new AbortController();
     let active = true;
@@ -131,6 +155,7 @@ export function useDashboardData(selectedPeriods: Set<string>, system: SystemFil
 type SupplementalOptions = {
   costs?: boolean;
   communication?: boolean;
+  communicationDaily?: boolean;
   emailClicks?: boolean;
 };
 
@@ -138,42 +163,87 @@ export function useDashboardSupplementalData(period: string, system: SystemFilte
   const [costs, setCosts] = useState<CostsData | null>(null);
   const [communication, setCommunication] = useState<CommunicationData | null>(null);
   const [emailClicks, setEmailClicks] = useState<EmailClickData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const costsEnabled = options.costs ?? true;
   const communicationEnabled = options.communication ?? true;
+  const communicationDailyEnabled = options.communicationDaily ?? false;
   const emailClicksEnabled = options.emailClicks ?? true;
 
   useEffect(() => {
     const hasEnabledRequest = costsEnabled || communicationEnabled || emailClicksEnabled;
-    if (!hasEnabledRequest) return;
-    if (!period) return;
+    if (!hasEnabledRequest || !period) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     if (isDemoMode()) {
       if (costsEnabled) setCosts(getDemoCosts(period, system));
       if (communicationEnabled) setCommunication(getDemoCommunication(period, system, selectedCreditors));
       if (emailClicksEnabled) setEmailClicks(null);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    const costsKey = responseCacheKey('costs', period, system, new Set());
+    const communicationKey = `${responseCacheKey('communication', period, system, selectedCreditors)}:diario:${communicationDailyEnabled}`;
+    const emailClicksKey = responseCacheKey('email-clicks', period, system, selectedCreditors);
+    const cachedCosts = costsEnabled ? getCachedResponse<CostsData>(costsKey) : undefined;
+    const cachedCommunication = communicationEnabled ? getCachedResponse<CommunicationData>(communicationKey) : undefined;
+    const cachedEmailClicks = emailClicksEnabled ? getCachedResponse<EmailClickData>(emailClicksKey) : undefined;
+    const loadCosts = costsEnabled && !cachedCosts;
+    const loadCommunication = communicationEnabled && !cachedCommunication;
+    const loadEmailClicks = emailClicksEnabled && !cachedEmailClicks;
+
+    if (cachedCosts) setCosts(cachedCosts);
+    if (cachedCommunication) setCommunication(cachedCommunication);
+    if (cachedEmailClicks) setEmailClicks(cachedEmailClicks);
+    if (!loadCosts && !loadCommunication && !loadEmailClicks) {
+      setLoading(false);
+      setRefreshing(false);
       return;
     }
 
     let active = true;
     const controller = new AbortController();
+    const hasVisibleData =
+      (!costsEnabled || Boolean(cachedCosts ?? costs)) &&
+      (!communicationEnabled || Boolean(cachedCommunication ?? communication)) &&
+      (!emailClicksEnabled || Boolean(cachedEmailClicks ?? emailClicks));
+    setLoading(!hasVisibleData);
+    setRefreshing(hasVisibleData);
+    const preserveOnError = <T,>(request: Promise<T | null>, previous: T | null) =>
+      request.then((data) => ({ data, fresh: true })).catch(() => ({ data: previous, fresh: false }));
+    const preserveCurrent = <T,>(data: T | null) => Promise.resolve({ data, fresh: false });
+
     Promise.all([
-      costsEnabled ? fetchCosts(period, system, controller.signal).catch(() => null) : Promise.resolve(costs),
-      communicationEnabled ? fetchCommunication(period, system, selectedCreditors, controller.signal).catch(() => null) : Promise.resolve(communication),
-      emailClicksEnabled ? fetchEmailClicks(period, system, selectedCreditors, controller.signal).catch(() => null) : Promise.resolve(emailClicks),
+      loadCosts ? preserveOnError(fetchCosts(period, system, controller.signal), costs) : preserveCurrent(cachedCosts ?? costs),
+      loadCommunication ? preserveOnError(fetchCommunication(period, system, selectedCreditors, controller.signal, communicationDailyEnabled), communication) : preserveCurrent(cachedCommunication ?? communication),
+      loadEmailClicks ? preserveOnError(fetchEmailClicks(period, system, selectedCreditors, controller.signal), emailClicks) : preserveCurrent(cachedEmailClicks ?? emailClicks),
     ])
       .then(([costsResult, communicationResult, emailClicksResult]) => {
         if (!active) return;
-        if (costsEnabled) setCosts(costsResult);
-        if (communicationEnabled) setCommunication(communicationResult);
-        if (emailClicksEnabled) setEmailClicks(emailClicksResult);
+        if (costsResult.fresh && costsResult.data) setCachedResponse(costsKey, costsResult.data);
+        if (communicationResult.fresh && communicationResult.data) setCachedResponse(communicationKey, communicationResult.data);
+        if (emailClicksResult.fresh && emailClicksResult.data) setCachedResponse(emailClicksKey, emailClicksResult.data);
+        if (costsEnabled) setCosts(costsResult.data);
+        if (communicationEnabled) setCommunication(communicationResult.data);
+        if (emailClicksEnabled) setEmailClicks(emailClicksResult.data);
       })
+      .finally(() => {
+        if (!active) return;
+        setLoading(false);
+        setRefreshing(false);
+      });
 
     return () => {
       active = false;
       controller.abort();
     };
-  }, [communicationEnabled, costsEnabled, emailClicksEnabled, period, selectedCreditors, system]);
+  }, [communicationDailyEnabled, communicationEnabled, costsEnabled, emailClicksEnabled, period, selectedCreditors, system]);
 
-  return { costs, communication, emailClicks };
+  return { costs, communication, emailClicks, loading, refreshing };
 }
 
 export function useCreditorsData(period: string, system: SystemFilter) {
@@ -207,7 +277,15 @@ export function useDashboardResultSummary(period: string, system: SystemFilter, 
 
   useEffect(() => {
     if (!enabled || !period || isDemoMode()) {
-      setData(null);
+      setLoading(false);
+      setError('');
+      return undefined;
+    }
+
+    const cacheKey = responseCacheKey('dashboard-result-summary', period, system, selectedCreditors);
+    const cached = getCachedResponse<DashboardResultSummary>(cacheKey);
+    if (cached) {
+      setData(cached);
       setLoading(false);
       setError('');
       return undefined;
@@ -222,6 +300,7 @@ export function useDashboardResultSummary(period: string, system: SystemFilter, 
     fetchDashboardResultSummary(period, system, selectedCreditors, controller.signal)
       .then((result) => {
         if (!active) return;
+        if (result) setCachedResponse(cacheKey, result);
         setData(result);
       })
       .catch((err) => {
@@ -249,7 +328,15 @@ export function useDashboardResultGraphs(period: string, system: SystemFilter, s
 
   useEffect(() => {
     if (!enabled || !period || isDemoMode()) {
-      setData(null);
+      setLoading(false);
+      setError('');
+      return undefined;
+    }
+
+    const cacheKey = responseCacheKey('dashboard-result-graphs', period, system, selectedCreditors);
+    const cached = getCachedResponse<DashboardResultGraphs>(cacheKey);
+    if (cached) {
+      setData(cached);
       setLoading(false);
       setError('');
       return undefined;
@@ -264,6 +351,7 @@ export function useDashboardResultGraphs(period: string, system: SystemFilter, s
     fetchDashboardResultGraphs(period, system, selectedCreditors, controller.signal)
       .then((result) => {
         if (!active) return;
+        if (result) setCachedResponse(cacheKey, result);
         setData(result);
       })
       .catch((err) => {
@@ -291,7 +379,15 @@ export function useDashboardPerformanceSummary(period: string, system: SystemFil
 
   useEffect(() => {
     if (!enabled || !period || isDemoMode()) {
-      setData(null);
+      setLoading(false);
+      setError('');
+      return undefined;
+    }
+
+    const cacheKey = responseCacheKey('dashboard-performance-summary', period, system, selectedCreditors);
+    const cached = getCachedResponse<DashboardPerformanceSummary>(cacheKey);
+    if (cached) {
+      setData(cached);
       setLoading(false);
       setError('');
       return undefined;
@@ -306,6 +402,7 @@ export function useDashboardPerformanceSummary(period: string, system: SystemFil
     fetchDashboardPerformanceSummary(period, system, selectedCreditors, controller.signal)
       .then((result) => {
         if (!active) return;
+        if (result) setCachedResponse(cacheKey, result);
         setData(result);
       })
       .catch((err) => {
@@ -450,6 +547,15 @@ export function useBaseSummaryData(system: SystemFilter, selectedPeriods: Set<st
       return;
     }
 
+    const cacheKey = `${responseCacheKey('base-summary', '', system, selectedCreditors)}:periodos:${Array.from(selectedPeriods).sort().join('|')}`;
+    const cached = getCachedResponse<BaseSummaryReport>(cacheKey);
+    if (cached) {
+      setData(cached);
+      setError('');
+      setLoading(false);
+      return;
+    }
+
     let active = true;
     const controller = new AbortController();
     setLoading(true);
@@ -457,12 +563,13 @@ export function useBaseSummaryData(system: SystemFilter, selectedPeriods: Set<st
     fetchBaseSummary(system, selectedPeriods, selectedCreditors, controller.signal)
       .then((result) => {
         if (!active) return;
-        setData(result ?? EMPTY_BASE_SUMMARY_REPORT);
+        const nextData = result ?? EMPTY_BASE_SUMMARY_REPORT;
+        setCachedResponse(cacheKey, nextData);
+        setData(nextData);
         setError('');
       })
       .catch((err) => {
         if (!active) return;
-        setData(EMPTY_BASE_SUMMARY_REPORT);
         setError(err instanceof Error ? err.message : 'Erro ao carregar resumo das bases.');
       })
       .finally(() => {

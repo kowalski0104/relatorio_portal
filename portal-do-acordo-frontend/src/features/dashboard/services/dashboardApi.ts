@@ -75,15 +75,6 @@ export async function fetchDashboardPerformanceSummary(periodo: string, sistema:
   return payload.data ?? null;
 }
 
-export async function fetchDashboardPerformanceGraphs(periodo: string, sistema: SystemFilter, credores: Set<string>, signal?: AbortSignal): Promise<DashboardPerformanceSummary | null> {
-  const params = new URLSearchParams({ periodo, sistema });
-  if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
-  const response = await fetch(apiUrl(`/api/dashboard/performance/graficos?${params.toString()}`), { signal });
-  if (!response.ok) return null;
-  const payload = await response.json();
-  return payload.data ?? null;
-}
-
 export async function fetchCosts(periodo: string, sistema: SystemFilter, signal?: AbortSignal): Promise<CostsData | null> {
   const params = new URLSearchParams({ periodo, sistema });
   const response = await fetch(apiUrl(`/api/custos?${params.toString()}`), { signal });
@@ -92,9 +83,10 @@ export async function fetchCosts(periodo: string, sistema: SystemFilter, signal?
   return payload.data ?? null;
 }
 
-export async function fetchCommunication(periodo: string, sistema: SystemFilter, credores: Set<string>, signal?: AbortSignal): Promise<CommunicationData | null> {
+export async function fetchCommunication(periodo: string, sistema: SystemFilter, credores: Set<string>, signal?: AbortSignal, includeDaily = false): Promise<CommunicationData | null> {
   const params = new URLSearchParams({ periodo, sistema });
   if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
+  params.set('diario', includeDaily ? '1' : '0');
   const response = await fetch(apiUrl(`/api/comunicacao?${params.toString()}`), { signal });
   if (!response.ok) return null;
   const payload = await response.json();

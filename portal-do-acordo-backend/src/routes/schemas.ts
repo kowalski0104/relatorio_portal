@@ -18,6 +18,10 @@ export const custosQuerySchema = z.object({
   sistema: z.enum(['consulth', 'sisth', 'total']).optional().default('total'),
 });
 
+export const communicationQuerySchema = baseQuerySchema.extend({
+  diario: z.enum(['0', '1']).optional().transform((value) => value !== '0'),
+});
+
 export const activeBaseQuerySchema = baseQuerySchema;
 export const dashboardResultGraphsQuerySchema = baseQuerySchema.extend({
   credor: z.string().optional(),

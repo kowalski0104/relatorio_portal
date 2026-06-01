@@ -1,6 +1,5 @@
 export type SystemFilter = 'consulth' | 'sisth' | 'total';
 export type DashboardTab = 'relatorio' | 'custos' | 'performance' | 'carteiras' | 'base-ativa';
-export type ThemeMode = 'sisth' | 'night';
 
 export type ActiveUsersReport = {
   generated_at: string;

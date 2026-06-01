@@ -1,9 +1,10 @@
-﻿import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { getLiveClients } from '../db/prismaClients';
 import { addSqlParam, formatMonthLabel, getLastThreeMonths, NEGOTIATORS, SystemFilter } from '../utils/reportFilters';
+import { CACHE_TTL, cacheKey, getCached } from '../utils/cache';
 
 type BaixaCustoRow = {
-  data: Date | string;
+  mes: Date | string;
   capital_pago: number | string;
   juros_pago: number | string;
   multa_pago: number | string;
@@ -12,7 +13,8 @@ type BaixaCustoRow = {
 };
 
 type AcordoCustoRow = {
-  data: Date | string;
+  mes: Date | string;
+  acordos: number | string;
 };
 
 function toMonthKey(value: Date | string) {
@@ -31,12 +33,12 @@ async function queryCosts(prisma: PrismaClient, empresaId: number, start: Date, 
 
   const baixasQuery = `
     SELECT
-      b.databaixa::date AS data,
-      COALESCE(b.capitalpago, 0) AS capital_pago,
-      COALESCE(b.jurospago, 0) AS juros_pago,
-      COALESCE(b.multapago, 0) AS multa_pago,
-      COALESCE(b.honorariospago, 0) AS honorarios_pago_portal,
-      COALESCE(b.totalpago, 0) AS total_pago_portal
+      date_trunc('month', b.databaixa)::date AS mes,
+      SUM(COALESCE(b.capitalpago, 0)) AS capital_pago,
+      SUM(COALESCE(b.jurospago, 0)) AS juros_pago,
+      SUM(COALESCE(b.multapago, 0)) AS multa_pago,
+      SUM(COALESCE(b.honorariospago, 0)) AS honorarios_pago_portal,
+      SUM(COALESCE(b.totalpago, 0)) AS total_pago_portal
     FROM tb_baixas b
     LEFT JOIN tb_credor c ON c.id = b.idcredor
     WHERE b.idempresa = $1
@@ -46,10 +48,12 @@ async function queryCosts(prisma: PrismaClient, empresaId: number, start: Date, 
       AND b.totalpago > 0
       AND b.idcredor IS NOT NULL
       AND TRIM(COALESCE(c.grupo, '')) != ''
+    GROUP BY 1
   `;
 
   const acordosQuery = `
-    SELECT ac.data_acordo::date AS data
+    SELECT date_trunc('month', ac.data_acordo)::date AS mes,
+           COUNT(*)::bigint AS acordos
     FROM tb_acordo ac
     LEFT JOIN tb_credor c ON c.id = ac.idcredor
     WHERE ac.idempresa = $1
@@ -60,6 +64,7 @@ async function queryCosts(prisma: PrismaClient, empresaId: number, start: Date, 
       AND ac.status = 'ANDAMENTO'
       AND ac.idcredor IS NOT NULL
       AND TRIM(COALESCE(c.grupo, '')) != ''
+    GROUP BY 1
   `;
 
   const baixas = await prisma.$queryRawUnsafe<BaixaCustoRow[]>(baixasQuery, ...baixaParams);
@@ -68,7 +73,7 @@ async function queryCosts(prisma: PrismaClient, empresaId: number, start: Date, 
   return { baixas, acordos };
 }
 
-export async function getCosts(filter: { periodo?: string; sistema?: SystemFilter }) {
+async function buildCosts(filter: { periodo?: string; sistema?: SystemFilter }) {
   const months = getLastThreeMonths(filter.periodo);
   const firstRange = months[0];
   const lastRange = months[months.length - 1];
@@ -91,13 +96,13 @@ export async function getCosts(filter: { periodo?: string; sistema?: SystemFilte
   });
 
   baixas.forEach((row) => {
-    const key = toMonthKey(row.data);
+    const key = toMonthKey(row.mes);
     if (receitaByMonth.has(key)) receitaByMonth.set(key, receitaByMonth.get(key)! + Number(row.total_pago_portal));
   });
 
   acordos.forEach((row) => {
-    const key = toMonthKey(row.data);
-    if (acordosByMonth.has(key)) acordosByMonth.set(key, acordosByMonth.get(key)! + 1);
+    const key = toMonthKey(row.mes);
+    if (acordosByMonth.has(key)) acordosByMonth.set(key, acordosByMonth.get(key)! + Number(row.acordos));
   });
 
   const values = months.map((month) => ({
@@ -114,7 +119,7 @@ export async function getCosts(filter: { periodo?: string; sistema?: SystemFilte
   const custoPorAcordo = latest.acordos > 0 ? totalAtual / latest.acordos : 0;
 
   const latestPeriod = months[months.length - 1];
-  const latestBaixas = baixas.filter((row) => toMonthKey(row.data) === latestPeriod);
+  const latestBaixas = baixas.filter((row) => toMonthKey(row.mes) === latestPeriod);
   const categories = [
     {
       name: 'Capital',
@@ -149,5 +154,6 @@ export async function getCosts(filter: { periodo?: string; sistema?: SystemFilte
   };
 }
 
-
-
+export async function getCosts(filter: { periodo?: string; sistema?: SystemFilter }) {
+  return getCached(cacheKey('costs', filter), CACHE_TTL.COSTS, () => buildCosts(filter));
+}

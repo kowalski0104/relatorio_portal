@@ -8,6 +8,7 @@ const cacheStore = new Map();
 exports.CACHE_TTL = {
     RESULTS: 10 * 60 * 1000,
     PERFORMANCE: 10 * 60 * 1000,
+    COSTS: 10 * 60 * 1000,
     COMMUNICATION: 15 * 60 * 1000,
     BASES: 10 * 60 * 1000,
     PERIODS: 30 * 60 * 1000,

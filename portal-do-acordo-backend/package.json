@@ -11,7 +11,12 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
-    "dev:lan": "tsx watch src/index.ts"
+    "dev:lan": "tsx watch src/index.ts",
+    "benchmark:queries": "node --env-file=.env --import tsx scripts/benchmarkQueries.ts",
+    "benchmark:queries:postgres": "node --env-file=.env --import tsx scripts/benchmarkQueries.ts --block=postgresql-principal",
+    "benchmark:queries:communication": "node --env-file=.env --import tsx scripts/benchmarkQueries.ts --block=comunicacao-postgresql",
+    "benchmark:queries:azure": "node --env-file=.env --import tsx scripts/benchmarkQueries.ts --block=azure-sql-cliques",
+    "validate:costs": "node --env-file=.env --import tsx scripts/validateCostsAggregation.ts"
   },
   "engines": {
     "node": ">=20 <25"

@@ -72,7 +72,8 @@ async function queryAccessSummary(prisma, empresaId, filter) {
                TRIM(COALESCE(tb_credor.grupo, 'OUTROS')) AS credor
         FROM tb_baixas
         LEFT JOIN tb_credor ON tb_credor.id = tb_baixas.idcredor
-        WHERE tb_baixas.totalpago > 0
+        WHERE tb_baixas.idempresa = $1
+          AND tb_baixas.totalpago > 0
           AND tb_baixas.databaixa >= $2
           AND tb_baixas.databaixa < $3
           AND tb_baixas.negociador IN (${negociadores})

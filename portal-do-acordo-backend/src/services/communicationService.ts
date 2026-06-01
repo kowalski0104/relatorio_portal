@@ -69,16 +69,57 @@ type ComunicacaoResult = {
   diario: Array<{ data: string; qtde_emails: number; mensagens_wati: number }>;
 };
 
+type CommunicationFilter = ReportFilter & {
+  diario?: boolean;
+};
+
 const comunicacaoCache = new Map<string, { expiresAt: number; data: ComunicacaoResult }>();
 const comunicacaoPending = new Map<string, Promise<ComunicacaoResult>>();
+const emailQueryCache = new Map<string, { expiresAt: number; data: unknown }>();
+const emailQueryPending = new Map<string, Promise<unknown>>();
 
-function getCommunicationCacheKey(filter: ReportFilter) {
-  const credores = [...(filter.credores ?? [])].map((item) => item.trim()).filter(Boolean).sort();
+function normalizedCredores(filter: ReportFilter) {
+  return [...(filter.credores ?? [])].map((item) => item.trim()).filter(Boolean).sort();
+}
+
+function getCommunicationCacheKey(filter: CommunicationFilter) {
+  const diario = filter.diario !== false;
   return JSON.stringify({
     periodo: filter.periodo ?? '',
     sistema: filter.sistema ?? 'total',
-    credores,
+    credores: normalizedCredores(filter),
+    diario,
   });
+}
+
+function getEmailQueryCacheKey(scope: 'credor' | 'mensal' | 'diario', filter: ReportFilter) {
+  const periodo = scope === 'mensal' ? (filter.periodo ?? '').slice(0, 4) : filter.periodo ?? '';
+  return JSON.stringify({
+    scope,
+    periodo,
+    sistema: filter.sistema ?? 'total',
+    credores: normalizedCredores(filter),
+  });
+}
+
+function getCachedEmailQuery<T>(key: string, producer: () => Promise<T>) {
+  const cached = emailQueryCache.get(key) as { expiresAt: number; data: T } | undefined;
+  if (cached && cached.expiresAt > Date.now()) return Promise.resolve(cached.data);
+
+  const pending = emailQueryPending.get(key) as Promise<T> | undefined;
+  if (pending) return pending;
+
+  const request = producer()
+    .then((data) => {
+      emailQueryCache.set(key, { data, expiresAt: Date.now() + COMUNICACAO_CACHE_TTL_MS });
+      return data;
+    })
+    .finally(() => {
+      emailQueryPending.delete(key);
+    });
+
+  emailQueryPending.set(key, request);
+  return request;
 }
 
 function emptyStore(): WatiStore {
@@ -209,9 +250,9 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && 'code' in error;
 }
 
-async function queryEnvios(prisma: PrismaClient, filter: ReportFilter) {
+async function queryEnvios(prisma: PrismaClient, empresaId: number, filter: ReportFilter) {
   const periodo = getPeriodRange(filter.periodo);
-  const params: unknown[] = [periodo.start, periodo.end];
+  const params: unknown[] = [empresaId, periodo.start, periodo.end];
   const credorExpr = "COALESCE(NULLIF(TRIM(c.grupo), ''), TRIM(c.razaosocial), 'OUTROS')";
   const credorFilter = buildSqlInFilter(credorExpr, filter.credores, params);
 
@@ -222,9 +263,10 @@ async function queryEnvios(prisma: PrismaClient, filter: ReportFilter) {
              COUNT(*)::bigint AS qtde_emails
       FROM tb_emails_enviados e
       LEFT JOIN tb_credor c ON c.id = e.idcredor
-      WHERE COALESCE(NULLIF(TRIM(c.grupo), ''), NULLIF(TRIM(c.razaosocial), '')) IS NOT NULL
-        AND e.data >= $1
-        AND e.data < $2
+      WHERE e.idempresa = $1
+        AND COALESCE(NULLIF(TRIM(c.grupo), ''), NULLIF(TRIM(c.razaosocial), '')) IS NOT NULL
+        AND e.data >= $2
+        AND e.data < $3
         AND COALESCE(c.razaosocial, '') NOT ILIKE '%MODELO%'
         AND COALESCE(c.razaosocial, '') NOT ILIKE '%SISTH%'
         AND COALESCE(c.razaosocial, '') NOT ILIKE '%CONNECTH%'
@@ -236,9 +278,9 @@ async function queryEnvios(prisma: PrismaClient, filter: ReportFilter) {
   );
 }
 
-async function queryEnviosMensais(prisma: PrismaClient, filter: ReportFilter) {
+async function queryEnviosMensais(prisma: PrismaClient, empresaId: number, filter: ReportFilter) {
   const range = getLivePeriodYearRange(filter.periodo);
-  const params: unknown[] = [range.start, range.end];
+  const params: unknown[] = [empresaId, range.start, range.end];
   const credorExpr = "COALESCE(NULLIF(TRIM(c.grupo), ''), TRIM(c.razaosocial), 'OUTROS')";
   const credorFilterEmails = buildSqlInFilter(credorExpr, filter.credores, params);
 
@@ -248,7 +290,8 @@ async function queryEnviosMensais(prisma: PrismaClient, filter: ReportFilter) {
              COUNT(*)::bigint AS qtde_emails
       FROM tb_emails_enviados e
       LEFT JOIN tb_credor c ON c.id = e.idcredor
-      WHERE e.data >= $1 AND e.data < $2
+      WHERE e.idempresa = $1
+        AND e.data >= $2 AND e.data < $3
         ${credorFilterEmails}
       GROUP BY 1
       ORDER BY mes
@@ -257,9 +300,9 @@ async function queryEnviosMensais(prisma: PrismaClient, filter: ReportFilter) {
   );
 }
 
-async function queryEnviosDiarios(prisma: PrismaClient, filter: ReportFilter) {
-  const range = getLivePeriodYearRange(filter.periodo);
-  const params: unknown[] = [range.start, range.end];
+async function queryEnviosDiarios(prisma: PrismaClient, empresaId: number, filter: ReportFilter) {
+  const range = getPeriodRange(filter.periodo);
+  const params: unknown[] = [empresaId, range.start, range.end];
   const credorExpr = "COALESCE(NULLIF(TRIM(c.grupo), ''), TRIM(c.razaosocial), 'OUTROS')";
   const credorFilterEmails = buildSqlInFilter(credorExpr, filter.credores, params);
 
@@ -269,7 +312,8 @@ async function queryEnviosDiarios(prisma: PrismaClient, filter: ReportFilter) {
              COUNT(*)::bigint AS qtde_emails
       FROM tb_emails_enviados e
       LEFT JOIN tb_credor c ON c.id = e.idcredor
-      WHERE e.data >= $1 AND e.data < $2
+      WHERE e.idempresa = $1
+        AND e.data >= $2 AND e.data < $3
         ${credorFilterEmails}
       GROUP BY 1
       ORDER BY data
@@ -278,12 +322,21 @@ async function queryEnviosDiarios(prisma: PrismaClient, filter: ReportFilter) {
   );
 }
 
-async function getCommunicationUncached(filter: ReportFilter): Promise<ComunicacaoResult> {
+async function getCommunicationUncached(filter: CommunicationFilter): Promise<ComunicacaoResult> {
   const clients = getLiveClients(filter.sistema);
+  const includeDaily = filter.diario !== false;
   const [enviosResults, enviosMensaisResults, enviosDiariosResults, store] = await Promise.all([
-    Promise.all(clients.map(({ query }) => query((prisma) => queryEnvios(prisma, filter)))),
-    Promise.all(clients.map(({ query }) => query((prisma) => queryEnviosMensais(prisma, filter)))),
-    Promise.all(clients.map(({ query }) => query((prisma) => queryEnviosDiarios(prisma, filter)))),
+    getCachedEmailQuery(getEmailQueryCacheKey('credor', filter), () =>
+      Promise.all(clients.map(({ empresaId, query }) => query((prisma) => queryEnvios(prisma, empresaId, filter))))
+    ),
+    getCachedEmailQuery(getEmailQueryCacheKey('mensal', filter), () =>
+      Promise.all(clients.map(({ empresaId, query }) => query((prisma) => queryEnviosMensais(prisma, empresaId, filter))))
+    ),
+    includeDaily
+      ? getCachedEmailQuery(getEmailQueryCacheKey('diario', filter), () =>
+          Promise.all(clients.map(({ empresaId, query }) => query((prisma) => queryEnviosDiarios(prisma, empresaId, filter))))
+        )
+      : Promise.resolve([] as EnvioDiarioRow[][]),
     readStore(),
   ]);
 
@@ -326,10 +379,12 @@ async function getCommunicationUncached(filter: ReportFilter): Promise<Comunicac
     diario.set(key, current);
   }
 
-  for (const day of store.dias) {
-    const current = diario.get(day.data) ?? { data: day.data, qtde_emails: 0, mensagens_wati: 0 };
-    current.mensagens_wati += Number(day.mensagens ?? 0);
-    diario.set(day.data, current);
+  if (includeDaily) {
+    for (const day of store.dias) {
+      const current = diario.get(day.data) ?? { data: day.data, qtde_emails: 0, mensagens_wati: 0 };
+      current.mensagens_wati += Number(day.mensagens ?? 0);
+      diario.set(day.data, current);
+    }
   }
 
   const porCredorList = Array.from(porCredor.values()).sort((a, b) => b.qtde_emails + b.mensagens_wati - (a.qtde_emails + a.mensagens_wati));
@@ -349,7 +404,7 @@ async function getCommunicationUncached(filter: ReportFilter): Promise<Comunicac
   };
 }
 
-export async function getCommunication(filter: ReportFilter) {
+export async function getCommunication(filter: CommunicationFilter) {
   const key = getCommunicationCacheKey(filter);
   const cached = comunicacaoCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.data;

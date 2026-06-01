@@ -25,7 +25,7 @@ import { DEMO_WHATSAPP_CAMPAIGN_DATA, isDemoMode } from './data/demoDashboardDat
 import { WHATSAPP_CAMPAIGN_DATA, type WhatsappCampaignCredor } from './data/whatsappCampaigns';
 import { useBaseSummaryData, useCreditorsData, useDashboardData, useDashboardPerformanceSummary, useDashboardResultGraphs, useDashboardResultSummary, useDashboardSupplementalData, usePortfolioData } from './hooks/useDashboardData';
 import { fetchActiveUsers, sendPresenceHeartbeat } from './services/dashboardApi';
-import type { Access, ActiveUsersReport, Agreement, CostsData, DashboardTab, PortfolioEntry, SystemFilter, ThemeMode } from './types';
+import type { Access, ActiveUsersReport, Agreement, CostsData, DashboardTab, PortfolioEntry, SystemFilter } from './types';
 import { groupBy, isNoCreditorSelection, NO_CREDITOR_SELECTION, normalizeCreditorGroup } from './utils/creditors';
 import { businessDayIndexMap, businessDaysInPeriod, dayLabel, monthKey, periodLabel, periodRangeLabel, previousPeriod } from './utils/dates';
 import { countBusinessDaysWithData, filterDashboardData, matchesSystem, summarizeDashboardMetrics } from './utils/dashboardMetrics';
@@ -110,11 +110,6 @@ function DashboardPage() {
   const [activeUsersError, setActiveUsersError] = useState('');
   const demoMode = isDemoMode();
   const [system, setSystem] = useState<SystemFilter>(() => demoMode ? 'total' : 'consulth');
-  const [theme, setTheme] = useState<ThemeMode>(() => {
-    if (typeof window === 'undefined') return 'night';
-    const savedTheme = window.localStorage.getItem('portal-theme');
-    return savedTheme === 'sisth' ? 'sisth' : 'night';
-  });
   const [tab, setTab] = useState<DashboardTab>(getInitialTab);
   const [selectedCredores, setSelectedCredores] = useState<Set<string>>(new Set());
   const [selectedPeriods, setSelectedPeriods] = useState<Set<string>>(new Set());
@@ -126,8 +121,9 @@ function DashboardPage() {
   const [forceRawPreviousForResults, setForceRawPreviousForResults] = useState(false);
   const creditorFilterRef = useRef<HTMLDivElement>(null);
   const periodFilterRef = useRef<HTMLDivElement>(null);
-  const includePreviousRawPeriod = (tab !== 'relatorio' && !(tab === 'performance' && businessDayLimit === 'all')) || businessDayLimit !== 'all' || forceRawPreviousForResults;
-  const { data, loading, error, period, setPeriod, periods } = useDashboardData(selectedPeriods, system, tab !== 'base-ativa', includePreviousRawPeriod);
+  const includePreviousRawPeriod = (tab !== 'relatorio' && tab !== 'custos' && !(tab === 'performance' && businessDayLimit === 'all')) || businessDayLimit !== 'all' || forceRawPreviousForResults;
+  const rawDashboardEnabled = tab !== 'base-ativa' && tab !== 'custos';
+  const { data, loading, error, period, setPeriod, periods } = useDashboardData(selectedPeriods, system, rawDashboardEnabled, includePreviousRawPeriod);
   const effectivePeriods = useMemo(() => (selectedPeriods.size > 0 ? selectedPeriods : period ? new Set([period]) : new Set<string>()), [period, selectedPeriods]);
   const portfolioPeriods = effectivePeriods;
   const dateFilterIgnored = false;
@@ -151,18 +147,15 @@ function DashboardPage() {
     const date = series ? item.payload?.[`${series.key}_date`] : null;
     return date ? `${name} (${date})` : name;
   };
-  const { costs: custos, communication: comunicacao, emailClicks } = useDashboardSupplementalData(primaryPeriod, system, selectedCredores, {
+  const { costs: custos, communication: comunicacao, emailClicks, loading: supplementalLoading, refreshing: supplementalRefreshing } = useDashboardSupplementalData(primaryPeriod, system, selectedCredores, {
     costs: tab === 'performance' || tab === 'custos',
     communication: tab === 'performance' || tab === 'custos',
+    communicationDaily: businessDayLimit !== 'all',
     emailClicks: tab === 'performance',
   });
   const { baseSummary, baseSummaryLoading, baseSummaryError } = useBaseSummaryData(system, portfolioPeriods, selectedCredores, tab === 'base-ativa');
   const { portfolioData, portfolioLoading, portfolioError } = usePortfolioData(system, portfolioPeriods, selectedCredores, tab === 'carteiras');
   const creditorOptions = useCreditorsData(primaryPeriod, system);
-
-  useEffect(() => {
-    window.localStorage.setItem('portal-theme', theme);
-  }, [theme]);
 
   useEffect(() => {
     if (!adminToken) return undefined;
@@ -288,7 +281,7 @@ function DashboardPage() {
   const noCreditorSelected = isNoCreditorSelection(selectedCredores);
 
   const color = COLORS[system];
-  const chartAccent = theme === 'night' && color === COLORS.consulth ? COLORS.sky : color;
+  const chartAccent = color === COLORS.consulth ? COLORS.sky : color;
   const businessDays = useMemo(() => selectedPeriodList.reduce((sum, item) => sum + businessDaysInPeriod(item), 0), [selectedPeriodList]);
   const maxBusinessDaysInSelectedPeriods = useMemo(() => selectedPeriodList.reduce((max, item) => Math.max(max, businessDaysInPeriod(item)), 0), [selectedPeriodList]);
   const businessDayMap = useMemo(() => {
@@ -1175,7 +1168,7 @@ function DashboardPage() {
 
   if (adminToken) {
     return (
-      <div className={`dashboard-shell theme-${theme}`}>
+      <div className="dashboard-shell theme-night">
         <header className="hero admin-hero">
           <div className="hero-top">
             <div>
@@ -1253,7 +1246,7 @@ function DashboardPage() {
   }
 
   return (
-    <div className={`dashboard-shell theme-${theme} ${presentationMode ? 'presentation-mode' : ''}`}>
+    <div className={`dashboard-shell theme-night ${presentationMode ? 'presentation-mode' : ''}`}>
       {presentationMode ? (
         <div className="presentation-hud">
           <div>
@@ -1351,9 +1344,6 @@ function DashboardPage() {
               <option key={day} value={day}>{day} dias úteis</option>
             ))}
           </select>
-          <button type="button" className="control-btn" onClick={() => setTheme(theme === 'sisth' ? 'night' : 'sisth')}>
-            Tema {theme === 'sisth' ? 'Escuro' : 'Claro'}
-          </button>
           <button type="button" className="control-btn presentation-trigger" onClick={() => {
             setPresentationMode(true);
             setPresentationPaused(false);
@@ -1382,8 +1372,8 @@ function DashboardPage() {
         </div>
       ) : null}
 
-      {loading && tab !== 'base-ativa' ? <div className="loading-state" role="status" aria-live="polite">Carregando dados do portal...</div> : null}
-      {error && tab !== 'base-ativa' ? <div className="error-state" role="alert">{error}</div> : null}
+      {loading && rawDashboardEnabled ? <div className="loading-state" role="status" aria-live="polite">Carregando dados do portal...</div> : null}
+      {error && rawDashboardEnabled ? <div className="error-state" role="alert">{error}</div> : null}
 
       {!loading && !error && tab === 'relatorio' ? (
         <>
@@ -1590,7 +1580,7 @@ function DashboardPage() {
         </>
       ) : null}
 
-      {!loading && !error && tab === 'custos' ? (
+      {tab === 'custos' ? (
         <>
           <header className="hero">
             <div className="hero-top">
@@ -1616,6 +1606,8 @@ function DashboardPage() {
           </header>
 
           <main className="main-content costs-content">
+          {supplementalLoading ? <div className="loading-state">Carregando custos...</div> : null}
+          {!supplementalLoading && supplementalRefreshing ? <div className="loading-state">Atualizando custos...</div> : null}
 
           <Section num="01" title="Custos WhatsApp e E-mail">
             <Panel title="Detalhamento">

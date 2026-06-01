@@ -1,11 +1,11 @@
 ﻿import { Router } from 'express';
-import { baseQuerySchema } from './schemas';
+import { communicationQuerySchema } from './schemas';
 import { getCommunication, handleWhatsAppWebhook } from '../services/communicationService';
 
 const router = Router();
 
 router.get('/', async (req, res) => {
-  const parseResult = baseQuerySchema.safeParse(req.query);
+  const parseResult = communicationQuerySchema.safeParse(req.query);
   if (!parseResult.success) {
     return res.status(400).json({ error: 'Query inválida', issues: parseResult.error.format() });
   }

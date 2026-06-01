@@ -5,7 +5,7 @@ const schemas_1 = require("./schemas");
 const communicationService_1 = require("../services/communicationService");
 const router = (0, express_1.Router)();
 router.get('/', async (req, res) => {
-    const parseResult = schemas_1.baseQuerySchema.safeParse(req.query);
+    const parseResult = schemas_1.communicationQuerySchema.safeParse(req.query);
     if (!parseResult.success) {
         return res.status(400).json({ error: 'Query inválida', issues: parseResult.error.format() });
     }

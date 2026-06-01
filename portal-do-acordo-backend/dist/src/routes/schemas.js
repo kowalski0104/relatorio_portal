@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.baseSummaryQuerySchema = exports.portfolioQuerySchema = exports.dashboardResultGraphsQuerySchema = exports.activeBaseQuerySchema = exports.custosQuerySchema = exports.baseQuerySchema = void 0;
+exports.baseSummaryQuerySchema = exports.portfolioQuerySchema = exports.dashboardResultGraphsQuerySchema = exports.activeBaseQuerySchema = exports.communicationQuerySchema = exports.custosQuerySchema = exports.baseQuerySchema = void 0;
 const zod_1 = require("zod");
 exports.baseQuerySchema = zod_1.z.object({
     periodo: zod_1.z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'periodo deve ser YYYY-MM').optional(),
@@ -15,6 +15,9 @@ exports.baseQuerySchema = zod_1.z.object({
 exports.custosQuerySchema = zod_1.z.object({
     periodo: zod_1.z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'periodo deve ser YYYY-MM').optional(),
     sistema: zod_1.z.enum(['consulth', 'sisth', 'total']).optional().default('total'),
+});
+exports.communicationQuerySchema = exports.baseQuerySchema.extend({
+    diario: zod_1.z.enum(['0', '1']).optional().transform((value) => value !== '0'),
 });
 exports.activeBaseQuerySchema = exports.baseQuerySchema;
 exports.dashboardResultGraphsQuerySchema = exports.baseQuerySchema.extend({
