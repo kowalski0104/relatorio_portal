@@ -5,7 +5,7 @@ const prismaClients_1 = require("../db/prismaClients");
 const reportFilters_1 = require("../utils/reportFilters");
 const cache_1 = require("../utils/cache");
 const activeBaseService_1 = require("./activeBaseService");
-const VISIBLE_AGING_ORDER = ['0-90', '91-180', '181-360', '361+'];
+const VISIBLE_AGING_ORDER = ['0-90', '91-180', '181-360', '361+', 'SEM VENCIMENTO'];
 const AGING_LABELS = {
     '0-90': '0 a 90 dias',
     '91-180': '91 a 180 dias',
@@ -17,16 +17,6 @@ function selectedMonths(filter) {
     if (filter.periodos.length > 0)
         return [...filter.periodos];
     return filter.periodo ? [filter.periodo] : [];
-}
-function annualPortfolioFilter(filter) {
-    const years = Array.from(new Set(selectedMonths(filter).map((month) => month.slice(0, 4))));
-    if (years.length === 0)
-        return { ...filter, periodo: undefined, periodos: [] };
-    return {
-        ...filter,
-        periodo: undefined,
-        periodos: years.flatMap((year) => Array.from({ length: 12 }, (_, index) => `${year}-${String(index + 1).padStart(2, '0')}`)),
-    };
 }
 function monthRange(months, fallbackPeriod) {
     if (months.length === 0)
@@ -169,12 +159,10 @@ async function getBaseSummary(filter) {
     return (0, cache_1.getCached)((0, cache_1.cacheKey)('base-summary', filter), cache_1.CACHE_TTL.BASES, () => buildBaseSummary(filter));
 }
 async function buildBaseSummary(filter) {
-    const valuationFilter = annualPortfolioFilter(filter);
     const [activeBaseResult, liveResults] = await Promise.all([
         (0, activeBaseService_1.getActiveBase)(filter),
         Promise.all((0, prismaClients_1.getLiveClients)(filter.sistema).map(({ empresaId, query }) => query(async (prisma) => ({
             portfolio: await queryPortfolioSummary(prisma, empresaId, filter),
-            valuationPortfolio: await queryPortfolioSummary(prisma, empresaId, valuationFilter),
             payments: await queryPaymentSummary(prisma, empresaId, filter),
             agreements: await queryAgreementSummary(prisma, empresaId, filter),
         })))),
@@ -182,7 +170,6 @@ async function buildBaseSummary(filter) {
     const matchesCreditor = creditorFilter(filter);
     const activeBase = activeBaseResult.data;
     const portfolioRows = liveResults.flatMap((result) => result.portfolio).filter((row) => matchesCreditor(row.credor));
-    const valuationPortfolioRows = liveResults.flatMap((result) => result.valuationPortfolio).filter((row) => matchesCreditor(row.credor));
     const paymentRows = liveResults.flatMap((result) => result.payments).filter((row) => matchesCreditor(row.credor));
     const agreementRows = liveResults.flatMap((result) => result.agreements).filter((row) => matchesCreditor(row.credor));
     const recoveredByCreditor = sumByCreditor(paymentRows, (row) => toNumber(row.recuperado));
@@ -212,19 +199,10 @@ async function buildBaseSummary(filter) {
     const totalBorderos = entradaPorCredor.reduce((sum, row) => sum + row.borderos, 0);
     const totalRecuperado = entradaPorCredor.reduce((sum, row) => sum + row.recuperado, 0);
     const totalAcordos = entradaPorCredor.reduce((sum, row) => sum + row.acordos, 0);
-    const valuationTotal = valuationPortfolioRows.reduce((sum, row) => sum + toNumber(row.valor_entrada), 0);
-    const valuationProcesses = valuationPortfolioRows.reduce((sum, row) => sum + toNumber(row.processos), 0);
-    const overallValuationTicket = valuationProcesses > 0 ? valuationTotal / valuationProcesses : 0;
-    const valuationTicketByCreditor = new Map(valuationPortfolioRows
-        .map((row) => {
-        const processos = toNumber(row.processos);
-        return [row.credor, processos > 0 ? toNumber(row.valor_entrada) / processos : 0];
-    })
-        .filter(([, ticket]) => ticket > 0));
     const activeAgingByCreditor = activeBase.aging_by_credor ?? [];
     const agingByCreditor = activeAgingByCreditor.length > 0
         ? activeAgingByCreditor
-        : activeBase.aging.flatMap((row) => ({ credor: 'TOTAL', faixa: row.faixa, processos: row.processos }));
+        : activeBase.aging.flatMap((row) => ({ credor: 'TOTAL', faixa: row.faixa, processos: row.processos, valor_total: row.valor_total }));
     const totalAgingByCreditor = new Map();
     agingByCreditor.forEach((row) => {
         totalAgingByCreditor.set(row.credor, (totalAgingByCreditor.get(row.credor) ?? 0) + toNumber(row.processos));
@@ -232,20 +210,17 @@ async function buildBaseSummary(filter) {
     const agingMap = new Map();
     VISIBLE_AGING_ORDER.forEach((faixa) => agingMap.set(faixa, { faixa, processos: 0, valorCarteira: 0, recuperado: 0, acordos: 0 }));
     agingByCreditor.forEach((row) => {
-        if (row.faixa === 'SEM VENCIMENTO')
-            return;
         const faixa = row.faixa;
         const current = agingMap.get(faixa);
         if (!current)
             return;
         const processos = toNumber(row.processos);
-        const creditorTicket = valuationTicketByCreditor.get(row.credor) ?? overallValuationTicket;
         const creditorBaseTotal = totalAgingByCreditor.get(row.credor) ?? 0;
         const share = creditorBaseTotal > 0 ? processos / creditorBaseTotal : 0;
         const creditorRecovered = row.credor === 'TOTAL' ? totalRecuperado : (recoveredByCreditor.get(row.credor) ?? 0);
         const creditorAgreements = row.credor === 'TOTAL' ? totalAcordos : (agreementsByCreditor.get(row.credor) ?? 0);
         current.processos += processos;
-        current.valorCarteira += processos * creditorTicket;
+        current.valorCarteira += toNumber(row.valor_total);
         current.recuperado += creditorRecovered * share;
         current.acordos += creditorAgreements * share;
     });

@@ -1780,9 +1780,9 @@ function DashboardPage() {
                     <Panel title="Processos por Faixa" meta="Menor vencimento por processo">
                       <BarRows rows={baseAgingProcessRows} color={color} valueLabel="Processos" showPercent />
                     </Panel>
-                    <Panel title="Valor Total por Faixa" meta="Estimativa baseada no ticket anual por credor">
+                    <Panel title="Valor Total por Faixa" meta="Títulos abertos da base ativa">
                       <div className="range-value-summary">
-                        <span>Carteira ativa estimada</span>
+                        <span>Carteira ativa</span>
                         <strong>{compactMoney(baseRangeTotal)}</strong>
                         <small>Distribuição por menor vencimento dos processos ativos</small>
                       </div>
@@ -1793,10 +1793,10 @@ function DashboardPage() {
                             <XAxis type="number" tickFormatter={(value) => shortMoney(Number(value))} tick={{ fontSize: 10 }} />
                             <YAxis type="category" dataKey="name" width={96} tick={{ fontSize: 11, fontWeight: 700 }} />
                             <Tooltip
-                              formatter={(value: number, name: string) => name === 'Valor estimado' ? [money(value), name] : [value, name]}
+                              formatter={(value: number, name: string) => name === 'Valor total' ? [money(value), name] : [value, name]}
                               labelFormatter={(label) => `Faixa: ${label}`}
                             />
-                            <Bar dataKey="valorCarteira" name="Valor estimado" radius={[0, 6, 6, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE}>
+                            <Bar dataKey="valorCarteira" name="Valor total" radius={[0, 6, 6, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE}>
                               {baseRangeChartRows.map((row, index) => <Cell key={row.faixa} fill={CHART_PALETTE[index % CHART_PALETTE.length]} />)}
                               <LabelList dataKey="valorCarteira" position="right" formatter={(value: number) => shortMoney(value)} className="range-value-label" />
                             </Bar>

@@ -35,7 +35,7 @@ function hasCompleteAging(creditors, aging) {
     if (creditors.length === 0)
         return false;
     const agingKeys = new Set(aging.map(creditorKey));
-    return creditors.every((row) => agingKeys.has(creditorKey(row)));
+    return creditors.every((row) => agingKeys.has(creditorKey(row))) && aging.every((row) => Number.isFinite(row.valor_total));
 }
 function pendingAgingCreditors(creditors, aging) {
     const agingKeys = new Set(aging.map(creditorKey));
@@ -112,7 +112,7 @@ async function queryActiveBaseByCreditor(prisma, empresaId) {
             COUNT(*)::bigint AS processos
         FROM tb_devedor d
         JOIN tb_credor c ON c.id = d.idcredor
-        LEFT JOIN tb_processo p ON p.processo = d.processo
+        LEFT JOIN tb_processo p ON p.processo = d.processo AND p.idempresa = d.idempresa
         WHERE d.idempresa = $1
           ${companyFilter(empresaId)}
           AND c.status = 'ATIVO'
@@ -130,74 +130,82 @@ async function queryActiveBaseByCreditor(prisma, empresaId) {
     }));
 }
 async function queryActiveBaseAgingForCreditor(prisma, empresaId, credor) {
+    const creditorRows = await withStatementTimeout(prisma, SUMMARY_TIMEOUT_MS, (tx) => tx.$queryRawUnsafe(`
+        SELECT c.id
+        FROM tb_credor c
+        WHERE c.idempresa = $1
+          AND TRIM(c.grupo) = $2
+          ${companyFilter(empresaId)}
+          AND c.status = 'ATIVO'
+      `, empresaId, credor));
+    const creditorIds = creditorRows.map((row) => Number(row.id));
+    if (creditorIds.length === 0)
+        return [];
     const countRows = await withStatementTimeout(prisma, SUMMARY_TIMEOUT_MS, (tx) => tx.$queryRawUnsafe(`
         SELECT COUNT(*)::bigint AS total
         FROM (
           SELECT DISTINCT d.processo
           FROM tb_devedor d
-          JOIN tb_credor c ON c.id = d.idcredor
-          LEFT JOIN tb_processo p ON p.processo = d.processo
+          LEFT JOIN tb_processo p ON p.processo = d.processo AND p.idempresa = d.idempresa
           WHERE d.idempresa = $1
-            AND TRIM(c.grupo) = $2
-            ${companyFilter(empresaId)}
-            AND c.status = 'ATIVO'
+            AND d.idcredor = ANY($2::int[])
             AND (p.status_desc IS NULL OR p.status_desc NOT IN ('DEVOLUCAO','BAIXADO','QUITADO'))
-            AND c.grupo IS NOT NULL
-            AND TRIM(c.grupo) <> ''
         ) base
-      `, empresaId, credor));
+      `, empresaId, creditorIds));
     const sistema = systemName(empresaId);
     const total = Number(countRows[0]?.total ?? 0);
     const totals = new Map();
     for (let offset = 0; offset < total; offset += AGING_BATCH_SIZE) {
-        const batchRows = await queryActiveBaseAgingBatch(prisma, empresaId, credor, AGING_BATCH_SIZE, offset);
+        const batchRows = await queryActiveBaseAgingBatch(prisma, empresaId, credor, creditorIds, AGING_BATCH_SIZE, offset);
         for (const row of batchRows) {
-            totals.set(row.faixa, (totals.get(row.faixa) ?? 0) + Number(row.processos ?? 0));
+            const current = totals.get(row.faixa) ?? { processos: 0, valor_total: 0 };
+            current.processos += Number(row.processos ?? 0);
+            current.valor_total += Number(row.valor_total ?? 0);
+            totals.set(row.faixa, current);
         }
     }
-    return Array.from(totals.entries()).map(([faixa, processos]) => ({
+    return Array.from(totals.entries()).map(([faixa, totals]) => ({
         sistema,
         credor,
         faixa,
-        processos,
+        processos: totals.processos,
+        valor_total: totals.valor_total,
     }));
 }
-async function queryActiveBaseAgingBatch(prisma, empresaId, credor, limit, offset) {
+async function queryActiveBaseAgingBatch(prisma, empresaId, credor, creditorIds, limit, offset) {
     return withStatementTimeout(prisma, AGING_TIMEOUT_MS, (tx) => tx.$queryRawUnsafe(`
-        WITH active_processes AS (
-          SELECT processo, credor
+        WITH selected_processes AS (
+          SELECT processo
           FROM (
-            SELECT DISTINCT
-                d.processo,
-                TRIM(c.grupo) AS credor
+            SELECT DISTINCT d.processo
             FROM tb_devedor d
-            JOIN tb_credor c ON c.id = d.idcredor
-            LEFT JOIN tb_processo p ON p.processo = d.processo
+            LEFT JOIN tb_processo p ON p.processo = d.processo AND p.idempresa = d.idempresa
             WHERE d.idempresa = $1
-              AND TRIM(c.grupo) = $2
-              ${companyFilter(empresaId)}
-              AND c.status = 'ATIVO'
+              AND d.idcredor = ANY($2::int[])
               AND (p.status_desc IS NULL OR p.status_desc NOT IN ('DEVOLUCAO','BAIXADO','QUITADO'))
-              AND c.grupo IS NOT NULL
-              AND TRIM(c.grupo) <> ''
             ORDER BY d.processo
             LIMIT $3 OFFSET $4
           ) base
         ),
-        process_due_dates AS (
+        active_debtors AS (
+          SELECT DISTINCT d.id AS iddevedor, d.processo
+          FROM tb_devedor d
+          JOIN selected_processes sp ON sp.processo = d.processo
+          WHERE d.idempresa = $1
+            AND d.idcredor = ANY($2::int[])
+        ),
+        process_titles AS (
           SELECT
-              ap.processo,
-              ap.credor,
-              (
-                SELECT MIN(t.vencimento)::date
-                FROM tb_titulos t
-                WHERE t.processo = ap.processo
-                  AND t.vencimento IS NOT NULL
-              ) AS vencimento_min
-          FROM active_processes ap
+              sp.processo,
+              MIN(t.vencimento)::date AS vencimento_min,
+              COALESCE(SUM(COALESCE(t.valor, 0)), 0) AS valor_total
+          FROM selected_processes sp
+          LEFT JOIN active_debtors ad ON ad.processo = sp.processo
+          LEFT JOIN tb_titulos t ON t.iddevedor = ad.iddevedor AND t.idempresa = $1 AND t.status = 'aberto'
+          GROUP BY sp.processo
         )
         SELECT
-            credor,
+            $5::text AS credor,
             CASE
               WHEN vencimento_min IS NULL THEN 'SEM VENCIMENTO'
               WHEN CURRENT_DATE - vencimento_min <= 90 THEN '0-90'
@@ -205,11 +213,12 @@ async function queryActiveBaseAgingBatch(prisma, empresaId, credor, limit, offse
               WHEN CURRENT_DATE - vencimento_min <= 360 THEN '181-360'
               ELSE '361+'
             END AS faixa,
-            COUNT(*)::bigint AS processos
-        FROM process_due_dates
+            COUNT(*)::bigint AS processos,
+            COALESCE(SUM(valor_total), 0) AS valor_total
+        FROM process_titles
         GROUP BY credor, faixa
         ORDER BY credor, faixa
-      `, empresaId, credor, limit, offset));
+      `, empresaId, creditorIds, limit, offset, credor));
 }
 function mergeAgingRows(currentRows, newRows) {
     const newKeys = new Set(newRows.map(creditorKey));
@@ -242,14 +251,17 @@ async function refreshActiveBaseCache() {
         await writeCache({ ...current, status: 'refreshing', error: undefined });
         const errors = [];
         const creditorResults = await Promise.all((0, prismaClients_1.getLiveClients)('total').map(async ({ empresaId, query }) => {
+            const sistema = systemName(empresaId);
             try {
-                return { rows: await withHardTimeout(query((prisma) => queryActiveBaseByCreditor(prisma, empresaId)), SUMMARY_TIMEOUT_MS + 15000, `base ativa ${systemName(empresaId)}`) };
+                return { sistema, rows: await withHardTimeout(query((prisma) => queryActiveBaseByCreditor(prisma, empresaId)), SUMMARY_TIMEOUT_MS + 15000, `base ativa ${sistema}`) };
             }
             catch (error) {
-                return { rows: [], error: `${systemName(empresaId)}: ${formatError(error)}` };
+                return { sistema, rows: [], error: `${sistema}: ${formatError(error)}` };
             }
         }));
-        const byCreditor = creditorResults.flatMap((result) => result.rows);
+        const refreshedSystems = new Set(creditorResults.filter((result) => !result.error).map((result) => result.sistema));
+        const preservedRows = current.by_credor.filter((row) => !refreshedSystems.has(row.sistema));
+        const byCreditor = [...preservedRows, ...creditorResults.flatMap((result) => result.rows)];
         errors.push(...creditorResults.flatMap((result) => (result.error ? [result.error] : [])));
         if (byCreditor.length === 0) {
             const cache = {
@@ -301,7 +313,7 @@ async function refreshActiveBaseCache() {
 }
 async function getActiveBase(filter) {
     const cache = await readCache();
-    if (cache.status === 'empty' || (cache.status === 'error' && cache.by_credor.length === 0)) {
+    if (cache.status === 'empty' || (cache.status === 'error' && cache.by_credor.length === 0) || !hasCompleteAging(cache.by_credor, cache.aging)) {
         void refreshActiveBaseCache();
     }
     const selectedSystems = filter.sistema === 'total' ? new Set(['consulth', 'sisth']) : new Set([filter.sistema]);
@@ -312,21 +324,25 @@ async function getActiveBase(filter) {
     const pending = pendingAgingCreditors(creditorRows, agingRows);
     const byCreditor = new Map();
     const aging = new Map([
-        ['0-90', 0],
-        ['91-180', 0],
-        ['181-360', 0],
-        ['361+', 0],
-        ['SEM VENCIMENTO', 0],
+        ['0-90', { processos: 0, valor_total: 0 }],
+        ['91-180', { processos: 0, valor_total: 0 }],
+        ['181-360', { processos: 0, valor_total: 0 }],
+        ['361+', { processos: 0, valor_total: 0 }],
+        ['SEM VENCIMENTO', { processos: 0, valor_total: 0 }],
     ]);
     const agingByCreditor = new Map();
     for (const row of creditorRows) {
         byCreditor.set(row.credor, (byCreditor.get(row.credor) ?? 0) + row.processos);
     }
     for (const row of agingRows) {
-        aging.set(row.faixa, (aging.get(row.faixa) ?? 0) + row.processos);
+        const total = aging.get(row.faixa) ?? { processos: 0, valor_total: 0 };
+        total.processos += row.processos;
+        total.valor_total += Number(row.valor_total ?? 0);
+        aging.set(row.faixa, total);
         const key = `${row.credor}::${row.faixa}`;
-        const current = agingByCreditor.get(key) ?? { credor: row.credor, faixa: row.faixa, processos: 0 };
+        const current = agingByCreditor.get(key) ?? { credor: row.credor, faixa: row.faixa, processos: 0, valor_total: 0 };
         current.processos += row.processos;
+        current.valor_total += Number(row.valor_total ?? 0);
         agingByCreditor.set(key, current);
     }
     return {
@@ -341,7 +357,7 @@ async function getActiveBase(filter) {
             by_credor: Array.from(byCreditor.entries())
                 .map(([credor, processos]) => ({ credor, processos }))
                 .sort((a, b) => b.processos - a.processos || a.credor.localeCompare(b.credor, 'pt-BR')),
-            aging: Array.from(aging.entries()).map(([faixa, processos]) => ({ faixa, processos })),
+            aging: Array.from(aging.entries()).map(([faixa, totals]) => ({ faixa, ...totals })),
             aging_by_credor: Array.from(agingByCreditor.values()).sort((a, b) => a.credor.localeCompare(b.credor, 'pt-BR') || a.faixa.localeCompare(b.faixa)),
         },
     };
