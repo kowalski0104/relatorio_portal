@@ -41,6 +41,17 @@ function selectedMonths(filter: PortfolioQuery) {
   return filter.periodo ? [filter.periodo] : [];
 }
 
+function annualPortfolioFilter(filter: PortfolioQuery): PortfolioQuery {
+  const years = Array.from(new Set(selectedMonths(filter).map((month) => month.slice(0, 4))));
+  if (years.length === 0) return { ...filter, periodo: undefined, periodos: [] };
+
+  return {
+    ...filter,
+    periodo: undefined,
+    periodos: years.flatMap((year) => Array.from({ length: 12 }, (_, index) => `${year}-${String(index + 1).padStart(2, '0')}`)),
+  };
+}
+
 function monthRange(months: string[], fallbackPeriod?: string) {
   if (months.length === 0) return getPeriodRange(fallbackPeriod);
   const sorted = [...months].sort();
@@ -202,12 +213,14 @@ export async function getBaseSummary(filter: PortfolioQuery) {
 }
 
 async function buildBaseSummary(filter: PortfolioQuery) {
+  const valuationFilter = annualPortfolioFilter(filter);
   const [activeBaseResult, liveResults] = await Promise.all([
     getActiveBase(filter),
     Promise.all(
       getLiveClients(filter.sistema).map(({ empresaId, query }) =>
         query(async (prisma) => ({
           portfolio: await queryPortfolioSummary(prisma, empresaId, filter),
+          valuationPortfolio: await queryPortfolioSummary(prisma, empresaId, valuationFilter),
           payments: await queryPaymentSummary(prisma, empresaId, filter),
           agreements: await queryAgreementSummary(prisma, empresaId, filter),
         }))
@@ -218,6 +231,7 @@ async function buildBaseSummary(filter: PortfolioQuery) {
   const matchesCreditor = creditorFilter(filter);
   const activeBase = activeBaseResult.data;
   const portfolioRows = liveResults.flatMap((result) => result.portfolio).filter((row) => matchesCreditor(row.credor));
+  const valuationPortfolioRows = liveResults.flatMap((result) => result.valuationPortfolio).filter((row) => matchesCreditor(row.credor));
   const paymentRows = liveResults.flatMap((result) => result.payments).filter((row) => matchesCreditor(row.credor));
   const agreementRows = liveResults.flatMap((result) => result.agreements).filter((row) => matchesCreditor(row.credor));
   const recoveredByCreditor = sumByCreditor(paymentRows, (row) => toNumber(row.recuperado));
@@ -247,12 +261,20 @@ async function buildBaseSummary(filter: PortfolioQuery) {
     .sort((a, b) => b.valorEntrada - a.valorEntrada || a.credor.localeCompare(b.credor, 'pt-BR'));
 
   const totalValorEntrada = entradaPorCredor.reduce((sum, row) => sum + row.valorEntrada, 0);
-  const totalProcessosEntrada = entradaPorCredor.reduce((sum, row) => sum + row.processos, 0);
   const totalBorderos = entradaPorCredor.reduce((sum, row) => sum + row.borderos, 0);
   const totalRecuperado = entradaPorCredor.reduce((sum, row) => sum + row.recuperado, 0);
   const totalAcordos = entradaPorCredor.reduce((sum, row) => sum + row.acordos, 0);
-  const overallTicket = totalProcessosEntrada > 0 ? totalValorEntrada / totalProcessosEntrada : 0;
-  const portfolioByCreditor = new Map(entradaPorCredor.map((row) => [row.credor, row]));
+  const valuationTotal = valuationPortfolioRows.reduce((sum, row) => sum + toNumber(row.valor_entrada), 0);
+  const valuationProcesses = valuationPortfolioRows.reduce((sum, row) => sum + toNumber(row.processos), 0);
+  const overallValuationTicket = valuationProcesses > 0 ? valuationTotal / valuationProcesses : 0;
+  const valuationTicketByCreditor = new Map(
+    valuationPortfolioRows
+      .map((row) => {
+        const processos = toNumber(row.processos);
+        return [row.credor, processos > 0 ? toNumber(row.valor_entrada) / processos : 0] as const;
+      })
+      .filter(([, ticket]) => ticket > 0)
+  );
 
   const activeAgingByCreditor = activeBase.aging_by_credor ?? [];
   const agingByCreditor = activeAgingByCreditor.length > 0
@@ -274,8 +296,7 @@ async function buildBaseSummary(filter: PortfolioQuery) {
     if (!current) return;
 
     const processos = toNumber(row.processos);
-    const creditorPortfolio = portfolioByCreditor.get(row.credor);
-    const creditorTicket = creditorPortfolio && creditorPortfolio.processos > 0 ? creditorPortfolio.valorEntrada / creditorPortfolio.processos : overallTicket;
+    const creditorTicket = valuationTicketByCreditor.get(row.credor) ?? overallValuationTicket;
     const creditorBaseTotal = totalAgingByCreditor.get(row.credor) ?? 0;
     const share = creditorBaseTotal > 0 ? processos / creditorBaseTotal : 0;
     const creditorRecovered = row.credor === 'TOTAL' ? totalRecuperado : (recoveredByCreditor.get(row.credor) ?? 0);

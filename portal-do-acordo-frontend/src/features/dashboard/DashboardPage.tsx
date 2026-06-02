@@ -1483,7 +1483,7 @@ function DashboardPage() {
               <Panel title="Projeção do mês" meta={`${number(projectionBaseDays)} de ${number(businessDays)} dias úteis considerados`}>
                 <table>
                   <thead>
-                    <tr><th>Indicador</th><th className="right">Realizado</th><th className="right">Projeção final</th><th className="right">Meta mensal</th><th className="right">Falta para meta</th></tr>
+                    <tr><th>Indicador</th><th className="right">Realizado</th><th className="right">Projeção final</th><th className="right">A projetar</th><th className="right">Meta mensal</th><th className="right">Falta para meta</th><th className="right">% projetada</th></tr>
                   </thead>
                   <tbody>
                     {projectionRows.map((row) => (
@@ -1491,8 +1491,10 @@ function DashboardPage() {
                         <td className="bold">{row.name}</td>
                         <td className="right">{money(row.atual)}</td>
                         <td className="right">{money(row.projetado)}</td>
+                        <td className="right muted">{money(Math.max(row.projetado - row.atual, 0))}</td>
                         <td className="right">{row.meta === null ? '-' : money(row.meta)}</td>
                         <td className="right muted">{row.meta === null ? '-' : money(Math.max(row.meta - row.atual, 0))}</td>
+                        <td className="right">{row.meta === null ? '-' : percent(row.projetado, row.meta)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1756,7 +1758,7 @@ function DashboardPage() {
                     <Panel title="Processos por Faixa" meta="Menor vencimento por processo">
                       <BarRows rows={baseAgingProcessRows} color={color} valueLabel="Processos" showPercent />
                     </Panel>
-                    <Panel title="Valor Total por Faixa" meta="Valor estimado da carteira por faixa">
+                    <Panel title="Valor Total por Faixa" meta="Estimativa baseada no ticket anual por credor">
                       <div className="chart-wrap small">
                         <ResponsiveContainer>
                           <BarChart data={baseRangeRows}>
