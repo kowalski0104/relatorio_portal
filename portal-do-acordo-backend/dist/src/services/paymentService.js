@@ -20,7 +20,10 @@ async function queryPayments(prisma, empresaId, filter) {
         COALESCE(b.honorariospago, 0) AS honorarios_pago_portal,
         COALESCE(b.totalpago, 0) AS total_pago_portal,
         COALESCE(b.taxapago, 0) AS taxa_pago,
-        COALESCE(b.taxaadmpago, 0) AS taxa_adm_pago
+        COALESCE(b.taxaadmpago, 0) AS taxa_adm_pago,
+        COALESCE(b.pdpago, 0) AS taxa_pd_pago,
+        COALESCE(b.taxaoutpago, 0) AS outras_taxas_pago,
+        COALESCE(b.jurosretpago, 0) AS juros_retido_pago
     FROM tb_baixas b
     LEFT JOIN tb_credor c ON c.id = b.idcredor
     WHERE b.idempresa = $1
@@ -54,6 +57,9 @@ async function getPayments(filter) {
             total_pago_portal: Number(row.total_pago_portal),
             taxa_pago: Number(row.taxa_pago),
             taxa_adm_pago: Number(row.taxa_adm_pago),
+            taxa_pd_pago: Number(row.taxa_pd_pago),
+            outras_taxas_pago: Number(row.outras_taxas_pago),
+            juros_retido_pago: Number(row.juros_retido_pago),
         }))
     };
 }

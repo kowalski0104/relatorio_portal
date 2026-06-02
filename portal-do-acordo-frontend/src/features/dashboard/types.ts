@@ -45,6 +45,9 @@ export type Payment = {
   total_pago_portal: number;
   taxa_pago: number;
   taxa_adm_pago: number;
+  taxa_pd_pago: number;
+  outras_taxas_pago: number;
+  juros_retido_pago: number;
 };
 
 export type Agreement = {

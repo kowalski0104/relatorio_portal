@@ -418,6 +418,9 @@ function buildDashboardData(): DashboardData {
             total_pago_portal: total,
             taxa_pago: roundMoney(juros + multa),
             taxa_adm_pago: roundMoney(honorarios * 0.12),
+            taxa_pd_pago: 0,
+            outras_taxas_pago: multa,
+            juros_retido_pago: 0,
           });
         }
 

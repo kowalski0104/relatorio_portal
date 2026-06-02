@@ -15,7 +15,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Building2, Check, ChevronDown, Pause, Play, Presentation, Printer, X } from 'lucide-react';
+import { Building2, Check, ChevronDown, FileSpreadsheet, Pause, Play, Presentation, Printer, X } from 'lucide-react';
 import logoUrl from '../../assets/portal-agreement-logo.png';
 import { BarRows } from './components/BarRows';
 import { MetricCard } from './components/MetricCard';
@@ -30,6 +30,7 @@ import type { Access, ActiveUsersReport, Agreement, CostsData, DashboardTab, Por
 import { groupBy, isNoCreditorSelection, NO_CREDITOR_SELECTION, normalizeCreditorGroup } from './utils/creditors';
 import { businessDayIndexMap, businessDayLimitDate, businessDaysInPeriod, dayLabel, monthKey, periodLabel, periodRangeLabel, previousPeriod } from './utils/dates';
 import { countBusinessDaysWithData, filterDashboardData, matchesSystem, summarizeDashboardMetrics } from './utils/dashboardMetrics';
+import { downloadMonthlyFinancialExcel } from './utils/exportMonthlyFinancialExcel';
 import { compactMoney, dateTime, money, number, percent, safeNumber, systemLabel } from './utils/formatters';
 import './styles/dashboard.css';
 
@@ -342,6 +343,11 @@ function DashboardPage() {
     () => filterDashboardData({ data, system, period: primaryPeriod, periods: effectivePeriods, selectedCreditors: selectedCredores, businessDayMap, selectedBusinessDayLimit }),
     [businessDayMap, data, effectivePeriods, primaryPeriod, selectedBusinessDayLimit, selectedCredores, system]
   );
+  const exportMonthlyFinancialExcel = useCallback(() => {
+    if (!downloadMonthlyFinancialExcel(filtered.baixas)) {
+      window.alert('Não há baixas disponíveis para gerar o Excel com os filtros atuais.');
+    }
+  }, [filtered.baixas]);
   const portfolioBusinessDayLimit = tab === 'base-ativa' ? null : selectedBusinessDayLimit;
   const portfolioFiltered = useMemo(
     () => filterDashboardData({ data, system, period: primaryPortfolioPeriod, periods: portfolioPeriods, selectedCreditors: selectedCredores, businessDayMap, selectedBusinessDayLimit: portfolioBusinessDayLimit }),
@@ -1404,6 +1410,10 @@ function DashboardPage() {
           <button type="button" className="control-btn" onClick={() => window.print()}>
             <Printer size={16} />
             PDF
+          </button>
+          <button type="button" className="control-btn" onClick={exportMonthlyFinancialExcel}>
+            <FileSpreadsheet size={16} />
+            Excel
           </button>
         </div>
       </div>
