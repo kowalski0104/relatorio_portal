@@ -27,7 +27,7 @@ import { useBaseSummaryData, useCreditorsData, useDashboardData, useDashboardPer
 import { fetchActiveUsers, sendPresenceHeartbeat } from './services/dashboardApi';
 import type { Access, ActiveUsersReport, Agreement, CostsData, DashboardTab, PortfolioEntry, SystemFilter } from './types';
 import { groupBy, isNoCreditorSelection, NO_CREDITOR_SELECTION, normalizeCreditorGroup } from './utils/creditors';
-import { businessDayIndexMap, businessDaysInPeriod, dayLabel, monthKey, periodLabel, periodRangeLabel, previousPeriod } from './utils/dates';
+import { businessDayIndexMap, businessDayLimitDate, businessDaysInPeriod, dayLabel, monthKey, periodLabel, periodRangeLabel, previousPeriod } from './utils/dates';
 import { countBusinessDaysWithData, filterDashboardData, matchesSystem, summarizeDashboardMetrics } from './utils/dashboardMetrics';
 import { compactMoney, dateTime, money, number, percent, safeNumber, systemLabel } from './utils/formatters';
 import './styles/dashboard.css';
@@ -49,6 +49,19 @@ const AGING_LABELS: Record<string, string> = {
   '181-360': '181 a 360 dias',
   '361+': '361+ dias',
   'SEM VENCIMENTO': 'Sem vencimento',
+};
+const MONTHLY_TARGETS: Record<string, { recuperado: number; faturamento: number }> = {
+  '2026-02': { recuperado: 250000, faturamento: 35000 },
+  '2026-03': { recuperado: 275000, faturamento: 40000 },
+  '2026-04': { recuperado: 300000, faturamento: 45000 },
+  '2026-05': { recuperado: 350000, faturamento: 50000 },
+  '2026-06': { recuperado: 365354, faturamento: 54721 },
+  '2026-07': { recuperado: 401889, faturamento: 60193 },
+  '2026-08': { recuperado: 442078, faturamento: 66212 },
+  '2026-09': { recuperado: 486286, faturamento: 72833 },
+  '2026-10': { recuperado: 534914, faturamento: 80116 },
+  '2026-11': { recuperado: 588405, faturamento: 88128 },
+  '2026-12': { recuperado: 647246, faturamento: 96941 },
 };
 
 function variation(current: number, previous: number | null | undefined) {
@@ -133,6 +146,9 @@ function DashboardPage() {
   const primaryPeriod = selectedPeriodList[0] ?? period;
   const primaryPortfolioPeriod = portfolioPeriodList[0] ?? primaryPeriod;
   const isMultiPeriod = selectedPeriodList.length > 1;
+  const maxBusinessDaysInSelectedPeriods = useMemo(() => selectedPeriodList.reduce((max, item) => Math.max(max, businessDaysInPeriod(item)), 0), [selectedPeriodList]);
+  const selectedBusinessDayLimit = !dateFilterIgnored && businessDayLimit !== 'all' ? Math.min(Number(businessDayLimit), maxBusinessDaysInSelectedPeriods) : null;
+  const emailClicksEndDate = selectedBusinessDayLimit ? businessDayLimitDate(primaryPeriod, selectedBusinessDayLimit) : null;
   const periodSeries = useMemo(
     () => [...selectedPeriodList].sort().map((item, index) => ({
       period: item,
@@ -147,11 +163,12 @@ function DashboardPage() {
     const date = series ? item.payload?.[`${series.key}_date`] : null;
     return date ? `${name} (${date})` : name;
   };
-  const { costs: custos, communication: comunicacao, emailClicks, loading: supplementalLoading, refreshing: supplementalRefreshing } = useDashboardSupplementalData(primaryPeriod, system, selectedCredores, {
+  const { costs: custos, communication: comunicacao, emailClicks, loading: supplementalLoading, refreshing: supplementalRefreshing, costsError, retryCosts } = useDashboardSupplementalData(primaryPeriod, system, selectedCredores, {
     costs: tab === 'performance' || tab === 'custos',
     communication: tab === 'performance' || tab === 'custos',
     communicationDaily: businessDayLimit !== 'all',
     emailClicks: tab === 'performance',
+    emailClicksEndDate,
   });
   const { baseSummary, baseSummaryLoading, baseSummaryError } = useBaseSummaryData(system, portfolioPeriods, selectedCredores, tab === 'base-ativa');
   const { portfolioData, portfolioLoading, portfolioError } = usePortfolioData(system, portfolioPeriods, selectedCredores, tab === 'carteiras');
@@ -283,7 +300,6 @@ function DashboardPage() {
   const color = COLORS[system];
   const chartAccent = color === COLORS.consulth ? COLORS.sky : color;
   const businessDays = useMemo(() => selectedPeriodList.reduce((sum, item) => sum + businessDaysInPeriod(item), 0), [selectedPeriodList]);
-  const maxBusinessDaysInSelectedPeriods = useMemo(() => selectedPeriodList.reduce((max, item) => Math.max(max, businessDaysInPeriod(item)), 0), [selectedPeriodList]);
   const businessDayMap = useMemo(() => {
     const map = new Map<string, number>();
     selectedPeriodList.forEach((item) => {
@@ -291,7 +307,6 @@ function DashboardPage() {
     });
     return map;
   }, [selectedPeriodList]);
-  const selectedBusinessDayLimit = !dateFilterIgnored && businessDayLimit !== 'all' ? Math.min(Number(businessDayLimit), maxBusinessDaysInSelectedPeriods) : null;
   const businessDaySelectValue = dateFilterIgnored || businessDayLimit === 'all' || maxBusinessDaysInSelectedPeriods === 0
     ? 'all'
     : String(Math.min(Number(businessDayLimit), maxBusinessDaysInSelectedPeriods));
@@ -333,14 +348,27 @@ function DashboardPage() {
     return summarizeDashboardMetrics(filtered);
   }, [filtered]);
 
+  const projectionTarget = useMemo(() => {
+    const targets = selectedPeriodList.map((item) => MONTHLY_TARGETS[item]).filter(Boolean);
+    if (targets.length === 0) return null;
+
+    return targets.reduce(
+      (total, target) => ({
+        recuperado: total.recuperado + target.recuperado,
+        faturamento: total.faturamento + target.faturamento,
+      }),
+      { recuperado: 0, faturamento: 0 }
+    );
+  }, [selectedPeriodList]);
+
   const projectionRows = useMemo(() => {
     const factor = businessDays > 0 && consideredBusinessDays > 0 ? businessDays / consideredBusinessDays : 0;
 
     return [
-      { name: 'Total Recuperado', atual: metrics.totalPago, projetado: metrics.totalPago * factor },
-      { name: 'Total Faturamento', atual: metrics.faturamento, projetado: metrics.faturamento * factor },
+      { name: 'Total Recuperado', atual: metrics.totalPago, projetado: metrics.totalPago * factor, meta: projectionTarget?.recuperado ?? null },
+      { name: 'Total Faturamento', atual: metrics.faturamento, projetado: metrics.faturamento * factor, meta: projectionTarget?.faturamento ?? null },
     ];
-  }, [businessDays, consideredBusinessDays, metrics]);
+  }, [businessDays, consideredBusinessDays, metrics, projectionTarget]);
 
   const projectionBaseDays = consideredBusinessDays;
 
@@ -1455,7 +1483,7 @@ function DashboardPage() {
               <Panel title="Projeção do mês" meta={`${number(projectionBaseDays)} de ${number(businessDays)} dias úteis considerados`}>
                 <table>
                   <thead>
-                    <tr><th>Indicador</th><th className="right">Realizado</th><th className="right">Projeção final</th><th className="right">A projetar</th></tr>
+                    <tr><th>Indicador</th><th className="right">Realizado</th><th className="right">Projeção final</th><th className="right">Meta mensal</th><th className="right">Falta para meta</th></tr>
                   </thead>
                   <tbody>
                     {projectionRows.map((row) => (
@@ -1463,7 +1491,8 @@ function DashboardPage() {
                         <td className="bold">{row.name}</td>
                         <td className="right">{money(row.atual)}</td>
                         <td className="right">{money(row.projetado)}</td>
-                        <td className="right muted">{money(Math.max(row.projetado - row.atual, 0))}</td>
+                        <td className="right">{row.meta === null ? '-' : money(row.meta)}</td>
+                        <td className="right muted">{row.meta === null ? '-' : money(Math.max(row.meta - row.atual, 0))}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1608,6 +1637,11 @@ function DashboardPage() {
           <main className="main-content costs-content">
           {supplementalLoading ? <div className="loading-state">Carregando custos...</div> : null}
           {!supplementalLoading && supplementalRefreshing ? <div className="loading-state">Atualizando custos...</div> : null}
+          {costsError ? (
+            <div className="error-state" role="alert">
+              {costsError} <button type="button" className="control-btn" onClick={retryCosts}>Tentar novamente</button>
+            </div>
+          ) : null}
 
           <Section num="01" title="Custos WhatsApp e E-mail">
             <Panel title="Detalhamento">
@@ -1722,7 +1756,7 @@ function DashboardPage() {
                     <Panel title="Processos por Faixa" meta="Menor vencimento por processo">
                       <BarRows rows={baseAgingProcessRows} color={color} valueLabel="Processos" showPercent />
                     </Panel>
-                    <Panel title="Valor Médio por Faixa" meta="Valor da carteira / processos da faixa">
+                    <Panel title="Valor Total por Faixa" meta="Valor estimado da carteira por faixa">
                       <div className="chart-wrap small">
                         <ResponsiveContainer>
                           <BarChart data={baseRangeRows}>
@@ -1730,7 +1764,7 @@ function DashboardPage() {
                             <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-16} textAnchor="end" height={62} />
                             <YAxis tickFormatter={(value) => `R$${Math.round(Number(value) / 1000)}k`} tick={{ fontSize: 10 }} />
                             <Tooltip formatter={(value: number) => money(value)} />
-                            <Bar dataKey="valorMedio" name="Valor médio" fill={chartAccent} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                            <Bar dataKey="valorCarteira" name="Valor total" fill={chartAccent} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
                           </BarChart>
                         </ResponsiveContainer>
                       </div>

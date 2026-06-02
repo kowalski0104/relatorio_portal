@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   DEMO_DASHBOARD_DATA,
   DEMO_PRIMARY_PERIOD,
@@ -157,6 +157,7 @@ type SupplementalOptions = {
   communication?: boolean;
   communicationDaily?: boolean;
   emailClicks?: boolean;
+  emailClicksEndDate?: string | null;
 };
 
 export function useDashboardSupplementalData(period: string, system: SystemFilter, selectedCreditors: Set<string>, options: SupplementalOptions = {}) {
@@ -165,10 +166,13 @@ export function useDashboardSupplementalData(period: string, system: SystemFilte
   const [emailClicks, setEmailClicks] = useState<EmailClickData | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [costsError, setCostsError] = useState('');
+  const [costsRetryVersion, setCostsRetryVersion] = useState(0);
   const costsEnabled = options.costs ?? true;
   const communicationEnabled = options.communication ?? true;
   const communicationDailyEnabled = options.communicationDaily ?? false;
   const emailClicksEnabled = options.emailClicks ?? true;
+  const emailClicksEndDate = options.emailClicksEndDate ?? null;
 
   useEffect(() => {
     const hasEnabledRequest = costsEnabled || communicationEnabled || emailClicksEnabled;
@@ -181,6 +185,7 @@ export function useDashboardSupplementalData(period: string, system: SystemFilte
       if (costsEnabled) setCosts(getDemoCosts(period, system));
       if (communicationEnabled) setCommunication(getDemoCommunication(period, system, selectedCreditors));
       if (emailClicksEnabled) setEmailClicks(null);
+      setCostsError('');
       setLoading(false);
       setRefreshing(false);
       return;
@@ -188,7 +193,7 @@ export function useDashboardSupplementalData(period: string, system: SystemFilte
 
     const costsKey = responseCacheKey('costs', period, system, new Set());
     const communicationKey = `${responseCacheKey('communication', period, system, selectedCreditors)}:diario:${communicationDailyEnabled}`;
-    const emailClicksKey = responseCacheKey('email-clicks', period, system, selectedCreditors);
+    const emailClicksKey = `${responseCacheKey('email-clicks', period, system, selectedCreditors)}:data-fim:${emailClicksEndDate ?? 'mes-completo'}`;
     const cachedCosts = costsEnabled ? getCachedResponse<CostsData>(costsKey) : undefined;
     const cachedCommunication = communicationEnabled ? getCachedResponse<CommunicationData>(communicationKey) : undefined;
     const cachedEmailClicks = emailClicksEnabled ? getCachedResponse<EmailClickData>(emailClicksKey) : undefined;
@@ -196,7 +201,10 @@ export function useDashboardSupplementalData(period: string, system: SystemFilte
     const loadCommunication = communicationEnabled && !cachedCommunication;
     const loadEmailClicks = emailClicksEnabled && !cachedEmailClicks;
 
-    if (cachedCosts) setCosts(cachedCosts);
+    if (cachedCosts) {
+      setCosts(cachedCosts);
+      setCostsError('');
+    }
     if (cachedCommunication) setCommunication(cachedCommunication);
     if (cachedEmailClicks) setEmailClicks(cachedEmailClicks);
     if (!loadCosts && !loadCommunication && !loadEmailClicks) {
@@ -215,12 +223,28 @@ export function useDashboardSupplementalData(period: string, system: SystemFilte
     setRefreshing(hasVisibleData);
     const preserveOnError = <T,>(request: Promise<T | null>, previous: T | null) =>
       request.then((data) => ({ data, fresh: true })).catch(() => ({ data: previous, fresh: false }));
+    const preserveCostsOnError = (request: Promise<CostsData | null>, previous: CostsData | null) =>
+      request
+        .then((data) => {
+          if (!data) {
+            if (active) setCostsError('Nao foi possivel carregar os custos. Os ultimos dados disponiveis foram mantidos.');
+            return { data: previous, fresh: false };
+          }
+          if (active) setCostsError('');
+          return { data, fresh: true };
+        })
+        .catch((err) => {
+          if (active && !(err instanceof DOMException && err.name === 'AbortError')) {
+            setCostsError('Nao foi possivel carregar os custos. Os ultimos dados disponiveis foram mantidos.');
+          }
+          return { data: previous, fresh: false };
+        });
     const preserveCurrent = <T,>(data: T | null) => Promise.resolve({ data, fresh: false });
 
     Promise.all([
-      loadCosts ? preserveOnError(fetchCosts(period, system, controller.signal), costs) : preserveCurrent(cachedCosts ?? costs),
+      loadCosts ? preserveCostsOnError(fetchCosts(period, system, controller.signal), costs) : preserveCurrent(cachedCosts ?? costs),
       loadCommunication ? preserveOnError(fetchCommunication(period, system, selectedCreditors, controller.signal, communicationDailyEnabled), communication) : preserveCurrent(cachedCommunication ?? communication),
-      loadEmailClicks ? preserveOnError(fetchEmailClicks(period, system, selectedCreditors, controller.signal), emailClicks) : preserveCurrent(cachedEmailClicks ?? emailClicks),
+      loadEmailClicks ? preserveOnError(fetchEmailClicks(period, system, selectedCreditors, emailClicksEndDate, controller.signal), emailClicks) : preserveCurrent(cachedEmailClicks ?? emailClicks),
     ])
       .then(([costsResult, communicationResult, emailClicksResult]) => {
         if (!active) return;
@@ -241,9 +265,14 @@ export function useDashboardSupplementalData(period: string, system: SystemFilte
       active = false;
       controller.abort();
     };
-  }, [communicationDailyEnabled, communicationEnabled, costsEnabled, emailClicksEnabled, period, selectedCreditors, system]);
+  }, [communicationDailyEnabled, communicationEnabled, costsEnabled, costsRetryVersion, emailClicksEnabled, emailClicksEndDate, period, selectedCreditors, system]);
 
-  return { costs, communication, emailClicks, loading, refreshing };
+  const retryCosts = useCallback(() => {
+    setCostsError('');
+    setCostsRetryVersion((current) => current + 1);
+  }, []);
+
+  return { costs, communication, emailClicks, loading, refreshing, costsError, retryCosts };
 }
 
 export function useCreditorsData(period: string, system: SystemFilter) {

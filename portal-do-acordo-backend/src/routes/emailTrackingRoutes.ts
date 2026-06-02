@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import sql from 'mssql';
-import { baseQuerySchema } from './schemas';
+import { emailClicksQuerySchema } from './schemas';
 import { getPeriodRange, ReportFilter } from '../utils/reportFilters';
 
 export const clickRouter = Router();
@@ -147,8 +147,24 @@ function createEmailClickBaseSql() {
   `;
 }
 
-export async function getEmailClickReport(filter: ReportFilter) {
+type EmailClickFilter = ReportFilter & {
+  dataFim?: string;
+};
+
+function getEmailClickRange(filter: EmailClickFilter) {
   const range = getPeriodRange(filter.periodo);
+  if (!filter.dataFim) return range;
+
+  const filteredEnd = new Date(`${filter.dataFim}T00:00:00Z`);
+  filteredEnd.setUTCDate(filteredEnd.getUTCDate() + 1);
+  return {
+    start: range.start,
+    end: filteredEnd < range.end ? filteredEnd : range.end,
+  };
+}
+
+export async function getEmailClickReport(filter: EmailClickFilter) {
+  const range = getEmailClickRange(filter);
   const connection = await getConnection();
 
   const summaryRequest = connection
@@ -261,7 +277,7 @@ clickRouter.get('/test/connection', async (req: Request, res: Response) => {
 });
 
 webhookRouter.get('/cliques', async (req: Request, res: Response) => {
-  const parseResult = baseQuerySchema.safeParse(req.query);
+  const parseResult = emailClicksQuerySchema.safeParse(req.query);
   if (!parseResult.success) {
     return res.status(400).json({ error: 'Query inválida', issues: parseResult.error.format() });
   }

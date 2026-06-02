@@ -7,9 +7,9 @@ const cache_1 = require("../utils/cache");
 async function queryPeriods(prisma, empresaId) {
     const range = (0, reportFilters_1.getPeriodRange)();
     const rows = await prisma.$queryRawUnsafe(`
-      SELECT DISTINCT to_char(data_ref, 'YYYY-MM') AS periodo
+      SELECT to_char(mes, 'YYYY-MM') AS periodo
       FROM (
-        SELECT b.databaixa::date AS data_ref
+        SELECT DISTINCT date_trunc('month', b.databaixa)::date AS mes
         FROM tb_baixas b
         WHERE b.idempresa = $1
           AND b.databaixa >= $2
@@ -19,7 +19,7 @@ async function queryPeriods(prisma, empresaId) {
 
         UNION
 
-        SELECT ac.data_acordo::date AS data_ref
+        SELECT DISTINCT date_trunc('month', ac.data_acordo)::date AS mes
         FROM tb_acordo ac
         WHERE ac.idempresa = $1
           AND ac.data_acordo >= $2
@@ -29,7 +29,7 @@ async function queryPeriods(prisma, empresaId) {
 
         UNION
 
-        SELECT a.data_cad::date AS data_ref
+        SELECT DISTINCT date_trunc('month', a.data_cad)::date AS mes
         FROM tb_portal_neg_acessos a
         WHERE a.idempresa = $1
           AND a.data_cad >= $2
@@ -37,13 +37,13 @@ async function queryPeriods(prisma, empresaId) {
 
         UNION
 
-        SELECT b.data_cad::date AS data_ref
+        SELECT DISTINCT date_trunc('month', b.data_cad)::date AS mes
         FROM tb_borderos_tit b
         WHERE b.idempresa = $1
           AND b.data_cad >= $2
           AND b.data_cad < $3
       ) periodos
-      WHERE data_ref IS NOT NULL
+      WHERE mes IS NOT NULL
       ORDER BY periodo DESC
     `, empresaId, range.start, range.end);
     return rows.map((row) => row.periodo).filter(Boolean);

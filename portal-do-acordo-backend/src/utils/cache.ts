@@ -4,6 +4,7 @@ type CacheEntry<T> = {
 };
 
 const cacheStore = new Map<string, CacheEntry<unknown>>();
+const pendingStore = new Map<string, Promise<unknown>>();
 
 export const CACHE_TTL = {
   RESULTS: 10 * 60 * 1000,
@@ -21,9 +22,21 @@ export async function getCached<T>(key: string, ttlMs: number, producer: () => P
   const current = cacheStore.get(key) as CacheEntry<T> | undefined;
   if (current && current.expiresAt > now) return current.value;
 
-  const value = await producer();
-  cacheStore.set(key, { value, expiresAt: now + ttlMs });
-  return value;
+  const pending = pendingStore.get(key) as Promise<T> | undefined;
+  if (pending) return pending;
+
+  const request = Promise.resolve()
+    .then(producer)
+    .then((value) => {
+      cacheStore.set(key, { value, expiresAt: Date.now() + ttlMs });
+      return value;
+    })
+    .finally(() => {
+      pendingStore.delete(key);
+    });
+
+  pendingStore.set(key, request);
+  return request;
 }
 
 export function cacheKey(prefix: string, input: unknown) {
@@ -33,5 +46,6 @@ export function cacheKey(prefix: string, input: unknown) {
 export function clearCache() {
   const size = cacheStore.size;
   cacheStore.clear();
+  pendingStore.clear();
   return size;
 }

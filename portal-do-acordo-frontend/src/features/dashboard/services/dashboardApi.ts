@@ -93,9 +93,10 @@ export async function fetchCommunication(periodo: string, sistema: SystemFilter,
   return payload.data ?? null;
 }
 
-export async function fetchEmailClicks(periodo: string, sistema: SystemFilter, credores: Set<string>, signal?: AbortSignal): Promise<EmailClickData | null> {
+export async function fetchEmailClicks(periodo: string, sistema: SystemFilter, credores: Set<string>, dataFim: string | null = null, signal?: AbortSignal): Promise<EmailClickData | null> {
   const params = new URLSearchParams({ periodo, sistema });
   if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
+  if (dataFim) params.set('dataFim', dataFim);
   const response = await fetch(apiUrl(`/api/mailgrid/cliques?${params.toString()}`), { signal });
   if (!response.ok) return null;
   const payload = await response.json();

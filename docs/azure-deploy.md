@@ -38,8 +38,10 @@ Variáveis de ambiente no App Service:
 ```text
 DATABASE_URL_401=postgresql://...
 DATABASE_URL_1007=postgresql://...
+EMAIL_MONTHLY_AGGREGATE_DATABASE_URL=postgresql://...
 CORS_ORIGINS=https://relatorio.portaldoacordo.com.br,https://NOME-DO-FRONT.azurestaticapps.net,http://localhost:5173
 COMUNICACAO_CACHE_TTL_MS=14400000
+USE_EMAIL_MONTHLY_AGGREGATE=false
 WATI_MESSAGE_COST_BRL=0.05
 ACTIVE_BASE_CACHE_FILE=data/base_ativa_cache.json
 ACTIVE_BASE_AUTO_REFRESH_ON_START=false

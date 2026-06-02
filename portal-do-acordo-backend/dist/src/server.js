@@ -5,6 +5,9 @@ const activeBaseService_1 = require("./services/activeBaseService");
 const prismaClients_1 = require("./db/prismaClients");
 const periodService_1 = require("./services/periodService");
 const creditorService_1 = require("./services/creditorService");
+const baseSummaryService_1 = require("./services/baseSummaryService");
+const dashboardPerformanceService_1 = require("./services/dashboardPerformanceService");
+const dashboardSummaryService_1 = require("./services/dashboardSummaryService");
 const port = Number(process.env.PORT ?? 3001);
 const host = process.env.HOST ?? '0.0.0.0';
 const app = (0, app_1.createApp)();
@@ -22,20 +25,31 @@ app.listen(port, host, () => {
         void warmupCriticalCaches();
 });
 async function warmupCriticalCaches() {
-    const systems = ['consulth', 'sisth'];
-    try {
-        const periodsBySystem = await Promise.all(systems.map(async (sistema) => ({
-            sistema,
-            periods: (await (0, periodService_1.getPeriods)({ sistema })).data,
-        })));
-        await Promise.all(periodsBySystem.map(({ sistema, periods }) => {
-            const periodo = periods[0];
-            return periodo ? (0, creditorService_1.getCreditors)({ sistema, periodo }) : Promise.resolve([]);
-        }));
-        console.log('Caches de periodos e credores aquecidos.');
+    const systems = ['consulth', 'sisth', 'total'];
+    const periodsBySystem = new Map();
+    const periodResults = await Promise.allSettled(systems.map(async (sistema) => {
+        const periods = (await (0, periodService_1.getPeriods)({ sistema })).data;
+        periodsBySystem.set(sistema, periods);
+        return periods;
+    }));
+    const tasks = systems.flatMap((sistema) => {
+        const periodo = periodsBySystem.get(sistema)?.[0];
+        if (!periodo)
+            return [];
+        return [
+            (0, creditorService_1.getCreditors)({ sistema, periodo }),
+            (0, dashboardSummaryService_1.getDashboardResultSummary)({ sistema, periodo, credores: [] }),
+            (0, dashboardPerformanceService_1.getDashboardPerformanceSummary)({ sistema, periodo, credores: [], negociador: undefined }),
+            (0, baseSummaryService_1.getBaseSummary)({ sistema, periodo, periodos: [periodo], credores: [] }),
+        ];
+    });
+    const dataResults = await Promise.allSettled(tasks);
+    const failures = [...periodResults, ...dataResults].filter((result) => result.status === 'rejected');
+    if (failures.length > 0) {
+        console.warn(`Warmup concluido com ${failures.length} falha(s).`);
     }
-    catch (error) {
-        console.warn('Falha ao aquecer caches de periodos e credores:', error);
+    else {
+        console.log('Caches criticos aquecidos.');
     }
 }
 //# sourceMappingURL=server.js.map

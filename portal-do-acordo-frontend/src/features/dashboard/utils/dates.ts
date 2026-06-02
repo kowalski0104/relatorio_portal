@@ -109,3 +109,13 @@ export function businessDayIndexMap(period: string) {
   }
   return map;
 }
+
+export function businessDayLimitDate(period: string, limit: number) {
+  if (!period || !Number.isInteger(limit) || limit < 1) return null;
+
+  let lastDate: string | null = null;
+  businessDayIndexMap(period).forEach((index, date) => {
+    if (index <= limit) lastDate = date;
+  });
+  return lastDate;
+}

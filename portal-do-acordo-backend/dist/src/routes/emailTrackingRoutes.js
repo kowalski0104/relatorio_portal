@@ -118,8 +118,19 @@ function createEmailClickBaseSql() {
     )
   `;
 }
-async function getEmailClickReport(filter) {
+function getEmailClickRange(filter) {
     const range = (0, reportFilters_1.getPeriodRange)(filter.periodo);
+    if (!filter.dataFim)
+        return range;
+    const filteredEnd = new Date(`${filter.dataFim}T00:00:00Z`);
+    filteredEnd.setUTCDate(filteredEnd.getUTCDate() + 1);
+    return {
+        start: range.start,
+        end: filteredEnd < range.end ? filteredEnd : range.end,
+    };
+}
+async function getEmailClickReport(filter) {
+    const range = getEmailClickRange(filter);
     const connection = await getConnection();
     const summaryRequest = connection
         .request()
@@ -224,7 +235,7 @@ exports.clickRouter.get('/test/connection', async (req, res) => {
     }
 });
 webhookRouter.get('/cliques', async (req, res) => {
-    const parseResult = schemas_1.baseQuerySchema.safeParse(req.query);
+    const parseResult = schemas_1.emailClicksQuerySchema.safeParse(req.query);
     if (!parseResult.success) {
         return res.status(400).json({ error: 'Query inválida', issues: parseResult.error.format() });
     }

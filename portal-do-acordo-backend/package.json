@@ -16,7 +16,12 @@
     "benchmark:queries:postgres": "node --env-file=.env --import tsx scripts/benchmarkQueries.ts --block=postgresql-principal",
     "benchmark:queries:communication": "node --env-file=.env --import tsx scripts/benchmarkQueries.ts --block=comunicacao-postgresql",
     "benchmark:queries:azure": "node --env-file=.env --import tsx scripts/benchmarkQueries.ts --block=azure-sql-cliques",
-    "validate:costs": "node --env-file=.env --import tsx scripts/validateCostsAggregation.ts"
+    "validate:costs": "node --env-file=.env --import tsx scripts/validateCostsAggregation.ts",
+    "ddl:email-mensal": "node --env-file=.env --import tsx scripts/applyEmailMonthlyAggregateDdl.ts",
+    "refresh:email-mensal": "node --env-file=.env --import tsx scripts/refreshEmailMonthlyAggregate.ts",
+    "validate:email-mensal": "node --env-file=.env --import tsx scripts/validateEmailMonthlyAggregate.ts",
+    "refresh:email-monthly-aggregate": "node --env-file=.env --import tsx scripts/refreshEmailMonthlyAggregate.ts",
+    "validate:email-monthly-aggregate": "node --env-file=.env --import tsx scripts/validateEmailMonthlyAggregate.ts"
   },
   "engines": {
     "node": ">=20 <25"

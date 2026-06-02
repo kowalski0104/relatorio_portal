@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.baseSummaryQuerySchema = exports.portfolioQuerySchema = exports.dashboardResultGraphsQuerySchema = exports.activeBaseQuerySchema = exports.communicationQuerySchema = exports.custosQuerySchema = exports.baseQuerySchema = void 0;
+exports.baseSummaryQuerySchema = exports.portfolioQuerySchema = exports.dashboardResultGraphsQuerySchema = exports.activeBaseQuerySchema = exports.emailClicksQuerySchema = exports.communicationQuerySchema = exports.custosQuerySchema = exports.baseQuerySchema = void 0;
 const zod_1 = require("zod");
 exports.baseQuerySchema = zod_1.z.object({
     periodo: zod_1.z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'periodo deve ser YYYY-MM').optional(),
@@ -18,6 +18,15 @@ exports.custosQuerySchema = zod_1.z.object({
 });
 exports.communicationQuerySchema = exports.baseQuerySchema.extend({
     diario: zod_1.z.enum(['0', '1']).optional().transform((value) => value !== '0'),
+});
+exports.emailClicksQuerySchema = exports.baseQuerySchema.extend({
+    dataFim: zod_1.z.string()
+        .regex(/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/, 'dataFim deve ser YYYY-MM-DD')
+        .refine((value) => {
+        const date = new Date(`${value}T00:00:00Z`);
+        return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+    }, 'dataFim deve ser uma data válida')
+        .optional(),
 });
 exports.activeBaseQuerySchema = exports.baseQuerySchema;
 exports.dashboardResultGraphsQuerySchema = exports.baseQuerySchema.extend({

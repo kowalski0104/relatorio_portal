@@ -128,6 +128,9 @@ function postgresLabel(workload: string, query: string) {
   if (workload === 'acessos') return 'acessos-listagem';
   if (workload === 'custos') return text.includes('from tb_baixas') ? 'custos-baixas' : 'custos-acordos';
   if (workload === 'comunicacao') {
+    if (text.includes('from portal_email_envios_mensal') || text.includes('from portal_email_envios_dashboard')) {
+      return text.includes('group by m.mes') ? 'comunicacao-email-mensal-auxiliar' : 'comunicacao-email-por-credor-auxiliar';
+    }
     if (text.includes("date_trunc('month'")) return 'comunicacao-email-mensal';
     if (text.includes('e.data::date as data')) return 'comunicacao-email-diario';
     return 'comunicacao-email-por-credor';
@@ -532,6 +535,8 @@ async function main() {
   await waitForDatabaseQueries();
   const report = await saveReport();
   await Promise.all(clients.map(({ prisma }) => prisma.$disconnect()));
+  const { disconnectEmailMonthlyAggregateClient } = await import('../src/db/emailMonthlyAggregateClient');
+  await disconnectEmailMonthlyAggregateClient();
 
   console.log('\nConsultas mais lentas:');
   report.queryAggregates.slice(0, 15).forEach((row) => {

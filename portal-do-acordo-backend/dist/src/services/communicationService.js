@@ -9,6 +9,8 @@ const fs_1 = require("fs");
 const path_1 = __importDefault(require("path"));
 const reportFilters_1 = require("../utils/reportFilters");
 const prismaClients_1 = require("../db/prismaClients");
+const emailMonthlyAggregateClient_1 = require("../db/emailMonthlyAggregateClient");
+const reportFilters_2 = require("../utils/reportFilters");
 const DATA_FILE = process.env.WATI_DATA_FILE ?? path_1.default.resolve(process.cwd(), 'data', 'custos_wati.json');
 const CUSTO_POR_MENSAGEM_BRL = Number(process.env.WATI_MESSAGE_COST_BRL ?? 0.05);
 const COMUNICACAO_CACHE_TTL_MS = Number(process.env.COMUNICACAO_CACHE_TTL_MS ?? 30 * 60 * 1000);
@@ -23,6 +25,9 @@ const emailQueryPending = new Map();
 function normalizedCredores(filter) {
     return [...(filter.credores ?? [])].map((item) => item.trim()).filter(Boolean).sort();
 }
+function useEmailMonthlyAggregate(filter) {
+    return process.env.USE_EMAIL_MONTHLY_AGGREGATE === 'true' && filter.diario === false;
+}
 function getCommunicationCacheKey(filter) {
     const diario = filter.diario !== false;
     return JSON.stringify({
@@ -30,6 +35,7 @@ function getCommunicationCacheKey(filter) {
         sistema: filter.sistema ?? 'total',
         credores: normalizedCredores(filter),
         diario,
+        emailSource: useEmailMonthlyAggregate(filter) ? 'monthly-aggregate' : 'source',
     });
 }
 function getEmailQueryCacheKey(scope, filter) {
@@ -39,6 +45,7 @@ function getEmailQueryCacheKey(scope, filter) {
         periodo,
         sistema: filter.sistema ?? 'total',
         credores: normalizedCredores(filter),
+        emailSource: useEmailMonthlyAggregate(filter) ? 'monthly-aggregate' : 'source',
     });
 }
 function getCachedEmailQuery(key, producer) {
@@ -204,10 +211,49 @@ async function queryEnviosMensais(prisma, empresaId, filter) {
       FROM tb_emails_enviados e
       LEFT JOIN tb_credor c ON c.id = e.idcredor
       WHERE e.idempresa = $1
+        AND COALESCE(NULLIF(TRIM(c.grupo), ''), NULLIF(TRIM(c.razaosocial), '')) IS NOT NULL
         AND e.data >= $2 AND e.data < $3
+        AND COALESCE(c.razaosocial, '') NOT ILIKE '%MODELO%'
+        AND COALESCE(c.razaosocial, '') NOT ILIKE '%SISTH%'
+        AND COALESCE(c.razaosocial, '') NOT ILIKE '%CONNECTH%'
         ${credorFilterEmails}
       GROUP BY 1
       ORDER BY mes
+    `, ...params);
+}
+async function queryEnviosFromMonthlyAggregate(empresaId, filter) {
+    const prisma = (0, emailMonthlyAggregateClient_1.getEmailMonthlyAggregateClient)();
+    const periodo = (0, reportFilters_1.getPeriodRange)(filter.periodo);
+    const params = [empresaId, periodo.start, periodo.end];
+    const credorFilter = (0, reportFilters_1.buildSqlInFilter)('m.credor', filter.credores, params);
+    return prisma.$queryRawUnsafe(`
+      SELECT m.idcredor,
+             m.credor,
+             SUM(m.qtde_emails)::bigint AS qtde_emails
+      FROM portal_email_envios_dashboard m
+      WHERE m.idempresa = $1
+        AND m.mes >= $2::date
+        AND m.mes < $3::date
+        ${credorFilter}
+      GROUP BY m.idcredor, m.credor
+      ORDER BY qtde_emails DESC, credor
+    `, ...params);
+}
+async function queryEnviosMensaisFromMonthlyAggregate(empresaId, filter) {
+    const prisma = (0, emailMonthlyAggregateClient_1.getEmailMonthlyAggregateClient)();
+    const range = (0, reportFilters_1.getLivePeriodYearRange)(filter.periodo);
+    const params = [empresaId, range.start, range.end];
+    const credorFilterEmails = (0, reportFilters_1.buildSqlInFilter)('m.credor', filter.credores, params);
+    return prisma.$queryRawUnsafe(`
+      SELECT m.mes,
+             SUM(m.qtde_emails)::bigint AS qtde_emails
+      FROM portal_email_envios_dashboard m
+      WHERE m.idempresa = $1
+        AND m.mes >= $2::date
+        AND m.mes < $3::date
+        ${credorFilterEmails}
+      GROUP BY m.mes
+      ORDER BY m.mes
     `, ...params);
 }
 async function queryEnviosDiarios(prisma, empresaId, filter) {
@@ -221,7 +267,11 @@ async function queryEnviosDiarios(prisma, empresaId, filter) {
       FROM tb_emails_enviados e
       LEFT JOIN tb_credor c ON c.id = e.idcredor
       WHERE e.idempresa = $1
+        AND COALESCE(NULLIF(TRIM(c.grupo), ''), NULLIF(TRIM(c.razaosocial), '')) IS NOT NULL
         AND e.data >= $2 AND e.data < $3
+        AND COALESCE(c.razaosocial, '') NOT ILIKE '%MODELO%'
+        AND COALESCE(c.razaosocial, '') NOT ILIKE '%SISTH%'
+        AND COALESCE(c.razaosocial, '') NOT ILIKE '%CONNECTH%'
         ${credorFilterEmails}
       GROUP BY 1
       ORDER BY data
@@ -229,10 +279,16 @@ async function queryEnviosDiarios(prisma, empresaId, filter) {
 }
 async function getCommunicationUncached(filter) {
     const clients = (0, prismaClients_1.getLiveClients)(filter.sistema);
+    const companyIds = (0, reportFilters_2.getSystemCompanyIds)(filter.sistema);
     const includeDaily = filter.diario !== false;
+    const useAggregate = useEmailMonthlyAggregate(filter);
     const [enviosResults, enviosMensaisResults, enviosDiariosResults, store] = await Promise.all([
-        getCachedEmailQuery(getEmailQueryCacheKey('credor', filter), () => Promise.all(clients.map(({ empresaId, query }) => query((prisma) => queryEnvios(prisma, empresaId, filter))))),
-        getCachedEmailQuery(getEmailQueryCacheKey('mensal', filter), () => Promise.all(clients.map(({ empresaId, query }) => query((prisma) => queryEnviosMensais(prisma, empresaId, filter))))),
+        getCachedEmailQuery(getEmailQueryCacheKey('credor', filter), () => useAggregate
+            ? Promise.all(companyIds.map((empresaId) => queryEnviosFromMonthlyAggregate(empresaId, filter)))
+            : Promise.all(clients.map(({ empresaId, query }) => query((prisma) => queryEnvios(prisma, empresaId, filter))))),
+        getCachedEmailQuery(getEmailQueryCacheKey('mensal', filter), () => useAggregate
+            ? Promise.all(companyIds.map((empresaId) => queryEnviosMensaisFromMonthlyAggregate(empresaId, filter)))
+            : Promise.all(clients.map(({ empresaId, query }) => query((prisma) => queryEnviosMensais(prisma, empresaId, filter))))),
         includeDaily
             ? getCachedEmailQuery(getEmailQueryCacheKey('diario', filter), () => Promise.all(clients.map(({ empresaId, query }) => query((prisma) => queryEnviosDiarios(prisma, empresaId, filter)))))
             : Promise.resolve([]),

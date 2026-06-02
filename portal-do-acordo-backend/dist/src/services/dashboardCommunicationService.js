@@ -111,8 +111,12 @@ async function queryEmailSendsByDay(prisma, empresaId, filter) {
       FROM tb_emails_enviados e
       LEFT JOIN tb_credor c ON c.id = e.idcredor
       WHERE e.idempresa = $1
+        AND COALESCE(NULLIF(TRIM(c.grupo), ''), NULLIF(TRIM(c.razaosocial), '')) IS NOT NULL
         AND e.data >= $2
         AND e.data < $3
+        AND COALESCE(c.razaosocial, '') NOT ILIKE '%MODELO%'
+        AND COALESCE(c.razaosocial, '') NOT ILIKE '%SISTH%'
+        AND COALESCE(c.razaosocial, '') NOT ILIKE '%CONNECTH%'
         ${credorFilter}
       GROUP BY e.data::date
       ORDER BY dia

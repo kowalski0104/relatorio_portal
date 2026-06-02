@@ -22,6 +22,16 @@ export const communicationQuerySchema = baseQuerySchema.extend({
   diario: z.enum(['0', '1']).optional().transform((value) => value !== '0'),
 });
 
+export const emailClicksQuerySchema = baseQuerySchema.extend({
+  dataFim: z.string()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/, 'dataFim deve ser YYYY-MM-DD')
+    .refine((value) => {
+      const date = new Date(`${value}T00:00:00Z`);
+      return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+    }, 'dataFim deve ser uma data válida')
+    .optional(),
+});
+
 export const activeBaseQuerySchema = baseQuerySchema;
 export const dashboardResultGraphsQuerySchema = baseQuerySchema.extend({
   credor: z.string().optional(),
