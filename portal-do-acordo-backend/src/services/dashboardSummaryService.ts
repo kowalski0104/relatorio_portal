@@ -51,7 +51,7 @@ async function queryPaymentSummary(prisma: PrismaClient, empresaId: number, filt
       SELECT
         COALESCE(SUM(COALESCE(b.capitalpago, 0) + COALESCE(b.jurospago, 0) + COALESCE(b.multapago, 0) + COALESCE(b.honorariospago, 0)), 0) AS total_recuperado,
         COALESCE(SUM(COALESCE(b.capitalpago, 0)), 0) AS capital_recuperado,
-        COALESCE(SUM(COALESCE(b.honorariospago, 0) + COALESCE(b.taxapago, 0) + COALESCE(b.taxaadmpago, 0) + COALESCE(b.multapago, 0) + COALESCE(b.jurospago, 0)), 0) AS faturamento,
+        COALESCE(SUM(COALESCE(b.honorariospago, 0) + COALESCE(b.taxapago, 0) + COALESCE(b.taxaadmpago, 0) + COALESCE(b.taxaoutpago, 0) + COALESCE(b.pdpago, 0) + COALESCE(b.protestopago, 0) + COALESCE(b.multapago, 0) + COALESCE(b.jurospago, 0) + COALESCE(b.jurosmorapago, 0)), 0) AS faturamento,
         COUNT(DISTINCT b.processo)::bigint AS acordos_pagos
       FROM tb_baixas b
       LEFT JOIN tb_credor c ON c.id = b.idcredor

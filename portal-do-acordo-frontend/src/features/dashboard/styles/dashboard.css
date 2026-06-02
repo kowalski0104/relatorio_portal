@@ -1290,6 +1290,10 @@ tfoot td {
 }
 
 .footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px 24px;
+  flex-wrap: wrap;
   padding: 18px 48px;
   border-top: 1px solid var(--border);
   background: var(--soft);

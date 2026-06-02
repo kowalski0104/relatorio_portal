@@ -5,7 +5,10 @@ type FinancialValues = {
   valorCobrado: number;
   honorarios: number;
   taxaContrato: number;
-  jurosRetido: number;
+  juros: number;
+  jurosMora: number;
+  multa: number;
+  protesto: number;
   taxaAdm: number;
   outrasTaxas: number;
   taxaPd: number;
@@ -23,7 +26,7 @@ const SYSTEM_LABELS: Record<Payment['sistema'], string> = {
   consulth: 'CONSULTH',
   sisth: 'SISTH',
 };
-const FINANCIAL_KEYS: Array<keyof FinancialValues> = ['valorCobrado', 'honorarios', 'taxaContrato', 'jurosRetido', 'taxaAdm', 'outrasTaxas', 'taxaPd', 'total'];
+const FINANCIAL_KEYS: Array<keyof FinancialValues> = ['valorCobrado', 'honorarios', 'taxaContrato', 'juros', 'jurosMora', 'multa', 'protesto', 'taxaAdm', 'outrasTaxas', 'taxaPd', 'total'];
 
 function safe(value: number | null | undefined) {
   const parsed = Number(value ?? 0);
@@ -35,7 +38,10 @@ function emptyValues(): FinancialValues {
     valorCobrado: 0,
     honorarios: 0,
     taxaContrato: 0,
-    jurosRetido: 0,
+    juros: 0,
+    jurosMora: 0,
+    multa: 0,
+    protesto: 0,
     taxaAdm: 0,
     outrasTaxas: 0,
     taxaPd: 0,
@@ -48,7 +54,10 @@ function valuesFromPayment(payment: Payment): FinancialValues {
     valorCobrado: safe(payment.total_pago_portal),
     honorarios: safe(payment.honorarios_pago_portal),
     taxaContrato: safe(payment.taxa_pago),
-    jurosRetido: safe(payment.juros_retido_pago),
+    juros: safe(payment.juros_pago),
+    jurosMora: safe(payment.juros_mora_pago),
+    multa: safe(payment.multa_pago),
+    protesto: safe(payment.protesto_pago),
     taxaAdm: safe(payment.taxa_adm_pago),
     outrasTaxas: safe(payment.outras_taxas_pago),
     taxaPd: safe(payment.taxa_pd_pago),
@@ -56,7 +65,15 @@ function valuesFromPayment(payment: Payment): FinancialValues {
 
   return {
     ...values,
-    total: values.honorarios + values.taxaContrato + values.jurosRetido + values.taxaAdm + values.outrasTaxas + values.taxaPd,
+    total: values.honorarios
+      + values.taxaContrato
+      + values.juros
+      + values.jurosMora
+      + values.multa
+      + values.protesto
+      + values.taxaAdm
+      + values.outrasTaxas
+      + values.taxaPd,
   };
 }
 
@@ -129,7 +146,7 @@ function buildPeriodWorksheet(period: string, payments: Payment[]) {
     .filter((sistema) => rows.some((row) => row.sistema === sistema))
     .map((sistema) => totalsRow(SYSTEM_LABELS[sistema], totalsBySystem.get(sistema)!, 'Subtotal'))
     .join('');
-  const headers = ['CREDOR', 'EMPRESA', 'VALOR COBRADO', 'HONORÁRIOS', 'TAXA DE CONTRATO', 'JUROS RETIDO', 'TAXA ADM', 'OUTRAS TAXAS', 'TAXA DE PD', 'TOTAL'];
+  const headers = ['CREDOR', 'EMPRESA', 'VALOR COBRADO', 'HONORÁRIOS', 'TAXA DE CONTRATO', 'JUROS', 'JUROS DE MORA', 'MULTA', 'PROTESTO', 'TAXA ADM', 'OUTRAS TAXAS', 'TAXA DE PD', 'TOTAL'];
 
   return `
     <Worksheet ss:Name="${escapeXml(period)}">
@@ -140,12 +157,15 @@ function buildPeriodWorksheet(period: string, payments: Payment[]) {
         <Column ss:Width="94"/>
         <Column ss:Width="118"/>
         <Column ss:Width="94"/>
+        <Column ss:Width="104"/>
+        <Column ss:Width="82"/>
+        <Column ss:Width="82"/>
         <Column ss:Width="86"/>
         <Column ss:Width="94"/>
         <Column ss:Width="82"/>
         <Column ss:Width="104"/>
-        <Row ss:Height="24"><Cell ss:MergeAcross="9" ss:StyleID="Title"><Data ss:Type="String">RELATÓRIO FINANCEIRO MENSAL</Data></Cell></Row>
-        <Row ss:Height="20"><Cell ss:MergeAcross="9" ss:StyleID="Period"><Data ss:Type="String">${escapeXml(periodTitle(period))}</Data></Cell></Row>
+        <Row ss:Height="24"><Cell ss:MergeAcross="12" ss:StyleID="Title"><Data ss:Type="String">RELATÓRIO FINANCEIRO MENSAL</Data></Cell></Row>
+        <Row ss:Height="20"><Cell ss:MergeAcross="12" ss:StyleID="Period"><Data ss:Type="String">${escapeXml(periodTitle(period))}</Data></Cell></Row>
         <Row/>
         <Row>${headers.map((header) => stringCell(header, 'Header')).join('')}</Row>
         ${detailRows}

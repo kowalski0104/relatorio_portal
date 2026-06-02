@@ -1,6 +1,32 @@
 import { defineConfig } from 'vite'
+import { execFileSync } from 'child_process'
 import path from 'path'
 import react from '@vitejs/plugin-react'
+
+function gitRevision() {
+  const candidates = [
+    process.env.GIT_BINARY,
+    'git',
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Programs', 'Git', 'cmd', 'git.exe') : null,
+    process.env.ProgramFiles ? path.join(process.env.ProgramFiles, 'Git', 'cmd', 'git.exe') : null,
+  ].filter((candidate): candidate is string => Boolean(candidate))
+
+  for (const candidate of candidates) {
+    try {
+      return execFileSync(candidate, ['rev-parse', '--short=8', 'HEAD'], {
+        cwd: path.resolve(__dirname, '..'),
+        encoding: 'utf8',
+      }).trim()
+    } catch {
+      // Tenta o próximo caminho conhecido.
+    }
+  }
+
+  return 'sem-commit'
+}
+
+const appVersion = process.env.VITE_APP_VERSION?.trim() || gitRevision()
+const deployedAt = process.env.VITE_DEPLOYED_AT?.trim() || new Date().toISOString()
 
 function figmaAssetResolver() {
   return {
@@ -15,6 +41,10 @@ function figmaAssetResolver() {
 }
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+    __APP_DEPLOYED_AT__: JSON.stringify(deployedAt),
+  },
   plugins: [
     figmaAssetResolver(),
     react(),

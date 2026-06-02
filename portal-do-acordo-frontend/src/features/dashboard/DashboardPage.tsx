@@ -359,8 +359,9 @@ function DashboardPage() {
       if (!downloadMonthlyFinancialExcel(payments)) {
         window.alert('Não há recebimentos disponíveis para gerar o Excel mensal com os filtros atuais.');
       }
-    } catch {
-      window.alert('Não foi possível gerar o Excel mensal. Tente novamente.');
+    } catch (error) {
+      const detail = error instanceof Error ? ` Detalhe: ${error.message}` : '';
+      window.alert(`Não foi possível gerar o Excel mensal.${detail}`);
     } finally {
       setExcelExporting(false);
     }
@@ -1473,7 +1474,7 @@ function DashboardPage() {
 
             <div className="kpi-row">
               <MetricCard tone="teal" label="Total Recuperado" value={compactMoney(resultMetrics.totalPago)} current={resultMetrics.totalPago} previous={resultPreviousMetrics?.totalPago} small="Pagamentos no período" summary="Total recuperado no período selecionado." />
-              <MetricCard tone="gold" label="Faturamento" value={compactMoney(resultMetrics.faturamento)} current={resultMetrics.faturamento} previous={resultPreviousMetrics?.faturamento} small="Honorários, taxas, juros e multas" summary="Receitas de faturamento vinculadas aos pagamentos do período." />
+              <MetricCard tone="gold" label="Faturamento" value={compactMoney(resultMetrics.faturamento)} current={resultMetrics.faturamento} previous={resultPreviousMetrics?.faturamento} small="Honorários, taxas, juros, multas e protestos" summary="Receitas de faturamento vinculadas aos pagamentos do período." />
               <MetricCard tone="rust" label="Acordos Pagos" value={number(resultMetrics.acordosPagos)} current={resultMetrics.acordosPagos} previous={resultPreviousMetrics?.acordosPagos} small="Processos com pagamento" summary="Quantidade de acordos/processos com pagamento no período." />
               <MetricCard tone="sky" label="Conversão" value={`${resultMetrics.conversao.toFixed(1)}%`} current={resultMetrics.conversao} previous={resultPreviousMetrics?.conversao} small={systemLabel(system)} summary="Conversão de acessos em acordos no recorte selecionado." />
               <MetricCard tone="teal" label="Acessos" value={number(resultMetrics.acessos)} current={resultMetrics.acessos} previous={resultPreviousMetrics?.acessos} small="Visitantes únicos" summary="Acessos registrados no Portal do Acordo." />
@@ -2310,7 +2311,12 @@ function DashboardPage() {
         </>
       ) : null}
 
-      <footer className="footer">Relatório atualizado em {new Date().toLocaleDateString('pt-BR')}</footer>
+      <footer className="footer">
+        <span>Relatório atualizado em {new Date().toLocaleDateString('pt-BR')}</span>
+        <span title="Versão do commit e horário em que o build publicado foi gerado">
+          Portal {__APP_VERSION__} · publicado em {dateTime(__APP_DEPLOYED_AT__)}
+        </span>
+      </footer>
     </div>
   );
 }

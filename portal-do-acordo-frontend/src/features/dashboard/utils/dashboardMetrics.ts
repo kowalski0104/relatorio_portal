@@ -79,7 +79,16 @@ export function summarizeDashboardMetrics(rows: DashboardData) {
   const capital = rows.baixas.reduce((sum, row) => sum + safeNumber(row.capital_pago), 0);
   const honorarios = rows.baixas.reduce((sum, row) => sum + safeNumber(row.honorarios_pago_portal), 0);
   const faturamento = rows.baixas.reduce(
-    (sum, row) => sum + safeNumber(row.honorarios_pago_portal) + safeNumber(row.taxa_pago) + safeNumber(row.taxa_adm_pago) + safeNumber(row.multa_pago) + safeNumber(row.juros_pago),
+    (sum, row) => sum
+      + safeNumber(row.honorarios_pago_portal)
+      + safeNumber(row.taxa_pago)
+      + safeNumber(row.taxa_adm_pago)
+      + safeNumber(row.outras_taxas_pago)
+      + safeNumber(row.taxa_pd_pago)
+      + safeNumber(row.protesto_pago)
+      + safeNumber(row.multa_pago)
+      + safeNumber(row.juros_pago)
+      + safeNumber(row.juros_mora_pago),
     0
   );
   const totalAcordos = rows.acordos.reduce((sum, row) => sum + safeNumber(row.tot_sub_total), 0);

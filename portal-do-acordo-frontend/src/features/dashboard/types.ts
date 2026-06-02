@@ -39,7 +39,9 @@ export type Payment = {
   credor: string;
   negociador: string;
   capital_pago: number;
+  protesto_pago: number;
   juros_pago: number;
+  juros_mora_pago: number;
   multa_pago: number;
   honorarios_pago_portal: number;
   total_pago_portal: number;
