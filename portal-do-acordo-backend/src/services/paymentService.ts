@@ -21,7 +21,22 @@ type BaixaRow = {
   juros_retido_pago: number | string;
 };
 
-async function queryPayments(prisma: PrismaClient, empresaId: number, filter: ReportFilter) {
+type PaymentDateSource = {
+  expression: string;
+  join: string;
+};
+
+const BAIXA_DATE_SOURCE: PaymentDateSource = {
+  expression: 'b.databaixa',
+  join: '',
+};
+
+const RECEIPT_DATE_SOURCE: PaymentDateSource = {
+  expression: 'r.data_cad',
+  join: 'INNER JOIN tb_recebimentos r ON r.id = b.idrecebimento',
+};
+
+async function queryPaymentsByDate(prisma: PrismaClient, empresaId: number, filter: ReportFilter, dateSource: PaymentDateSource) {
   const periodo = getPeriodRange(filter.periodo);
   const params: unknown[] = [empresaId, periodo.start, periodo.end];
   const negociadores = NEGOTIATORS.map((negociador) => addSqlParam(params, negociador)).join(', ');
@@ -29,7 +44,7 @@ async function queryPayments(prisma: PrismaClient, empresaId: number, filter: Re
 
   const query = `
     SELECT
-        b.id, b.idempresa, b.databaixa::date AS data,
+        b.id, b.idempresa, ${dateSource.expression}::date AS data,
         TRIM(COALESCE(c.grupo, 'OUTROS')) AS credor,
         TRIM(COALESCE(b.negociador, 'SEM NEGOCIADOR')) AS negociador,
         b.processo,
@@ -44,49 +59,68 @@ async function queryPayments(prisma: PrismaClient, empresaId: number, filter: Re
         COALESCE(b.taxaoutpago, 0) AS outras_taxas_pago,
         COALESCE(b.jurosretpago, 0) AS juros_retido_pago
     FROM tb_baixas b
+    ${dateSource.join}
     LEFT JOIN tb_credor c ON c.id = b.idcredor
     WHERE b.idempresa = $1
-      AND b.databaixa >= $2
-      AND b.databaixa < $3
+      AND ${dateSource.expression} >= $2
+      AND ${dateSource.expression} < $3
       AND b.negociador IN (${negociadores})
       AND b.totalpago > 0
       AND b.idcredor IS NOT NULL
       AND TRIM(COALESCE(c.grupo, '')) != ''
       ${credorFilter}
-    ORDER BY b.databaixa DESC
+    ORDER BY ${dateSource.expression} DESC, b.id DESC
   `;
 
   return prisma.$queryRawUnsafe<BaixaRow[]>(query, ...params);
 }
 
-export async function getPayments(filter: ReportFilter) {
+function queryPayments(prisma: PrismaClient, empresaId: number, filter: ReportFilter) {
+  return queryPaymentsByDate(prisma, empresaId, filter, BAIXA_DATE_SOURCE);
+}
+
+function queryMonthlyFinancialPayments(prisma: PrismaClient, empresaId: number, filter: ReportFilter) {
+  return queryPaymentsByDate(prisma, empresaId, filter, RECEIPT_DATE_SOURCE);
+}
+
+function mapPayments(rows: BaixaRow[]) {
+  return rows.map(row => ({
+    id: String(row.id),
+    processo: String(row.processo),
+    data: row.data instanceof Date ? row.data.toISOString().slice(0, 10) : String(row.data).slice(0, 10),
+    sistema: Number(row.idempresa) === 401 ? 'consulth' : 'sisth',
+    idempresa: Number(row.idempresa),
+    credor: String(row.credor),
+    negociador: String(row.negociador),
+    capital_pago: Number(row.capital_pago),
+    juros_pago: Number(row.juros_pago),
+    multa_pago: Number(row.multa_pago),
+    honorarios_pago_portal: Number(row.honorarios_pago_portal),
+    total_pago_portal: Number(row.total_pago_portal),
+    taxa_pago: Number(row.taxa_pago),
+    taxa_adm_pago: Number(row.taxa_adm_pago),
+    taxa_pd_pago: Number(row.taxa_pd_pago),
+    outras_taxas_pago: Number(row.outras_taxas_pago),
+    juros_retido_pago: Number(row.juros_retido_pago),
+  }));
+}
+
+async function getPaymentsByQuery(filter: ReportFilter, queryPaymentsForCompany: typeof queryPayments) {
   const results = await Promise.all(
-    getLiveClients(filter.sistema).map(({ empresaId, query }) => query((prisma) => queryPayments(prisma, empresaId, filter)))
+    getLiveClients(filter.sistema).map(({ empresaId, query }) => query((prisma) => queryPaymentsForCompany(prisma, empresaId, filter)))
   );
-  const allData = results.flat();
 
   return {
-    data: allData.map(row => ({
-      id: String(row.id),
-      processo: String(row.processo),
-      data: row.data instanceof Date ? row.data.toISOString().slice(0, 10) : String(row.data).slice(0, 10),
-      sistema: Number(row.idempresa) === 401 ? 'consulth' : 'sisth',
-      idempresa: Number(row.idempresa),
-      credor: String(row.credor),
-      negociador: String(row.negociador),
-      capital_pago: Number(row.capital_pago),
-      juros_pago: Number(row.juros_pago),
-      multa_pago: Number(row.multa_pago),
-      honorarios_pago_portal: Number(row.honorarios_pago_portal),
-      total_pago_portal: Number(row.total_pago_portal),
-      taxa_pago: Number(row.taxa_pago),
-      taxa_adm_pago: Number(row.taxa_adm_pago),
-      taxa_pd_pago: Number(row.taxa_pd_pago),
-      outras_taxas_pago: Number(row.outras_taxas_pago),
-      juros_retido_pago: Number(row.juros_retido_pago),
-    }))
+    data: mapPayments(results.flat())
   };
 }
 
+export function getPayments(filter: ReportFilter) {
+  return getPaymentsByQuery(filter, queryPayments);
+}
+
+export function getMonthlyFinancialPayments(filter: ReportFilter) {
+  return getPaymentsByQuery(filter, queryMonthlyFinancialPayments);
+}
 
 

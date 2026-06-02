@@ -25,7 +25,7 @@ import { CHART_PALETTE, COLORS, FIXED_EMAIL_COST } from './config/constants';
 import { DEMO_WHATSAPP_CAMPAIGN_DATA, isDemoMode } from './data/demoDashboardData';
 import { WHATSAPP_CAMPAIGN_DATA, type WhatsappCampaignCredor } from './data/whatsappCampaigns';
 import { useBaseSummaryData, useCreditorsData, useDashboardData, useDashboardPerformanceSummary, useDashboardResultGraphs, useDashboardResultSummary, useDashboardSupplementalData, usePortfolioData } from './hooks/useDashboardData';
-import { fetchActiveUsers, sendPresenceHeartbeat } from './services/dashboardApi';
+import { fetchActiveUsers, fetchMonthlyFinancialPayments, sendPresenceHeartbeat } from './services/dashboardApi';
 import type { Access, ActiveUsersReport, Agreement, CostsData, DashboardTab, PortfolioEntry, SystemFilter } from './types';
 import { groupBy, isNoCreditorSelection, NO_CREDITOR_SELECTION, normalizeCreditorGroup } from './utils/creditors';
 import { businessDayIndexMap, businessDayLimitDate, businessDaysInPeriod, dayLabel, monthKey, periodLabel, periodRangeLabel, previousPeriod } from './utils/dates';
@@ -140,6 +140,7 @@ function DashboardPage() {
   const [presentationMode, setPresentationMode] = useState(false);
   const [presentationPaused, setPresentationPaused] = useState(false);
   const [forceRawPreviousForResults, setForceRawPreviousForResults] = useState(false);
+  const [excelExporting, setExcelExporting] = useState(false);
   const creditorFilterRef = useRef<HTMLDivElement>(null);
   const periodFilterRef = useRef<HTMLDivElement>(null);
   const includePreviousRawPeriod = (tab !== 'relatorio' && tab !== 'custos' && !(tab === 'performance' && businessDayLimit === 'all')) || businessDayLimit !== 'all' || forceRawPreviousForResults;
@@ -343,11 +344,27 @@ function DashboardPage() {
     () => filterDashboardData({ data, system, period: primaryPeriod, periods: effectivePeriods, selectedCreditors: selectedCredores, businessDayMap, selectedBusinessDayLimit }),
     [businessDayMap, data, effectivePeriods, primaryPeriod, selectedBusinessDayLimit, selectedCredores, system]
   );
-  const exportMonthlyFinancialExcel = useCallback(() => {
-    if (!downloadMonthlyFinancialExcel(filtered.baixas)) {
-      window.alert('Não há baixas disponíveis para gerar o Excel com os filtros atuais.');
+  const exportMonthlyFinancialExcel = useCallback(async () => {
+    if (excelExporting) return;
+    if (isNoCreditorSelection(selectedCredores)) {
+      window.alert('Selecione ao menos um credor para gerar o Excel.');
+      return;
     }
-  }, [filtered.baixas]);
+
+    setExcelExporting(true);
+    try {
+      const payments = demoMode
+        ? filtered.baixas
+        : (await Promise.all(selectedPeriodList.map((item) => fetchMonthlyFinancialPayments(item, system, selectedCredores)))).flat();
+      if (!downloadMonthlyFinancialExcel(payments)) {
+        window.alert('Não há recebimentos disponíveis para gerar o Excel mensal com os filtros atuais.');
+      }
+    } catch {
+      window.alert('Não foi possível gerar o Excel mensal. Tente novamente.');
+    } finally {
+      setExcelExporting(false);
+    }
+  }, [demoMode, excelExporting, filtered.baixas, selectedCredores, selectedPeriodList, system]);
   const portfolioBusinessDayLimit = tab === 'base-ativa' ? null : selectedBusinessDayLimit;
   const portfolioFiltered = useMemo(
     () => filterDashboardData({ data, system, period: primaryPortfolioPeriod, periods: portfolioPeriods, selectedCreditors: selectedCredores, businessDayMap, selectedBusinessDayLimit: portfolioBusinessDayLimit }),
@@ -1411,9 +1428,9 @@ function DashboardPage() {
             <Printer size={16} />
             PDF
           </button>
-          <button type="button" className="control-btn" onClick={exportMonthlyFinancialExcel}>
+          <button type="button" className="control-btn" disabled={excelExporting} onClick={exportMonthlyFinancialExcel}>
             <FileSpreadsheet size={16} />
-            Excel
+            {excelExporting ? 'Gerando...' : 'Excel'}
           </button>
         </div>
       </div>

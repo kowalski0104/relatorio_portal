@@ -32,6 +32,12 @@ export async function fetchDashboardData(periodo?: string, signal?: AbortSignal)
   return { baixas, acordos, acessos };
 }
 
+export function fetchMonthlyFinancialPayments(periodo: string, sistema: SystemFilter, credores: Set<string>, signal?: AbortSignal) {
+  const params = new URLSearchParams({ periodo, sistema });
+  if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
+  return fetchDataset<Payment>(`/api/baixas/financeiro-mensal?${params.toString()}`, signal);
+}
+
 export async function fetchPeriods(sistema: SystemFilter, signal?: AbortSignal): Promise<string[]> {
   const response = await fetch(apiUrl(`/api/periodos?${new URLSearchParams({ sistema }).toString()}`), { signal });
   if (!response.ok) return [];

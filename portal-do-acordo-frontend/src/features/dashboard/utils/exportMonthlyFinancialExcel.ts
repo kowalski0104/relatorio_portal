@@ -45,7 +45,7 @@ function emptyValues(): FinancialValues {
 
 function valuesFromPayment(payment: Payment): FinancialValues {
   const values = {
-    valorCobrado: safe(payment.capital_pago),
+    valorCobrado: safe(payment.total_pago_portal),
     honorarios: safe(payment.honorarios_pago_portal),
     taxaContrato: safe(payment.taxa_pago),
     jurosRetido: safe(payment.juros_retido_pago),

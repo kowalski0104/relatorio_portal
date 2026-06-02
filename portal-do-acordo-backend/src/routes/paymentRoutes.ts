@@ -1,8 +1,18 @@
 ﻿import { Router } from 'express';
-import { getPayments } from '../services/paymentService';
+import { getMonthlyFinancialPayments, getPayments } from '../services/paymentService';
 import { baseQuerySchema } from './schemas';
 
 const router = Router();
+
+router.get('/financeiro-mensal', async (req, res) => {
+  const parseResult = baseQuerySchema.safeParse(req.query);
+  if (!parseResult.success) {
+    return res.status(400).json({ error: 'Query inválida', issues: parseResult.error.format() });
+  }
+
+  const result = await getMonthlyFinancialPayments(parseResult.data);
+  res.json(result);
+});
 
 router.get('/', async (req, res) => {
   const parseResult = baseQuerySchema.safeParse(req.query);
