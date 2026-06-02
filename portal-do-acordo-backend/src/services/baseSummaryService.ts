@@ -27,7 +27,7 @@ type AgreementSummaryRow = {
   acordos: number | string;
 };
 
-const VISIBLE_AGING_ORDER: AgingRange[] = ['0-90', '91-180', '181-360', '361+', 'SEM VENCIMENTO'];
+const VISIBLE_AGING_ORDER: AgingRange[] = ['0-90', '91-180', '181-360', '361+'];
 const AGING_LABELS: Record<AgingRange, string> = {
   '0-90': '0 a 90 dias',
   '91-180': '91 a 180 dias',

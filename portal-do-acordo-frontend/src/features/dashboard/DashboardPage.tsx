@@ -49,7 +49,6 @@ const AGING_LABELS: Record<string, string> = {
   '91-180': '91 a 180 dias',
   '181-360': '181 a 360 dias',
   '361+': '361+ dias',
-  'SEM VENCIMENTO': 'Sem vencimento',
 };
 const MONTHLY_TARGETS: Record<string, { recuperado: number; faturamento: number }> = {
   '2026-02': { recuperado: 250000, faturamento: 35000 },
@@ -1087,9 +1086,13 @@ function DashboardPage() {
     () => baseSummary.processos_por_credor.map((row) => ({ name: row.credor, value: row.processos })),
     [baseSummary.processos_por_credor]
   );
-  const baseAgingProcessRows = useMemo(
-    () => baseSummary.aging.map((row) => ({ name: row.name || AGING_LABELS[row.faixa] || row.faixa, value: row.processos })),
+  const baseVisibleAgingRows = useMemo(
+    () => baseSummary.aging.filter((row) => row.faixa !== 'SEM VENCIMENTO'),
     [baseSummary.aging]
+  );
+  const baseAgingProcessRows = useMemo(
+    () => baseVisibleAgingRows.map((row) => ({ name: row.name || AGING_LABELS[row.faixa] || row.faixa, value: row.processos })),
+    [baseVisibleAgingRows]
   );
   const baseStatusLabel =
     baseSummary.aging_complete || baseSummary.status === 'ready'
@@ -1178,7 +1181,7 @@ function DashboardPage() {
   const baseTicketMedio = baseSummary.ticket_medio;
   const baseTotalBorderos = baseSummary.total_borderos;
   const baseEntryCreditorRows = baseSummary.entrada_por_credor;
-  const baseRangeRows = baseSummary.aging;
+  const baseRangeRows = baseVisibleAgingRows;
   const baseRangeTotal = useMemo(
     () => baseRangeRows.reduce((sum, row) => sum + row.valorCarteira, 0),
     [baseRangeRows]

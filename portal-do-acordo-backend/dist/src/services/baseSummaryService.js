@@ -5,7 +5,7 @@ const prismaClients_1 = require("../db/prismaClients");
 const reportFilters_1 = require("../utils/reportFilters");
 const cache_1 = require("../utils/cache");
 const activeBaseService_1 = require("./activeBaseService");
-const VISIBLE_AGING_ORDER = ['0-90', '91-180', '181-360', '361+', 'SEM VENCIMENTO'];
+const VISIBLE_AGING_ORDER = ['0-90', '91-180', '181-360', '361+'];
 const AGING_LABELS = {
     '0-90': '0 a 90 dias',
     '91-180': '91 a 180 dias',
