@@ -5,6 +5,7 @@ import {
   CartesianGrid,
   Cell,
   ComposedChart,
+  LabelList,
   Line,
   LineChart,
   Legend,
@@ -115,6 +116,13 @@ function calendarWeekOfMonth(date: string) {
 
 function viewportLabel(value: { width: number | null; height: number | null }) {
   return value.width && value.height ? `${value.width} x ${value.height}` : '-';
+}
+
+function shortMoney(value: number) {
+  const absoluteValue = Math.abs(value);
+  if (absoluteValue >= 1000000) return `R$ ${(value / 1000000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi`;
+  if (absoluteValue >= 1000) return `R$ ${(value / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} mil`;
+  return compactMoney(value);
 }
 
 function DashboardPage() {
@@ -1171,6 +1179,17 @@ function DashboardPage() {
   const baseTotalBorderos = baseSummary.total_borderos;
   const baseEntryCreditorRows = baseSummary.entrada_por_credor;
   const baseRangeRows = baseSummary.aging;
+  const baseRangeTotal = useMemo(
+    () => baseRangeRows.reduce((sum, row) => sum + row.valorCarteira, 0),
+    [baseRangeRows]
+  );
+  const baseRangeChartRows = useMemo(
+    () => baseRangeRows.map((row) => ({
+      ...row,
+      participacao: baseRangeTotal > 0 ? (row.valorCarteira / baseRangeTotal) * 100 : 0,
+    })),
+    [baseRangeRows, baseRangeTotal]
+  );
 
   function toggleCredor(credor: string) {
     setSelectedCredores((current) => {
@@ -1481,9 +1500,13 @@ function DashboardPage() {
 
             <Section num="02" title="Projeção do Mês">
               <Panel title="Projeção do mês" meta={`${number(projectionBaseDays)} de ${number(businessDays)} dias úteis considerados`}>
-                <table>
+                <table className="projection-table">
+                  <colgroup>
+                    <col />
+                    <col span={5} />
+                  </colgroup>
                   <thead>
-                    <tr><th>Indicador</th><th className="right">Realizado</th><th className="right">Projeção final</th><th className="right">A projetar</th><th className="right">Meta mensal</th><th className="right">Falta para meta</th><th className="right">% projetada</th></tr>
+                    <tr><th>Indicador</th><th className="right">Realizado</th><th className="right">Projeção final</th><th className="right">Meta mensal</th><th className="right">Falta para meta</th><th className="right">% projetada</th></tr>
                   </thead>
                   <tbody>
                     {projectionRows.map((row) => (
@@ -1491,7 +1514,6 @@ function DashboardPage() {
                         <td className="bold">{row.name}</td>
                         <td className="right">{money(row.atual)}</td>
                         <td className="right">{money(row.projetado)}</td>
-                        <td className="right muted">{money(Math.max(row.projetado - row.atual, 0))}</td>
                         <td className="right">{row.meta === null ? '-' : money(row.meta)}</td>
                         <td className="right muted">{row.meta === null ? '-' : money(Math.max(row.meta - row.atual, 0))}</td>
                         <td className="right">{row.meta === null ? '-' : percent(row.projetado, row.meta)}</td>
@@ -1759,16 +1781,37 @@ function DashboardPage() {
                       <BarRows rows={baseAgingProcessRows} color={color} valueLabel="Processos" showPercent />
                     </Panel>
                     <Panel title="Valor Total por Faixa" meta="Estimativa baseada no ticket anual por credor">
-                      <div className="chart-wrap small">
+                      <div className="range-value-summary">
+                        <span>Carteira ativa estimada</span>
+                        <strong>{compactMoney(baseRangeTotal)}</strong>
+                        <small>Distribuição por menor vencimento dos processos ativos</small>
+                      </div>
+                      <div className="chart-wrap range-value-chart">
                         <ResponsiveContainer>
-                          <BarChart data={baseRangeRows}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                            <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-16} textAnchor="end" height={62} />
-                            <YAxis tickFormatter={(value) => `R$${Math.round(Number(value) / 1000)}k`} tick={{ fontSize: 10 }} />
-                            <Tooltip formatter={(value: number) => money(value)} />
-                            <Bar dataKey="valorCarteira" name="Valor total" fill={chartAccent} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                          <BarChart data={baseRangeChartRows} layout="vertical" margin={{ top: 8, right: 88, bottom: 4, left: 10 }}>
+                            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                            <XAxis type="number" tickFormatter={(value) => shortMoney(Number(value))} tick={{ fontSize: 10 }} />
+                            <YAxis type="category" dataKey="name" width={96} tick={{ fontSize: 11, fontWeight: 700 }} />
+                            <Tooltip
+                              formatter={(value: number, name: string) => name === 'Valor estimado' ? [money(value), name] : [value, name]}
+                              labelFormatter={(label) => `Faixa: ${label}`}
+                            />
+                            <Bar dataKey="valorCarteira" name="Valor estimado" radius={[0, 6, 6, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE}>
+                              {baseRangeChartRows.map((row, index) => <Cell key={row.faixa} fill={CHART_PALETTE[index % CHART_PALETTE.length]} />)}
+                              <LabelList dataKey="valorCarteira" position="right" formatter={(value: number) => shortMoney(value)} className="range-value-label" />
+                            </Bar>
                           </BarChart>
                         </ResponsiveContainer>
+                      </div>
+                      <div className="range-value-details">
+                        {baseRangeChartRows.map((row, index) => (
+                          <div className="range-value-detail" key={row.faixa}>
+                            <span className="range-value-swatch" style={{ background: CHART_PALETTE[index % CHART_PALETTE.length] }} />
+                            <strong>{row.name}</strong>
+                            <span>{compactMoney(row.valorCarteira)}</span>
+                            <small>{row.participacao.toFixed(1)}% | {number(row.processos)} processos</small>
+                          </div>
+                        ))}
                       </div>
                     </Panel>
                   </div>
