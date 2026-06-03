@@ -1351,8 +1351,9 @@ function DashboardPage() {
         <div className="tv-mode">
           <div className="tv-mode-header">
             <div className="tv-mode-title">
-              <h1>Portal do Acordo - {TAB_LABELS[tab] || selectedPeriodTitle}</h1>
-              <p>{selectedPeriodLabel} · {systemLabel(system)}</p>
+              <div className="tv-mode-eyebrow"><span /> Modo TV</div>
+              <h1>{TAB_LABELS[tab] || selectedPeriodTitle}</h1>
+              <p>Portal do Acordo · {selectedPeriodLabel} · {systemLabel(system)}</p>
             </div>
             <div className="tv-mode-clock">
               <div className="tv-time">{tvTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
@@ -1363,32 +1364,32 @@ function DashboardPage() {
           <div className="tv-mode-content">
             <div className="tv-metrics-container">
               <div className="tv-grid-6">
-                <div className="tv-metric-card">
+                <div className="tv-metric-card tv-tone-gold">
                   <div className="tv-metric-label">Recuperado</div>
                   <div className="tv-metric-value">{money(resultMetrics.totalPago)}</div>
                   <div className="tv-metric-small">{number(resultMetrics.acordos)} acordos</div>
                 </div>
-                <div className="tv-metric-card">
+                <div className="tv-metric-card tv-tone-sky">
                   <div className="tv-metric-label">Acordos Pagos</div>
                   <div className="tv-metric-value">{number(resultMetrics.acordosPagos)}</div>
                   <div className="tv-metric-small">Com pagamento</div>
                 </div>
-                <div className="tv-metric-card">
+                <div className="tv-metric-card tv-tone-blue">
                   <div className="tv-metric-label">Acessos</div>
                   <div className="tv-metric-value">{number(resultMetrics.acessos)}</div>
                   <div className="tv-metric-small">Conversão: {resultMetrics.conversao.toFixed(1)}%</div>
                 </div>
-                <div className="tv-metric-card">
+                <div className="tv-metric-card tv-tone-violet">
                   <div className="tv-metric-label">Ticket Médio</div>
                   <div className="tv-metric-value">{money(resultMetrics.totalPago / Math.max(resultMetrics.acordosPagos, 1))}</div>
                   <div className="tv-metric-small">Por pagamento</div>
                 </div>
-                <div className="tv-metric-card">
+                <div className="tv-metric-card tv-tone-rust">
                   <div className="tv-metric-label">Faturamento</div>
                   <div className="tv-metric-value">{money(resultMetrics.faturamento)}</div>
-                  <div className="tv-metric-small">Honorários e taxas</div>
+                  <div className="tv-metric-small">Receitas sem capital</div>
                 </div>
-                <div className="tv-metric-card">
+                <div className="tv-metric-card tv-tone-green">
                   <div className="tv-metric-label">Taxa de Conversão</div>
                   <div className="tv-metric-value">{resultMetrics.conversao.toFixed(2)}%</div>
                   <div className="tv-metric-small">Acessos → Acordos</div>
@@ -1399,7 +1400,7 @@ function DashboardPage() {
                   <h2>Top Pagamentos por Negociador</h2>
                   <div className="tv-negotiators-list">
                     {negociadores.slice(0, 3).map((neg, index) => (
-                      <div key={neg.name} className="tv-negotiator-item">
+                      <div key={neg.name} className={`tv-negotiator-item tv-rank-${index + 1}`}>
                         <div className="tv-neg-rank">#{index + 1}</div>
                         <div className="tv-neg-info">
                           <div className="tv-neg-name">{neg.name}</div>
