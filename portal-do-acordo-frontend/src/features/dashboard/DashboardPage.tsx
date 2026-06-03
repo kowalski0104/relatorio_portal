@@ -1349,70 +1349,310 @@ function DashboardPage() {
     <div className={`dashboard-shell theme-night ${presentationMode ? 'presentation-mode' : ''}`}>
       {tvMode ? (
         <div className="tv-mode">
-          <div className="tv-mode-header">
-            <div className="tv-mode-title">
-              <div className="tv-mode-eyebrow"><span /> Modo TV</div>
-              <h1>{TAB_LABELS[tab] || selectedPeriodTitle}</h1>
-              <p>Portal do Acordo · {selectedPeriodLabel} · {systemLabel(system)}</p>
-            </div>
-            <div className="tv-mode-clock">
-              <div className="tv-time">{tvTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
-              <div className="tv-date">{tvTime.toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
-              <div className="tv-auto-refresh">Auto-refresh: 30 min</div>
-            </div>
-          </div>
-          <div className="tv-mode-content">
-            <div className="tv-metrics-container">
-              <div className="tv-grid-6">
-                <div className="tv-metric-card tv-tone-gold">
-                  <div className="tv-metric-label">Recuperado</div>
-                  <div className="tv-metric-value">{money(resultMetrics.totalPago)}</div>
-                  <div className="tv-metric-small">{number(resultMetrics.acordos)} acordos</div>
-                </div>
-                <div className="tv-metric-card tv-tone-sky">
-                  <div className="tv-metric-label">Acordos Pagos</div>
-                  <div className="tv-metric-value">{number(resultMetrics.acordosPagos)}</div>
-                  <div className="tv-metric-small">Com pagamento</div>
-                </div>
-                <div className="tv-metric-card tv-tone-blue">
-                  <div className="tv-metric-label">Acessos</div>
-                  <div className="tv-metric-value">{number(resultMetrics.acessos)}</div>
-                  <div className="tv-metric-small">Conversão: {resultMetrics.conversao.toFixed(1)}%</div>
-                </div>
-                <div className="tv-metric-card tv-tone-violet">
-                  <div className="tv-metric-label">Ticket Médio</div>
-                  <div className="tv-metric-value">{money(resultMetrics.totalPago / Math.max(resultMetrics.acordosPagos, 1))}</div>
-                  <div className="tv-metric-small">Por pagamento</div>
-                </div>
-                <div className="tv-metric-card tv-tone-rust">
-                  <div className="tv-metric-label">Faturamento</div>
-                  <div className="tv-metric-value">{money(resultMetrics.faturamento)}</div>
-                  <div className="tv-metric-small">Receitas sem capital</div>
-                </div>
-                <div className="tv-metric-card tv-tone-green">
-                  <div className="tv-metric-label">Taxa de Conversão</div>
-                  <div className="tv-metric-value">{resultMetrics.conversao.toFixed(2)}%</div>
-                  <div className="tv-metric-small">Acessos → Acordos</div>
+          <div className="tv-frame">
+            <header className="tv-toolbar">
+              <div className="tv-brand">
+                <img src={logoUrl} alt="Portal do Acordo" />
+                <div>
+                  <span>Modo TV</span>
+                  <strong>{TAB_LABELS[tab]}</strong>
+                  <small>{selectedPeriodLabel} · {systemLabel(system)}</small>
                 </div>
               </div>
-              {negociadores.length > 0 && (
-                <div className="tv-top-negotiators">
-                  <h2>Top Pagamentos por Negociador</h2>
-                  <div className="tv-negotiators-list">
-                    {negociadores.slice(0, 3).map((neg, index) => (
-                      <div key={neg.name} className={`tv-negotiator-item tv-rank-${index + 1}`}>
-                        <div className="tv-neg-rank">#{index + 1}</div>
-                        <div className="tv-neg-info">
-                          <div className="tv-neg-name">{neg.name}</div>
-                          <div className="tv-neg-value">{money(neg.total)}</div>
-                        </div>
-                        <div className="tv-neg-qtd">{number(neg.qtd)} pagamentos</div>
+              <div className="tv-tabs" aria-label="Abas do modo TV">
+                {PRESENTATION_TABS.map((item) => (
+                  <button key={item} type="button" className={tab === item ? 'active' : ''} onClick={() => setTab(item)}>
+                    {TAB_LABELS[item]}
+                  </button>
+                ))}
+              </div>
+              <div className="tv-clock">
+                <strong>{tvTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</strong>
+                <span>{tvTime.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+              </div>
+            </header>
+
+            <main className="tv-report">
+              {loading && rawDashboardEnabled ? <div className="loading-state" role="status">Carregando dados do portal...</div> : null}
+              {error && rawDashboardEnabled ? <div className="error-state" role="alert">{error}</div> : null}
+
+              {!loading && !error && tab === 'relatorio' ? (
+                <>
+                  <header className="hero tv-hero">
+                    <div className="hero-top">
+                      <div>
+                        <p>Resultados</p>
+                        <h1><span>{portfolioPeriodTitle}</span></h1>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+                      <div className="hero-meta">
+                        <strong>{portfolioPeriodList.length === 1 ? periodLabel(primaryPortfolioPeriod) : `${portfolioPeriodList.length} meses`}</strong>
+                        <span>{portfolioPeriodRange}</span>
+                        <span>{number(businessDays)} dias úteis</span>
+                        <em>{systemLabel(system)}</em>
+                      </div>
+                    </div>
+                    <div className="kpi-row">
+                      <MetricCard tone="teal" label="Total Recuperado" value={compactMoney(resultMetrics.totalPago)} current={resultMetrics.totalPago} previous={resultPreviousMetrics?.totalPago} small="Pagamentos no período" />
+                      <MetricCard tone="gold" label="Faturamento" value={compactMoney(resultMetrics.faturamento)} current={resultMetrics.faturamento} previous={resultPreviousMetrics?.faturamento} small="Receitas sem capital" />
+                      <MetricCard tone="rust" label="Acordos Pagos" value={number(resultMetrics.acordosPagos)} current={resultMetrics.acordosPagos} previous={resultPreviousMetrics?.acordosPagos} small="Processos com pagamento" />
+                      <MetricCard tone="sky" label="Conversão" value={`${resultMetrics.conversao.toFixed(1)}%`} current={resultMetrics.conversao} previous={resultPreviousMetrics?.conversao} small={systemLabel(system)} />
+                      <MetricCard tone="teal" label="Acessos" value={number(resultMetrics.acessos)} current={resultMetrics.acessos} previous={resultPreviousMetrics?.acessos} small="Visitantes únicos" />
+                    </div>
+                  </header>
+
+                  <Section num="01" title="Evolução e Volume">
+                    <div className="grid-2">
+                      <Panel title="Receita diária" expandable={false}>
+                        <div className="chart-wrap small">
+                          <ResponsiveContainer>
+                            <LineChart data={isMultiPeriod ? dailyRevenueComparisonRows : receitaDiaria}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                              {businessDayLimitArea && !isMultiPeriod ? (
+                                <ReferenceArea x1={businessDayLimitArea.startLabel} x2={businessDayLimitArea.endLabel} fill="#dbe7f5" fillOpacity={0.45} ifOverflow="extendDomain" />
+                              ) : null}
+                              <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                              <YAxis tickFormatter={(value) => `R$${Math.round(Number(value) / 1000)}k`} tick={{ fontSize: 10 }} />
+                              <Tooltip formatter={(value: number, name: string, item) => [money(value), isMultiPeriod ? comparisonTooltipName(name, item) : name]} />
+                              <Legend verticalAlign="top" height={28} />
+                              {isMultiPeriod ? periodSeries.map((item) => (
+                                <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={item.color} strokeWidth={2.5} dot={{ r: 3 }} connectNulls isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                              )) : (
+                                <Line type="monotone" dataKey="receita" name="Receita diária" stroke={chartAccent} strokeWidth={2.5} dot={{ r: 3 }} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                              )}
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </Panel>
+                      <Panel title="Acordos e acessos" expandable={false}>
+                        <div className="chart-wrap small">
+                          <ResponsiveContainer>
+                            <ComposedChart data={acordosDiarios}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                              <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                              <YAxis yAxisId="left" allowDecimals={false} tick={{ fontSize: 10 }} />
+                              <YAxis yAxisId="right" orientation="right" allowDecimals={false} tick={{ fontSize: 10 }} />
+                              <Tooltip formatter={(value: number, name: string) => name === 'Acessos' ? [`${value} acessos`, name] : [`${value} acordos`, name]} />
+                              <Legend verticalAlign="top" height={28} />
+                              <Bar yAxisId="left" dataKey="acordos" name="Acordos por dia" fill={chartAccent} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                              <Line yAxisId="right" type="monotone" dataKey="acessos" name="Acessos" stroke="#8884d8" strokeWidth={2} dot={false} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                            </ComposedChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </Panel>
+                    </div>
+                  </Section>
+
+                  <Section num="02" title="Top Negociadores">
+                    <Panel title="Pagamentos por negociador" expandable={false}>
+                      <BarRows rows={negociadores.slice(0, 6).map((row) => ({ name: row.name, value: row.total }))} color={color} valueFormatter={money} valueLabel="Recuperado" />
+                    </Panel>
+                  </Section>
+                </>
+              ) : null}
+
+              {!loading && !error && tab === 'performance' ? (
+                <>
+                  <header className="hero tv-hero">
+                    <div className="hero-top">
+                      <div>
+                        <p>Performance</p>
+                        <h1><span>{selectedPeriodTitle}</span></h1>
+                      </div>
+                      <div className="hero-meta">
+                        <strong>{selectedPeriodLabel}</strong>
+                        <span>{selectedPeriodRange}</span>
+                        <span>{number(businessDays)} dias úteis</span>
+                        <em>{systemLabel(system)}</em>
+                      </div>
+                    </div>
+                    <div className="kpi-row">
+                      <MetricCard tone="teal" label="Envios" value={number(totalEnviosCanal)} current={totalEnviosCanal} small={`${number(emailEnvios)} e-mails - ${number(whatsappEnvios)} WhatsApp`} />
+                      <MetricCard tone="gold" label="Cliques no Link" value={number(totalCliquesLink)} current={totalCliquesLink} small={`${number(cliquesPortal)} WhatsApp - ${number(emailClickTotal)} e-mail`} />
+                      <MetricCard tone="sky" label="Acessos" value={number(acessosPortal)} current={acessosPortal} previous={previousPerformanceMetrics?.acessos} small="Acessos no site" />
+                      <MetricCard tone="teal" label="Acordos" value={number(acordosPortal)} current={acordosPortal} previous={previousPerformanceMetrics?.acordos} small="Formalizados" />
+                      <MetricCard tone="rust" label="Conversão" value={`${conversaoPortal.toFixed(1)}%`} current={conversaoPortal} previous={previousPerformanceMetrics?.conversao} small={`${number(acordosPortal)} acordos`} />
+                    </div>
+                  </header>
+
+                  <Section num="01" title="Acessos e Conversão">
+                    <div className="grid-2">
+                      <Panel title="Funil do Canal" expandable={false}>
+                        <div className="funnel-grid">
+                          {funnelRows.map((row, index) => (
+                            <div className="funnel-card" key={row.name}>
+                              <span>{row.name}</span>
+                              <strong>{row.value}</strong>
+                              <em style={{ width: `${Math.max(Math.min(row.fill, 100), 8)}%`, background: CHART_PALETTE[index % CHART_PALETTE.length] }} />
+                            </div>
+                          ))}
+                        </div>
+                      </Panel>
+                      <Panel title="WhatsApp e E-mail por Credor" meta={`${number(totalCliquesLink)} cliques`} expandable={false}>
+                        <table>
+                          <thead>
+                            <tr><th>Credor / Grupo</th><th className="right">WhatsApp</th><th className="right">E-mail</th><th className="right">Total</th><th className="right">Conversão</th></tr>
+                          </thead>
+                          <tbody>
+                            {clickCredorRows.length === 0 ? <tr><td colSpan={5} className="muted">Sem cliques no período.</td></tr> : null}
+                            {clickCredorRows.slice(0, 6).map((row) => (
+                              <tr key={row.credor}>
+                                <td className="bold">{row.credor}</td>
+                                <td className="right">{number(row.whatsapp)}</td>
+                                <td className="right">{number(row.email)}</td>
+                                <td className="right bold">{number(row.total)}</td>
+                                <td className="right">{row.conversao.toFixed(1)}%</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </Panel>
+                    </div>
+                  </Section>
+
+                  <Section num="02" title="Evolução Mensal">
+                    <div className="grid-2">
+                      <Panel title="Envios por canal" expandable={false}>
+                        <div className="chart-wrap small">
+                          <ResponsiveContainer>
+                            <ComposedChart data={monthlyEvolution}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                              <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                              <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+                              <Tooltip formatter={(value: number, name: string) => [number(value), name]} />
+                              <Legend verticalAlign="top" height={28} />
+                              <Bar dataKey="emails" name="E-mails" fill={COLORS.sky} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                              <Bar dataKey="whatsapp" name="WhatsApp" fill={COLORS.green} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                              <Line type="monotone" dataKey="envios" name="Total de envios" stroke={COLORS.gold} strokeWidth={2.5} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                            </ComposedChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </Panel>
+                      <Panel title="Acessos, acordos e conversão" expandable={false}>
+                        <div className="chart-wrap small">
+                          <ResponsiveContainer>
+                            <ComposedChart data={monthlyEvolution}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                              <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                              <YAxis yAxisId="volume" allowDecimals={false} tick={{ fontSize: 10 }} />
+                              <YAxis yAxisId="rate" orientation="right" tickFormatter={(value) => `${value}%`} tick={{ fontSize: 10 }} />
+                              <Tooltip formatter={(value: number, name: string) => [name === 'Conversão acesso -> acordo' ? `${value.toFixed(1)}%` : number(value), name]} />
+                              <Legend verticalAlign="top" height={28} />
+                              <Bar yAxisId="volume" dataKey="acessos" name="Acessos" fill={COLORS.sky} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                              <Bar yAxisId="volume" dataKey="acordos" name="Acordos" fill={COLORS.rust} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                              <Line yAxisId="rate" type="monotone" dataKey="conversao" name="Conversão acesso -> acordo" stroke={COLORS.green} strokeWidth={2.5} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                            </ComposedChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </Panel>
+                    </div>
+                  </Section>
+                </>
+              ) : null}
+
+              {tab === 'base-ativa' ? (
+                <>
+                  <header className="hero tv-hero">
+                    <div className="hero-top">
+                      <div>
+                        <p>Bases</p>
+                        <h1><span>{selectedPeriodTitle}</span></h1>
+                      </div>
+                      <div className="hero-meta">
+                        <strong>{selectedPeriodLabel}</strong>
+                        <span>{noCreditorSelected ? 'Nenhum credor selecionado' : selectedCredores.size === 0 ? 'Todos os credores' : `${number(selectedCredores.size)} credores selecionados`}</span>
+                        <em>{systemLabel(system)}</em>
+                      </div>
+                    </div>
+                    <div className="kpi-row">
+                      <MetricCard tone="teal" label="Total de Processos" value={number(baseTotalProcessos)} current={baseTotalProcessos} small="Processos na base" />
+                      <MetricCard tone="gold" label="Valor Total da Carteira" value={compactMoney(baseValorTotal)} current={baseValorTotal} small={`${number(baseTotalBorderos)} borderôs`} />
+                      <MetricCard tone="sky" label="Credores Ativos" value={number(baseCredoresAtivos)} current={baseCredoresAtivos} small={baseStatusLabel} />
+                      <MetricCard tone="rust" label="Ticket Médio" value={money(baseTicketMedio)} current={baseTicketMedio} small="Valor por processo" />
+                    </div>
+                  </header>
+
+                  <Section num="01" title="Base por Credor e Faixa">
+                    <div className="grid-2">
+                      <Panel title="Processos por Credor" meta={`Top ${Math.min(baseProcessCredorRows.length, 6)}`} expandable={false}>
+                        <BarRows rows={baseProcessCredorRows.slice(0, 6)} color={color} valueLabel="Processos" />
+                      </Panel>
+                      <Panel title="Valor Total por Faixa" meta="Títulos abertos da base ativa" expandable={false}>
+                        <div className="range-value-summary">
+                          <span>Carteira ativa</span>
+                          <strong>{compactMoney(baseRangeTotal)}</strong>
+                          <small>Distribuição por menor vencimento dos processos ativos</small>
+                        </div>
+                        <div className="chart-wrap range-value-chart">
+                          <ResponsiveContainer>
+                            <BarChart data={baseRangeChartRows} layout="vertical" margin={{ top: 8, right: 88, bottom: 4, left: 10 }}>
+                              <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                              <XAxis type="number" tickFormatter={(value) => shortMoney(Number(value))} tick={{ fontSize: 10 }} />
+                              <YAxis type="category" dataKey="name" width={96} tick={{ fontSize: 11, fontWeight: 700 }} />
+                              <Tooltip formatter={(value: number, name: string) => name === 'Valor total' ? [money(value), name] : [value, name]} labelFormatter={(label) => `Faixa: ${label}`} />
+                              <Bar dataKey="valorCarteira" name="Valor total" radius={[0, 6, 6, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE}>
+                                {baseRangeChartRows.map((row, index) => <Cell key={row.faixa} fill={CHART_PALETTE[index % CHART_PALETTE.length]} />)}
+                                <LabelList dataKey="valorCarteira" position="right" formatter={(value: number) => shortMoney(value)} className="range-value-label" />
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </Panel>
+                    </div>
+                  </Section>
+                </>
+              ) : null}
+
+              {tab === 'custos' ? (
+                <>
+                  <header className="hero tv-hero">
+                    <div className="hero-top">
+                      <div>
+                        <p>Custos</p>
+                        <h1><span>{selectedPeriodTitle}</span></h1>
+                      </div>
+                      <div className="hero-meta">
+                        <strong>{selectedPeriodLabel}</strong>
+                        <span>{selectedPeriodRange}</span>
+                        <span>{number(businessDays)} dias úteis</span>
+                        <em>{systemLabel(system)}</em>
+                      </div>
+                    </div>
+                    <div className="kpi-row">
+                      <MetricCard tone="teal" label="Total comunicação" value={money(communicationCosts.emailCost + whatsappCusto)} current={communicationCosts.emailCost + whatsappCusto} small="WhatsApp + e-mail" />
+                      <MetricCard tone="gold" label="Custo WhatsApp" value={money(whatsappCusto)} current={whatsappCusto} small={`${number(whatsappEnvios)} mensagens`} />
+                      <MetricCard tone="rust" label="Custo e-mail" value={money(communicationCosts.emailCost)} current={communicationCosts.emailCost} small={`${number(emailEnvios)} e-mails enviados`} />
+                    </div>
+                  </header>
+
+                  <Section num="01" title="Custos e Envios">
+                    <div className="grid-2">
+                      <Panel title="Detalhamento" expandable={false}>
+                        <BarRows rows={communicationCosts.rows} color={color} valueFormatter={money} valueLabel="Valor" showPercent />
+                      </Panel>
+                      <Panel title="E-mail e WhatsApp por credor" meta="Top 6 por envios" expandable={false}>
+                        <table>
+                          <thead>
+                            <tr><th>Credor / Grupo</th><th className="right">E-mails</th><th className="right">WhatsApp</th><th className="right">Custo WhatsApp</th><th className="right">Envios totais</th></tr>
+                          </thead>
+                          <tbody>
+                            {communicationCosts.byCredor.length === 0 ? <tr><td colSpan={5} className="muted">Sem dados de comunicação no período.</td></tr> : null}
+                            {communicationCosts.byCredor.slice(0, 6).map((row) => (
+                              <tr key={row.credor}>
+                                <td className="bold">{row.credor}</td>
+                                <td className="right">{number(row.emails)}</td>
+                                <td className="right">{number(row.whatsapp)}</td>
+                                <td className="right">{money(row.custoWati)}</td>
+                                <td className="right muted">{number(row.totalEnvios)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </Panel>
+                    </div>
+                  </Section>
+                </>
+              ) : null}
+            </main>
           </div>
           <button type="button" className="tv-close-btn" onClick={() => setTvMode(false)} title="Sair do modo TV (ESC)">
             <X size={20} />
