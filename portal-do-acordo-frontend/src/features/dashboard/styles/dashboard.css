@@ -1855,8 +1855,8 @@ tfoot td {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background: linear-gradient(135deg, #0a1f3a 0%, #0f2a48 50%, #142d4c 100%);
-  color: #fff;
+  background: var(--paper);
+  color: var(--ink);
   font-family: var(--font-family);
   overflow: hidden;
 }
@@ -1866,25 +1866,31 @@ tfoot td {
   justify-content: space-between;
   align-items: center;
   gap: 20px;
-  padding: 25px 35px;
-  background: rgba(0, 0, 0, 0.3);
-  border-bottom: 3px solid #5a8bc4;
+  padding: 20px 36px;
+  background: linear-gradient(180deg, var(--surface) 0%, var(--soft) 100%);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 12px 30px rgba(13, 17, 23, .085);
   flex-shrink: 0;
+}
+
+.dashboard-shell.theme-night .tv-mode-header {
+  background: linear-gradient(180deg, #172235 0%, var(--soft) 100%);
 }
 
 .tv-mode-title h1 {
   margin: 0;
-  font-size: clamp(28px, 3.5vw, 44px);
-  font-weight: 700;
-  line-height: 1.1;
-  color: #fff;
+  font-size: clamp(24px, 3vw, 36px);
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--ink);
+  letter-spacing: -0.5px;
 }
 
 .tv-mode-title p {
-  margin: 6px 0 0;
-  font-size: clamp(13px, 1.2vw, 16px);
-  color: #b0c4de;
-  letter-spacing: 0.5px;
+  margin: 4px 0 0;
+  font-size: clamp(12px, 1vw, 14px);
+  color: var(--muted);
+  letter-spacing: 0.04em;
 }
 
 .tv-mode-clock {
@@ -1892,119 +1898,151 @@ tfoot td {
   flex-direction: column;
   align-items: flex-end;
   gap: 6px;
-  padding: 12px 18px;
-  background: rgba(90, 139, 196, 0.15);
+  padding: 16px 20px;
+  background: var(--soft);
   border-radius: 8px;
-  border: 2px solid #5a8bc4;
+  border: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .tv-time {
-  font-size: clamp(24px, 2.5vw, 36px);
-  font-weight: 700;
+  font-size: clamp(20px, 2.2vw, 32px);
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 1px;
+  line-height: 1;
+  color: var(--ink);
 }
 
 .tv-date {
-  font-size: clamp(11px, 0.9vw, 13px);
-  color: #b0c4de;
+  font-size: clamp(11px, 0.85vw, 12px);
+  color: var(--muted);
   text-transform: capitalize;
+  font-weight: 600;
 }
 
 .tv-auto-refresh {
-  font-size: 11px;
-  color: #90ee90;
-  margin-top: 3px;
-  font-weight: 600;
+  font-size: 10px;
+  color: var(--accent);
+  margin-top: 4px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
 }
 
 .tv-mode-content {
   flex: 1;
-  padding: 30px;
+  padding: 36px;
   overflow: auto;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
 }
 
 .tv-metrics-container {
   width: 100%;
+  max-width: 1400px;
   display: flex;
   flex-direction: column;
-  gap: 30px;
+  gap: 28px;
 }
 
 .tv-grid-6 {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 20px;
+  gap: 24px;
   width: 100%;
 }
 
 .tv-metric-card {
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 20px 22px;
-  background: linear-gradient(135deg, rgba(90, 139, 196, 0.2), rgba(110, 161, 218, 0.1));
-  border: 2px solid #5a8bc4;
-  border-radius: 12px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
-  min-height: 160px;
-  transition: all 0.3s ease;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(13, 17, 23, .085);
+  min-height: 140px;
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
 }
 
+.tv-metric-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--accent);
+}
+
+.tv-metric-card.gold::before { background: var(--gold); }
+.tv-metric-card.rust::before { background: var(--rust); }
+.tv-metric-card.sky::before { background: #7da7d9; }
+
 .tv-metric-card:hover {
-  background: linear-gradient(135deg, rgba(90, 139, 196, 0.3), rgba(110, 161, 218, 0.2));
-  box-shadow: 0 20px 50px rgba(90, 139, 196, 0.3);
   transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow: 0 18px 42px rgba(13, 17, 23, .16);
 }
 
 .tv-metric-label {
-  font-size: clamp(11px, 1vw, 13px);
-  color: #b0c4de;
+  font-size: clamp(10px, 0.85vw, 12px);
+  color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 1px;
-  font-weight: 600;
-  margin-bottom: 8px;
+  letter-spacing: .08em;
+  font-weight: 800;
+  margin-bottom: 10px;
 }
 
 .tv-metric-value {
-  font-size: clamp(28px, 4.5vw, 48px);
-  font-weight: 900;
+  font-size: clamp(26px, 4vw, 42px);
+  font-weight: 800;
   line-height: 1;
-  color: #ffffff;
-  margin-bottom: 10px;
+  color: var(--ink);
+  margin-bottom: 12px;
   font-variant-numeric: tabular-nums;
 }
 
 .tv-metric-small {
-  font-size: clamp(11px, 0.95vw, 13px);
-  color: #90ee90;
+  font-size: clamp(10px, 0.9vw, 12px);
+  color: var(--muted);
   margin-top: auto;
   line-height: 1.3;
 }
 
 .tv-top-negotiators {
-  background: rgba(0, 0, 0, 0.2);
-  border: 2px solid #5a8bc4;
-  border-radius: 12px;
-  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 12px 30px rgba(13, 17, 23, .085);
 }
 
 .tv-top-negotiators h2 {
   margin: 0 0 20px 0;
-  font-size: clamp(16px, 1.8vw, 24px);
-  font-weight: 700;
-  color: #fff;
+  font-size: clamp(14px, 1.5vw, 18px);
+  font-weight: 800;
+  color: var(--ink);
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: .12em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tv-top-negotiators h2::before {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 1.4em;
+  background: var(--gold);
+  border-radius: 2px;
+  flex-shrink: 0;
 }
 
 .tv-negotiators-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
 }
 
@@ -2013,80 +2051,83 @@ tfoot td {
   align-items: center;
   gap: 16px;
   padding: 16px;
-  background: linear-gradient(135deg, rgba(110, 161, 218, 0.15), rgba(90, 139, 196, 0.1));
-  border-left: 4px solid #90ee90;
-  border-radius: 8px;
-  transition: all 0.3s ease;
+  background: var(--soft);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  transition: transform .18s ease, border-color .18s ease;
 }
 
 .tv-negotiator-item:hover {
-  background: linear-gradient(135deg, rgba(110, 161, 218, 0.25), rgba(90, 139, 196, 0.15));
-  transform: translateX(4px);
+  transform: translateX(3px);
+  border-left-color: var(--gold);
 }
 
 .tv-neg-rank {
-  font-size: clamp(18px, 2vw, 24px);
+  font-size: clamp(16px, 1.8vw, 22px);
   font-weight: 900;
-  color: #90ee90;
-  min-width: 50px;
+  color: var(--accent);
+  min-width: 45px;
   text-align: center;
 }
 
 .tv-neg-info {
   flex: 1;
+  min-width: 0;
 }
 
 .tv-neg-name {
-  font-size: clamp(12px, 1.1vw, 14px);
-  color: #b0c4de;
-  font-weight: 600;
-  margin-bottom: 4px;
+  font-size: clamp(11px, 1vw, 13px);
+  color: var(--muted);
+  font-weight: 700;
+  margin-bottom: 3px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.05em;
 }
 
 .tv-neg-value {
-  font-size: clamp(16px, 2vw, 22px);
-  font-weight: 900;
-  color: #fff;
+  font-size: clamp(14px, 1.8vw, 18px);
+  font-weight: 800;
+  color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
 
 .tv-neg-qtd {
-  font-size: clamp(11px, 0.95vw, 12px);
-  color: #90ee90;
+  font-size: clamp(10px, 0.9vw, 11px);
+  color: var(--muted);
   text-align: right;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .tv-close-btn {
   position: absolute;
-  top: 15px;
-  right: 15px;
+  top: 20px;
+  right: 20px;
   z-index: 10001;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 45px;
-  height: 45px;
-  border: 2px solid #c2553f;
-  border-radius: 50%;
-  background: rgba(194, 85, 63, 0.2);
-  color: #ff6b6b;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--soft);
+  color: var(--rust);
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all .18s ease;
   font-size: 0;
   padding: 0;
+  font-weight: 600;
 }
 
 .tv-close-btn:hover {
-  background: rgba(194, 85, 63, 0.4);
-  box-shadow: 0 0 20px rgba(194, 85, 63, 0.4);
+  background: color-mix(in srgb, var(--rust) 8%, var(--soft));
+  border-color: var(--rust);
 }
 
 .tv-close-btn::before {
   content: '✕';
-  font-size: 22px;
+  font-size: 18px;
   font-weight: bold;
 }
 
