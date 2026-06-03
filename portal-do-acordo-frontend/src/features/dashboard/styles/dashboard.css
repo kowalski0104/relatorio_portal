@@ -1872,7 +1872,7 @@ tfoot td {
   top: 0;
   z-index: 4;
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto minmax(180px, .45fr);
+  grid-template-columns: minmax(260px, 1fr) minmax(180px, .45fr);
   align-items: center;
   gap: 18px;
   padding: 14px 18px;
@@ -1906,7 +1906,6 @@ tfoot td {
   gap: 3px;
 }
 
-.tv-brand span,
 .tv-brand small,
 .tv-clock span {
   color: rgba(255, 255, 255, .7);
@@ -1929,34 +1928,6 @@ tfoot td {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.tv-tabs {
-  display: inline-flex;
-  gap: 8px;
-  padding: 5px;
-  background: rgba(255, 255, 255, .07);
-  border: 1px solid rgba(255, 255, 255, .14);
-  border-radius: 999px;
-}
-
-.tv-tabs button {
-  min-height: 38px;
-  border: 0;
-  border-radius: 999px;
-  padding: 0 14px;
-  background: transparent;
-  color: rgba(255, 255, 255, .72);
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  cursor: pointer;
-}
-
-.tv-tabs button.active {
-  background: #fff;
-  color: var(--accent-dark);
 }
 
 .tv-clock {
@@ -1994,6 +1965,10 @@ tfoot td {
 
 .tv-report .hero {
   margin-top: 0;
+}
+
+.tv-report .hero-meta {
+  display: none;
 }
 
 .tv-report .kpi-row {
@@ -2050,11 +2025,6 @@ tfoot td {
 @media (max-width: 1200px) {
   .tv-toolbar {
     grid-template-columns: 1fr;
-  }
-
-  .tv-tabs {
-    justify-content: center;
-    overflow-x: auto;
   }
 
   .tv-clock {

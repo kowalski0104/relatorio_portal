@@ -305,6 +305,7 @@ function DashboardPage() {
         setTvMode(false);
       }
       if (!presentationMode && !tvMode) return;
+      if (tvMode) return;
       if (event.key === ' ') {
         event.preventDefault();
         if (presentationMode) setPresentationPaused((current) => !current);
@@ -1354,17 +1355,9 @@ function DashboardPage() {
               <div className="tv-brand">
                 <img src={logoUrl} alt="Portal do Acordo" />
                 <div>
-                  <span>Modo TV</span>
-                  <strong>{TAB_LABELS[tab]}</strong>
+                  <strong>Resultados</strong>
                   <small>{selectedPeriodLabel} · {systemLabel(system)}</small>
                 </div>
-              </div>
-              <div className="tv-tabs" aria-label="Abas do modo TV">
-                {PRESENTATION_TABS.map((item) => (
-                  <button key={item} type="button" className={tab === item ? 'active' : ''} onClick={() => setTab(item)}>
-                    {TAB_LABELS[item]}
-                  </button>
-                ))}
               </div>
               <div className="tv-clock">
                 <strong>{tvTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</strong>
@@ -1771,7 +1764,10 @@ function DashboardPage() {
             <Presentation size={16} />
             Apresentar
           </button>
-          <button type="button" className="control-btn" onClick={() => setTvMode(true)} title="Modo TV com auto-refresh a cada 30 minutos">
+          <button type="button" className="control-btn" onClick={() => {
+            setTab('relatorio');
+            setTvMode(true);
+          }} title="Tela de resultados com auto-refresh a cada 30 minutos">
             <Presentation size={16} />
             TV
           </button>
