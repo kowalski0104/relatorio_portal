@@ -1407,9 +1407,18 @@ function DashboardPage() {
                           <ResponsiveContainer>
                             <LineChart data={isMultiPeriod ? dailyRevenueComparisonRows : receitaDiaria}>
                               <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                              {businessDayLimitArea && !isMultiPeriod ? (
-                                <ReferenceArea x1={businessDayLimitArea.startLabel} x2={businessDayLimitArea.endLabel} fill="#dbe7f5" fillOpacity={0.45} ifOverflow="extendDomain" />
-                              ) : null}
+                              {!isMultiPeriod ? weeklyRevenueBlocks.map((row) => (
+                                <ReferenceArea
+                                  key={row.label}
+                                  x1={row.x1}
+                                  x2={row.x2}
+                                  fill={row.fill}
+                                  fillOpacity={0.08}
+                                  stroke={row.fill}
+                                  strokeOpacity={0.18}
+                                  label={{ value: `${row.label} ${row.note}`, position: 'insideTop', fill: row.fill, fontSize: 10, fontWeight: 700 }}
+                                />
+                              )) : null}
                               <XAxis dataKey="label" tick={{ fontSize: 10 }} />
                               <YAxis tickFormatter={(value) => `R$${Math.round(Number(value) / 1000)}k`} tick={{ fontSize: 10 }} />
                               <Tooltip formatter={(value: number, name: string, item) => [money(value), isMultiPeriod ? comparisonTooltipName(name, item) : name]} />
