@@ -140,6 +140,7 @@ function DashboardPage() {
   const [presentationMode, setPresentationMode] = useState(false);
   const [presentationPaused, setPresentationPaused] = useState(false);
   const [tvMode, setTvMode] = useState(false);
+  const [tvTime, setTvTime] = useState(new Date());
   const [forceRawPreviousForResults, setForceRawPreviousForResults] = useState(false);
   const [excelExporting, setExcelExporting] = useState(false);
   const creditorFilterRef = useRef<HTMLDivElement>(null);
@@ -271,6 +272,17 @@ function DashboardPage() {
     }, 30 * 60 * 1000); // 30 minutos
 
     return () => window.clearInterval(interval);
+  }, [tvMode]);
+
+  // Atualizar relógio a cada segundo em modo TV
+  useEffect(() => {
+    if (!tvMode) return undefined;
+
+    const timer = window.setInterval(() => {
+      setTvTime(new Date());
+    }, 1000);
+
+    return () => window.clearInterval(timer);
   }, [tvMode]);
 
   useEffect(() => {
@@ -1343,36 +1355,63 @@ function DashboardPage() {
               <p>{selectedPeriodLabel} · {systemLabel(system)}</p>
             </div>
             <div className="tv-mode-clock">
-              <div className="tv-time">{new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
-              <div className="tv-date">{new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+              <div className="tv-time">{tvTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+              <div className="tv-date">{tvTime.toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
               <div className="tv-auto-refresh">Auto-refresh: 30 min</div>
             </div>
           </div>
           <div className="tv-mode-content">
-            {tab === 'relatorio' && (
-              <div className="tv-grid-4">
-                <div className="tv-metric-card large">
+            <div className="tv-metrics-container">
+              <div className="tv-grid-6">
+                <div className="tv-metric-card">
                   <div className="tv-metric-label">Recuperado</div>
-                  <div className="tv-metric-value">{money(metrics.recuperado)}</div>
-                  <div className="tv-metric-small">{number(metrics.acordos)} acordos</div>
+                  <div className="tv-metric-value">{money(resultMetrics.totalPago)}</div>
+                  <div className="tv-metric-small">{number(resultMetrics.acordos)} acordos</div>
                 </div>
-                <div className="tv-metric-card large">
+                <div className="tv-metric-card">
+                  <div className="tv-metric-label">Acordos Pagos</div>
+                  <div className="tv-metric-value">{number(resultMetrics.acordosPagos)}</div>
+                  <div className="tv-metric-small">Com pagamento</div>
+                </div>
+                <div className="tv-metric-card">
                   <div className="tv-metric-label">Acessos</div>
-                  <div className="tv-metric-value">{number(metrics.acessos)}</div>
-                  <div className="tv-metric-small">Conversão: {metrics.conversao.toFixed(1)}%</div>
+                  <div className="tv-metric-value">{number(resultMetrics.acessos)}</div>
+                  <div className="tv-metric-small">Conversão: {resultMetrics.conversao.toFixed(1)}%</div>
                 </div>
-                <div className="tv-metric-card large">
+                <div className="tv-metric-card">
                   <div className="tv-metric-label">Ticket Médio</div>
-                  <div className="tv-metric-value">{money(metrics.ticketMedio)}</div>
-                  <div className="tv-metric-small">Por acordo</div>
+                  <div className="tv-metric-value">{money(resultMetrics.totalPago / Math.max(resultMetrics.acordosPagos, 1))}</div>
+                  <div className="tv-metric-small">Por pagamento</div>
                 </div>
-                <div className="tv-metric-card large">
+                <div className="tv-metric-card">
+                  <div className="tv-metric-label">Faturamento</div>
+                  <div className="tv-metric-value">{money(resultMetrics.faturamento)}</div>
+                  <div className="tv-metric-small">Honorários e taxas</div>
+                </div>
+                <div className="tv-metric-card">
                   <div className="tv-metric-label">Taxa de Conversão</div>
-                  <div className="tv-metric-value">{metrics.conversao.toFixed(2)}%</div>
+                  <div className="tv-metric-value">{resultMetrics.conversao.toFixed(2)}%</div>
                   <div className="tv-metric-small">Acessos → Acordos</div>
                 </div>
               </div>
-            )}
+              {negociadores.length > 0 && (
+                <div className="tv-top-negotiators">
+                  <h2>Top Pagamentos por Negociador</h2>
+                  <div className="tv-negotiators-list">
+                    {negociadores.slice(0, 3).map((neg, index) => (
+                      <div key={neg.name} className="tv-negotiator-item">
+                        <div className="tv-neg-rank">#{index + 1}</div>
+                        <div className="tv-neg-info">
+                          <div className="tv-neg-name">{neg.name}</div>
+                          <div className="tv-neg-value">{money(neg.total)}</div>
+                        </div>
+                        <div className="tv-neg-qtd">{number(neg.qtd)} pagamentos</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <button type="button" className="tv-close-btn" onClick={() => setTvMode(false)} title="Sair do modo TV (ESC)">
             <X size={20} />
