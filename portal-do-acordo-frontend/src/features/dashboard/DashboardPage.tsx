@@ -139,6 +139,7 @@ function DashboardPage() {
   const [periodFilterOpen, setPeriodFilterOpen] = useState(false);
   const [presentationMode, setPresentationMode] = useState(false);
   const [presentationPaused, setPresentationPaused] = useState(false);
+  const [tvMode, setTvMode] = useState(false);
   const [forceRawPreviousForResults, setForceRawPreviousForResults] = useState(false);
   const [excelExporting, setExcelExporting] = useState(false);
   const creditorFilterRef = useRef<HTMLDivElement>(null);
@@ -256,10 +257,21 @@ function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    if (!presentationMode) return;
+    if (!presentationMode && !tvMode) return;
     setFilterOpen(false);
     setPeriodFilterOpen(false);
-  }, [presentationMode]);
+  }, [presentationMode, tvMode]);
+
+  // Auto-refresh a cada 30 minutos em modo TV
+  useEffect(() => {
+    if (!tvMode) return undefined;
+
+    const interval = window.setInterval(() => {
+      window.location.reload();
+    }, 30 * 60 * 1000); // 30 minutos
+
+    return () => window.clearInterval(interval);
+  }, [tvMode]);
 
   useEffect(() => {
     if (!presentationMode || presentationPaused) return undefined;
@@ -276,11 +288,14 @@ function DashboardPage() {
 
   useEffect(() => {
     function handlePresentationKeys(event: KeyboardEvent) {
-      if (!presentationMode) return;
-      if (event.key === 'Escape') setPresentationMode(false);
+      if (event.key === 'Escape') {
+        setPresentationMode(false);
+        setTvMode(false);
+      }
+      if (!presentationMode && !tvMode) return;
       if (event.key === ' ') {
         event.preventDefault();
-        setPresentationPaused((current) => !current);
+        if (presentationMode) setPresentationPaused((current) => !current);
       }
       if (event.key === 'ArrowRight') {
         setTab((current) => {
@@ -298,7 +313,7 @@ function DashboardPage() {
 
     document.addEventListener('keydown', handlePresentationKeys);
     return () => document.removeEventListener('keydown', handlePresentationKeys);
-  }, [presentationMode]);
+  }, [presentationMode, tvMode]);
 
   const allCredores = useMemo(() => {
     const values = [...creditorOptions, ...baseSummary.processos_por_credor.map((row) => row.credor)];
@@ -586,14 +601,13 @@ function DashboardPage() {
   const acordosDiarios = useMemo(() => {
     if (resultSummaryEnabled && resultGraphs) {
       return resultGraphs.evolucaoDiaria
-        .filter((row) => row.acordos > 0)
-        .map((row) => ({ date: row.dia, label: dayLabel(row.dia), acordos: row.acordos }))
+        .map((row) => ({ date: row.dia, label: dayLabel(row.dia), acordos: row.acordos, acessos: row.acessos }))
         .sort((a, b) => a.date.localeCompare(b.date));
     }
 
     const groups = groupBy(filtered.acordos, (row) => row.data);
     return Object.entries(groups)
-      .map(([date, rows]) => ({ date, label: dayLabel(date), acordos: rows.length }))
+      .map(([date, rows]) => ({ date, label: dayLabel(date), acordos: rows.length, acessos: 0 }))
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [filtered.acordos, resultGraphs, resultSummaryEnabled]);
 
@@ -1321,7 +1335,50 @@ function DashboardPage() {
 
   return (
     <div className={`dashboard-shell theme-night ${presentationMode ? 'presentation-mode' : ''}`}>
-      {presentationMode ? (
+      {tvMode ? (
+        <div className="tv-mode">
+          <div className="tv-mode-header">
+            <div className="tv-mode-title">
+              <h1>Portal do Acordo - {TAB_LABELS[tab] || selectedPeriodTitle}</h1>
+              <p>{selectedPeriodLabel} · {systemLabel(system)}</p>
+            </div>
+            <div className="tv-mode-clock">
+              <div className="tv-time">{new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+              <div className="tv-date">{new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+              <div className="tv-auto-refresh">Auto-refresh: 30 min</div>
+            </div>
+          </div>
+          <div className="tv-mode-content">
+            {tab === 'relatorio' && (
+              <div className="tv-grid-4">
+                <div className="tv-metric-card large">
+                  <div className="tv-metric-label">Recuperado</div>
+                  <div className="tv-metric-value">{money(metrics.recuperado)}</div>
+                  <div className="tv-metric-small">{number(metrics.acordos)} acordos</div>
+                </div>
+                <div className="tv-metric-card large">
+                  <div className="tv-metric-label">Acessos</div>
+                  <div className="tv-metric-value">{number(metrics.acessos)}</div>
+                  <div className="tv-metric-small">Conversão: {metrics.conversao.toFixed(1)}%</div>
+                </div>
+                <div className="tv-metric-card large">
+                  <div className="tv-metric-label">Ticket Médio</div>
+                  <div className="tv-metric-value">{money(metrics.ticketMedio)}</div>
+                  <div className="tv-metric-small">Por acordo</div>
+                </div>
+                <div className="tv-metric-card large">
+                  <div className="tv-metric-label">Taxa de Conversão</div>
+                  <div className="tv-metric-value">{metrics.conversao.toFixed(2)}%</div>
+                  <div className="tv-metric-small">Acessos → Acordos</div>
+                </div>
+              </div>
+            )}
+          </div>
+          <button type="button" className="tv-close-btn" onClick={() => setTvMode(false)} title="Sair do modo TV (ESC)">
+            <X size={20} />
+          </button>
+        </div>
+      ) : presentationMode ? (
         <div className="presentation-hud">
           <div>
             <strong>{TAB_LABELS[tab]}</strong>
@@ -1424,6 +1481,10 @@ function DashboardPage() {
           }}>
             <Presentation size={16} />
             Apresentar
+          </button>
+          <button type="button" className="control-btn" onClick={() => setTvMode(true)} title="Modo TV com auto-refresh a cada 30 minutos">
+            <Presentation size={16} />
+            TV
           </button>
           <button type="button" className="control-btn" onClick={() => window.print()}>
             <Printer size={16} />
@@ -1640,20 +1701,35 @@ function DashboardPage() {
                 <Panel title="Acordos por Dia">
                   <div className="chart-wrap small">
                     <ResponsiveContainer>
-                      <BarChart data={isMultiPeriod ? dailyAgreementComparisonRows : acordosDiarios}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                        <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
-                        <Tooltip formatter={(value: number, name: string, item) => [`${value} acordos`, isMultiPeriod ? comparisonTooltipName(name, item) : name]} />
-                        <Legend verticalAlign="top" height={28} />
-                        {isMultiPeriod ? periodSeries.map((item) => (
-                          <Bar key={item.key} dataKey={item.key} name={item.label} fill={item.color} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
-                        )) : (
-                          <Bar dataKey="acordos" name="Acordos por dia" fill={chartAccent} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE}>
+                      {isMultiPeriod ? (
+                        <BarChart data={dailyAgreementComparisonRows}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                          <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+                          <Tooltip formatter={(value: number, name: string, item) => [`${value} acordos`, comparisonTooltipName(name, item)]} />
+                          <Legend verticalAlign="top" height={28} />
+                          {periodSeries.map((item) => (
+                            <Bar key={item.key} dataKey={item.key} name={item.label} fill={item.color} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                          ))}
+                        </BarChart>
+                      ) : (
+                        <ComposedChart data={acordosDiarios}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                          <YAxis yAxisId="left" allowDecimals={false} tick={{ fontSize: 10 }} label={{ value: 'Acordos', angle: -90, position: 'insideLeft', offset: 5 }} />
+                          <YAxis yAxisId="right" orientation="right" allowDecimals={false} tick={{ fontSize: 10 }} label={{ value: 'Acessos', angle: 90, position: 'insideRight', offset: 5 }} />
+                          <Tooltip formatter={(value: number, name: string) => {
+                            if (name === 'Acordos por dia') return [`${value} acordos`, name];
+                            if (name === 'Acessos') return [`${value} acessos`, name];
+                            return [value, name];
+                          }} />
+                          <Legend verticalAlign="top" height={28} />
+                          <Bar yAxisId="left" dataKey="acordos" name="Acordos por dia" fill={chartAccent} radius={[4, 4, 0, 0]} isAnimationActive={CHART_ANIMATION_ACTIVE}>
                             {acordosDiarios.map((row, index) => <Cell key={row.date} fill={CHART_PALETTE[index % CHART_PALETTE.length]} />)}
                           </Bar>
-                        )}
-                      </BarChart>
+                          <Line yAxisId="right" type="monotone" dataKey="acessos" name="Acessos" stroke="#8884d8" strokeWidth={2} dot={false} isAnimationActive={CHART_ANIMATION_ACTIVE} />
+                        </ComposedChart>
+                      )}
                     </ResponsiveContainer>
                   </div>
                 </Panel>
@@ -2050,7 +2126,7 @@ function DashboardPage() {
 
           <Section num="01" title="Acessos e Conversão">
             <div className="grid-2">
-              <Panel title="Mini funil de acessos">
+              <Panel title="Acessos e Acordos">
                 <div className="center-funnel">
                   {accessFunnelRows.map((row, index) => (
                     <div className="center-funnel-row" key={row.name}>
