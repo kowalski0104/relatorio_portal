@@ -1854,8 +1854,8 @@ tfoot td {
   z-index: 10000;
   display: block;
   padding: 18px;
-  background: var(--paper);
-  color: var(--ink);
+  background: #07101d;
+  color: #e7edf7;
   font-family: var(--font-family);
   overflow: auto;
 }
