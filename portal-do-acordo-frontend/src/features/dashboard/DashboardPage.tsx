@@ -430,6 +430,21 @@ function DashboardPage() {
   }, [businessDays, consideredBusinessDays, metrics, projectionTarget]);
 
   const projectionBaseDays = consideredBusinessDays;
+  const tvBusinessDayLabel = useMemo(() => {
+    const todayKey = `${tvTime.getFullYear()}-${String(tvTime.getMonth() + 1).padStart(2, '0')}-${String(tvTime.getDate()).padStart(2, '0')}`;
+    const todayPeriod = monthKey(todayKey);
+
+    if (selectedPeriodList.length === 1 && primaryPeriod === todayPeriod) {
+      let currentBusinessDay = 0;
+      businessDayIndexMap(primaryPeriod).forEach((index, date) => {
+        if (date <= todayKey) currentBusinessDay = Math.max(currentBusinessDay, index);
+      });
+
+      return `Dia útil ${number(currentBusinessDay)} de ${number(businessDays)}`;
+    }
+
+    return `Dias úteis ${number(projectionBaseDays)} de ${number(businessDays)}`;
+  }, [businessDays, primaryPeriod, projectionBaseDays, selectedPeriodList.length, tvTime]);
 
   const previousPeriodKey = selectedPeriodList.length === 1 ? previousPeriod(primaryPeriod) : '';
   const previousBusinessDayMap = useMemo(() => previousPeriodKey ? businessDayIndexMap(previousPeriodKey) : new Map<string, number>(), [previousPeriodKey]);
@@ -1362,6 +1377,7 @@ function DashboardPage() {
               <div className="tv-clock">
                 <strong>{tvTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</strong>
                 <span>{tvTime.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+                <em>{tvBusinessDayLabel}</em>
               </div>
             </header>
 
@@ -1371,27 +1387,13 @@ function DashboardPage() {
 
               {!loading && !error && tab === 'relatorio' ? (
                 <>
-                  <header className="hero tv-hero">
-                    <div className="hero-top">
-                      <div>
-                        <p>Resultados</p>
-                        <h1><span>{portfolioPeriodTitle}</span></h1>
-                      </div>
-                      <div className="hero-meta">
-                        <strong>{portfolioPeriodList.length === 1 ? periodLabel(primaryPortfolioPeriod) : `${portfolioPeriodList.length} meses`}</strong>
-                        <span>{portfolioPeriodRange}</span>
-                        <span>{number(businessDays)} dias úteis</span>
-                        <em>{systemLabel(system)}</em>
-                      </div>
-                    </div>
-                    <div className="kpi-row">
-                      <MetricCard tone="teal" label="Total Recuperado" value={compactMoney(resultMetrics.totalPago)} current={resultMetrics.totalPago} previous={resultPreviousMetrics?.totalPago} small="Pagamentos no período" />
-                      <MetricCard tone="gold" label="Faturamento" value={compactMoney(resultMetrics.faturamento)} current={resultMetrics.faturamento} previous={resultPreviousMetrics?.faturamento} small="Receitas sem capital" />
-                      <MetricCard tone="rust" label="Acordos Pagos" value={number(resultMetrics.acordosPagos)} current={resultMetrics.acordosPagos} previous={resultPreviousMetrics?.acordosPagos} small="Processos com pagamento" />
-                      <MetricCard tone="sky" label="Conversão" value={`${resultMetrics.conversao.toFixed(1)}%`} current={resultMetrics.conversao} previous={resultPreviousMetrics?.conversao} small={systemLabel(system)} />
-                      <MetricCard tone="teal" label="Acessos" value={number(resultMetrics.acessos)} current={resultMetrics.acessos} previous={resultPreviousMetrics?.acessos} small="Visitantes únicos" />
-                    </div>
-                  </header>
+                  <div className="kpi-row tv-kpi-row">
+                    <MetricCard tone="teal" label="Total Recuperado" value={compactMoney(resultMetrics.totalPago)} current={resultMetrics.totalPago} previous={resultPreviousMetrics?.totalPago} small="Pagamentos no período" />
+                    <MetricCard tone="gold" label="Faturamento" value={compactMoney(resultMetrics.faturamento)} current={resultMetrics.faturamento} previous={resultPreviousMetrics?.faturamento} small="Receitas sem capital" />
+                    <MetricCard tone="rust" label="Acordos Pagos" value={number(resultMetrics.acordosPagos)} current={resultMetrics.acordosPagos} previous={resultPreviousMetrics?.acordosPagos} small="Processos com pagamento" />
+                    <MetricCard tone="sky" label="Conversão" value={`${resultMetrics.conversao.toFixed(1)}%`} current={resultMetrics.conversao} previous={resultPreviousMetrics?.conversao} small={systemLabel(system)} />
+                    <MetricCard tone="teal" label="Acessos" value={number(resultMetrics.acessos)} current={resultMetrics.acessos} previous={resultPreviousMetrics?.acessos} small="Visitantes únicos" />
+                  </div>
 
                   <Section num="01" title="Evolução e Volume">
                     <div className="grid-2">

@@ -1907,7 +1907,8 @@ tfoot td {
 }
 
 .tv-brand small,
-.tv-clock span {
+.tv-clock span,
+.tv-clock em {
   color: rgba(255, 255, 255, .7);
   font-size: 11px;
   font-weight: 800;
@@ -1951,6 +1952,15 @@ tfoot td {
   text-transform: capitalize;
 }
 
+.tv-clock em {
+  display: inline-flex;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .12);
+  color: #ffffff;
+  font-style: normal;
+}
+
 .tv-report {
   width: min(1780px, 100%);
   margin: 0 auto;
@@ -1973,6 +1983,14 @@ tfoot td {
 
 .tv-report .kpi-row {
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.tv-kpi-row {
+  margin-top: 0;
+  border-top: 0;
+  background: #08111f;
+  border-radius: 18px;
+  overflow: hidden;
 }
 
 .tv-report .kpi-row .metric-card {
