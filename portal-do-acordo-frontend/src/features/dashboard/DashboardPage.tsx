@@ -1686,6 +1686,8 @@ function DashboardPage() {
           </button>
         </div>
       ) : null}
+      {!tvMode ? (
+        <>
       <div className="system-bar" role="navigation" aria-label="Filtros do relatório">
         <div className="system-group" aria-label="Selecionar sistema">
           <span>Sistema</span>
@@ -2676,6 +2678,8 @@ function DashboardPage() {
           Portal {__APP_VERSION__} · publicado em {dateTime(__APP_DEPLOYED_AT__)}
         </span>
       </footer>
+        </>
+      ) : null}
     </div>
   );
 }
