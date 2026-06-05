@@ -1369,6 +1369,10 @@ function DashboardPage() {
             <header className="tv-toolbar">
               <div className="tv-brand">
                 <img src={logoUrl} alt="Portal do Acordo" />
+                <div>
+                  <strong>{selectedPeriodLabel}</strong>
+                  <small>{systemLabel(system)}</small>
+                </div>
               </div>
               <div className="tv-clock">
                 <strong>{tvTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</strong>

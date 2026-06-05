@@ -2060,10 +2060,6 @@ tfoot td {
     padding: 12px;
   }
 
-  .tv-brand img {
-    display: none;
-  }
-
   .tv-report .grid-2 {
     grid-template-columns: 1fr;
   }
