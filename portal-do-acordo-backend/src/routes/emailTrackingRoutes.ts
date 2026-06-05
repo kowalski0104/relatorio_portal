@@ -6,6 +6,7 @@ import { getPeriodRange, ReportFilter } from '../utils/reportFilters';
 export const clickRouter = Router();
 const webhookRouter = Router();
 const EMAIL_TRACKING_DEBUG = process.env.EMAIL_TRACKING_DEBUG === 'true';
+const BRASILIA_TIME_ZONE = 'America/Sao_Paulo';
 
 type EmailClickSummaryRow = {
   credor: string | null;
@@ -39,6 +40,31 @@ let poolPromise: Promise<sql.ConnectionPool> | null = null;
 
 function debugLog(...args: unknown[]) {
   if (EMAIL_TRACKING_DEBUG) console.log(...args);
+}
+
+function nowInBrasiliaAsSqlDateTime() {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: BRASILIA_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(now);
+  const valueByType = new Map(parts.map((part) => [part.type, part.value]));
+
+  return new Date(Date.UTC(
+    Number(valueByType.get('year')),
+    Number(valueByType.get('month')) - 1,
+    Number(valueByType.get('day')),
+    Number(valueByType.get('hour')),
+    Number(valueByType.get('minute')),
+    Number(valueByType.get('second')),
+    now.getMilliseconds()
+  ));
 }
 
 async function getConnection(): Promise<sql.ConnectionPool> {
@@ -329,6 +355,7 @@ clickRouter.get('/:token', async (req: Request, res: Response) => {
       .input('template', sql.VarChar(150), envio.template)
       .input('ip', sql.VarChar(100), req.ip || 'unknown')
       .input('user_agent', sql.NVarChar(sql.MAX), req.headers['user-agent'] || '')
+      .input('data_clique', sql.DateTime2, nowInBrasiliaAsSqlDateTime())
       .query(`
         INSERT INTO email_cliques (
           token,
@@ -339,7 +366,8 @@ clickRouter.get('/:token', async (req: Request, res: Response) => {
           campanha,
           template,
           ip,
-          user_agent
+          user_agent,
+          data_clique
         )
         VALUES (
           @token,
@@ -350,7 +378,8 @@ clickRouter.get('/:token', async (req: Request, res: Response) => {
           @campanha,
           @template,
           @ip,
-          @user_agent
+          @user_agent,
+          @data_clique
         )
       `);
 
