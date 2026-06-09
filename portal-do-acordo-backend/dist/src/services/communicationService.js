@@ -26,7 +26,7 @@ function normalizedCredores(filter) {
     return [...(filter.credores ?? [])].map((item) => item.trim()).filter(Boolean).sort();
 }
 function useEmailMonthlyAggregate(filter) {
-    return process.env.USE_EMAIL_MONTHLY_AGGREGATE === 'true' && filter.diario === false;
+    return process.env.USE_EMAIL_MONTHLY_AGGREGATE === 'true' && filter.diario === false && (0, emailMonthlyAggregateClient_1.hasEmailMonthlyAggregateDatabaseConfig)();
 }
 function getCommunicationCacheKey(filter) {
     const diario = filter.diario !== false;

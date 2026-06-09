@@ -16,7 +16,7 @@ exports.formatMonthLabel = formatMonthLabel;
 exports.getLastThreeMonths = getLastThreeMonths;
 exports.DEFAULT_YEAR = 2026;
 exports.NEGOTIATORS = ['PORTALNEG', 'KETLEN.ATANAZIO', 'ZAQUEU.RITTER'];
-exports.EXCLUDED_DASHBOARD_CREDITOR_IDS = [31084];
+exports.EXCLUDED_DASHBOARD_CREDITOR_IDS = [31084, 29033];
 exports.systemToCompanyIds = {
     consulth: [401],
     sisth: [1007],

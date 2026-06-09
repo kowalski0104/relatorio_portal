@@ -100,8 +100,8 @@ async function withHardTimeout(promise, timeoutMs, label) {
             clearTimeout(timer);
     }
 }
-function companyFilter(empresaId) {
-    return empresaId === 1007 ? 'AND c.id != 31084' : '';
+function companyFilter(_empresaId) {
+    return (0, reportFilters_1.buildExcludedDashboardCreditorFilter)('c.id');
 }
 function systemName(empresaId) {
     return empresaId === 401 ? 'consulth' : 'sisth';

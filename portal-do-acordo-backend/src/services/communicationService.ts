@@ -3,7 +3,7 @@ import path from 'path';
 import { PrismaClient } from '@prisma/client';
 import { buildSqlInFilter, getLivePeriodYearRange, getPeriodRange, monthKey, ReportFilter } from '../utils/reportFilters';
 import { getLiveClients } from '../db/prismaClients';
-import { getEmailMonthlyAggregateClient } from '../db/emailMonthlyAggregateClient';
+import { getEmailMonthlyAggregateClient, hasEmailMonthlyAggregateDatabaseConfig } from '../db/emailMonthlyAggregateClient';
 import { getSystemCompanyIds } from '../utils/reportFilters';
 
 type EnvioRow = {
@@ -85,7 +85,7 @@ function normalizedCredores(filter: ReportFilter) {
 }
 
 function useEmailMonthlyAggregate(filter: CommunicationFilter) {
-  return process.env.USE_EMAIL_MONTHLY_AGGREGATE === 'true' && filter.diario === false;
+  return process.env.USE_EMAIL_MONTHLY_AGGREGATE === 'true' && filter.diario === false && hasEmailMonthlyAggregateDatabaseConfig();
 }
 
 function getCommunicationCacheKey(filter: CommunicationFilter) {
