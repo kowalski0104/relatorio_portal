@@ -103,7 +103,7 @@ export async function fetchEmailClicks(periodo: string, sistema: SystemFilter, c
   const params = new URLSearchParams({ periodo, sistema });
   if (credores.size > 0) params.set('credores', Array.from(credores).join(','));
   if (dataFim) params.set('dataFim', dataFim);
-  const response = await fetch(apiUrl(`/api/mailgrid/cliques?${params.toString()}`), { signal });
+  const response = await fetch(apiUrl(`/api/mailgrid/cliques?${params.toString()}`), { signal, cache: 'no-store' });
   if (!response.ok) return null;
   const payload = await response.json();
   return payload.data ?? null;

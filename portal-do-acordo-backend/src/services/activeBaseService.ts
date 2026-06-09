@@ -3,6 +3,7 @@ import path from 'path';
 import { getLiveClients } from '../db/prismaClients';
 import type { ActiveBaseQuery } from '../routes/schemas';
 import type { PrismaClient } from '@prisma/client';
+import { isExcludedDashboardCreditorName } from '../utils/reportFilters';
 
 type SystemName = 'consulth' | 'sisth';
 type AgingRange = '0-90' | '91-180' | '181-360' | '361+' | 'SEM VENCIMENTO';
@@ -420,8 +421,8 @@ export async function getActiveBase(filter: ActiveBaseQuery) {
 
   const selectedSystems = filter.sistema === 'total' ? new Set<SystemName>(['consulth', 'sisth']) : new Set<SystemName>([filter.sistema]);
   const selectedCreditors = new Set((filter.credores ?? []).map((creditor) => creditor.trim()).filter(Boolean));
-  const creditorRows = cache.by_credor.filter((row) => selectedSystems.has(row.sistema) && (selectedCreditors.size === 0 || selectedCreditors.has(row.credor)));
-  const agingRows = cache.aging.filter((row) => selectedSystems.has(row.sistema) && (selectedCreditors.size === 0 || selectedCreditors.has(row.credor)));
+  const creditorRows = cache.by_credor.filter((row) => !isExcludedDashboardCreditorName(row.credor) && selectedSystems.has(row.sistema) && (selectedCreditors.size === 0 || selectedCreditors.has(row.credor)));
+  const agingRows = cache.aging.filter((row) => !isExcludedDashboardCreditorName(row.credor) && selectedSystems.has(row.sistema) && (selectedCreditors.size === 0 || selectedCreditors.has(row.credor)));
   const agingComplete = hasCompleteAging(creditorRows, agingRows);
   const pending = pendingAgingCreditors(creditorRows, agingRows);
 

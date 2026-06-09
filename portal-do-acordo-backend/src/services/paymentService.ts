@@ -1,6 +1,6 @@
 ﻿import { PrismaClient } from '@prisma/client';
 import { getLiveClients } from '../db/prismaClients';
-import { addSqlParam, buildSqlInFilter, getPeriodRange, NEGOTIATORS, ReportFilter } from '../utils/reportFilters';
+import { addSqlParam, buildExcludedDashboardCreditorFilter, buildSqlInFilter, getPeriodRange, NEGOTIATORS, ReportFilter } from '../utils/reportFilters';
 
 type BaixaRow = {
   id: number | string;
@@ -71,6 +71,7 @@ async function queryPaymentsByDate(prisma: PrismaClient, empresaId: number, filt
       AND b.negociador IN (${negociadores})
       AND b.totalpago > 0
       AND b.idcredor IS NOT NULL
+      ${buildExcludedDashboardCreditorFilter('b.idcredor')}
       AND TRIM(COALESCE(c.grupo, '')) != ''
       ${credorFilter}
     ORDER BY ${dateSource.expression} DESC, b.id DESC

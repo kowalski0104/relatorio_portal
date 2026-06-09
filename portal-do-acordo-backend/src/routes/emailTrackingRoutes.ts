@@ -309,6 +309,7 @@ webhookRouter.get('/cliques', async (req: Request, res: Response) => {
   }
 
   const report = await getEmailClickReport(parseResult.data);
+  res.set('Cache-Control', 'no-store');
   res.json({ data: report });
 });
 

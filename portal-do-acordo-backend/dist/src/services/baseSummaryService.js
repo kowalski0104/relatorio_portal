@@ -69,6 +69,7 @@ async function queryPortfolioSummary(prisma, empresaId, filter) {
         WHERE b.idempresa = $1
           AND b.data_cad >= $2
           AND b.data_cad < $3
+          ${(0, reportFilters_1.buildNullableExcludedDashboardCreditorFilter)('b.idcredor')}
           ${monthFilter}
       )
       SELECT
@@ -114,6 +115,7 @@ async function queryPaymentSummary(prisma, empresaId, filter) {
         AND b.negociador IN (${negociadores})
         AND b.totalpago > 0
         AND b.idcredor IS NOT NULL
+        ${(0, reportFilters_1.buildExcludedDashboardCreditorFilter)('b.idcredor')}
         AND TRIM(COALESCE(c.grupo, '')) != ''
         ${monthFilter}
       GROUP BY TRIM(COALESCE(c.grupo, 'OUTROS'))
@@ -148,7 +150,7 @@ function toNumber(value) {
 }
 function creditorFilter(filter) {
     const selected = new Set((filter.credores ?? []).map((creditor) => creditor.trim()).filter(Boolean));
-    return (credor) => selected.size === 0 || selected.has(credor);
+    return (credor) => !(0, reportFilters_1.isExcludedDashboardCreditorName)(credor) && (selected.size === 0 || selected.has(credor));
 }
 function sumByCreditor(rows, value) {
     const totals = new Map();

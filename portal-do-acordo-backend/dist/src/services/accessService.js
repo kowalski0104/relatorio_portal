@@ -32,6 +32,8 @@ async function queryAccesses(prisma, empresaId, filter) {
       WHERE a.idempresa = $1
         AND a.data_cad >= $2
         AND a.data_cad < $3
+        ${(0, reportFilters_1.buildNullableExcludedDashboardCreditorFilter)('ac_credor.idcredor')}
+        ${(0, reportFilters_1.buildExcludedDashboardAccessFilter)('a')}
       ORDER BY a.data_cad DESC
     `;
         return prisma.$queryRawUnsafe(query, ...params);
@@ -64,6 +66,7 @@ async function queryAccesses(prisma, empresaId, filter) {
           AND tb_baixas.databaixa < $3
           AND tb_baixas.negociador IN (${negociadores})
           AND tb_baixas.idcredor IS NOT NULL
+          ${(0, reportFilters_1.buildExcludedDashboardCreditorFilter)('tb_baixas.idcredor')}
           AND TRIM(COALESCE(tb_credor.grupo, '')) != ''
     ) b ON b.processo = a.processo AND b.idempresa = a.idempresa
     LEFT JOIN tb_acordo ac ON ac.processo = a.processo
@@ -72,6 +75,7 @@ async function queryAccesses(prisma, empresaId, filter) {
     WHERE a.idempresa = $1
       AND a.data_cad >= $2
       AND a.data_cad < $3
+      ${(0, reportFilters_1.buildExcludedDashboardAccessFilter)('a')}
       ${credorFilter}
     ORDER BY a.data_cad DESC
   `;

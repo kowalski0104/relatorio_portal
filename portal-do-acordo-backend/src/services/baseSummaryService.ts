@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { getLiveClients } from '../db/prismaClients';
 import type { PortfolioQuery } from '../routes/schemas';
-import { addSqlParam, getPeriodRange, NEGOTIATORS } from '../utils/reportFilters';
+import { addSqlParam, buildExcludedDashboardCreditorFilter, buildNullableExcludedDashboardCreditorFilter, getPeriodRange, isExcludedDashboardCreditorName, NEGOTIATORS } from '../utils/reportFilters';
 import { CACHE_TTL, cacheKey, getCached } from '../utils/cache';
 import { getActiveBase } from './activeBaseService';
 
@@ -95,6 +95,7 @@ async function queryPortfolioSummary(prisma: PrismaClient, empresaId: number, fi
         WHERE b.idempresa = $1
           AND b.data_cad >= $2
           AND b.data_cad < $3
+          ${buildNullableExcludedDashboardCreditorFilter('b.idcredor')}
           ${monthFilter}
       )
       SELECT
@@ -145,6 +146,7 @@ async function queryPaymentSummary(prisma: PrismaClient, empresaId: number, filt
         AND b.negociador IN (${negociadores})
         AND b.totalpago > 0
         AND b.idcredor IS NOT NULL
+        ${buildExcludedDashboardCreditorFilter('b.idcredor')}
         AND TRIM(COALESCE(c.grupo, '')) != ''
         ${monthFilter}
       GROUP BY TRIM(COALESCE(c.grupo, 'OUTROS'))
@@ -188,7 +190,7 @@ function toNumber(value: number | string | null | undefined) {
 
 function creditorFilter(filter: PortfolioQuery) {
   const selected = new Set((filter.credores ?? []).map((creditor) => creditor.trim()).filter(Boolean));
-  return (credor: string) => selected.size === 0 || selected.has(credor);
+  return (credor: string) => !isExcludedDashboardCreditorName(credor) && (selected.size === 0 || selected.has(credor));
 }
 
 function sumByCreditor<T extends { credor: string }>(rows: T[], value: (row: T) => number) {

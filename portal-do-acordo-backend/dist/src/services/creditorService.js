@@ -18,6 +18,7 @@ async function queryCreditors(prisma, empresaId, periodo) {
         AND b.databaixa < $3
         AND b.totalpago > 0
         AND b.idcredor IS NOT NULL
+        ${(0, reportFilters_1.buildExcludedDashboardCreditorFilter)('b.idcredor')}
         AND TRIM(COALESCE(c.grupo, '')) != ''
 
       UNION
@@ -43,6 +44,7 @@ async function queryCreditors(prisma, empresaId, periodo) {
         AND a.data_cad >= $2
         AND a.data_cad < $3
         AND b.idcredor IS NOT NULL
+        ${(0, reportFilters_1.buildExcludedDashboardCreditorFilter)('b.idcredor')}
         AND TRIM(COALESCE(c.grupo, '')) != ''
     ) credores
     WHERE credor IS NOT NULL AND credor != ''

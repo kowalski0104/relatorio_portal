@@ -1,7 +1,7 @@
 import type { DashboardData, SystemFilter } from '../types';
 import { monthKey } from './dates';
 import { safeNumber } from './formatters';
-import { isNoCreditorSelection } from './creditors';
+import { isExcludedDashboardCreditor, isNoCreditorSelection } from './creditors';
 
 type RowWithCompany = {
   idempresa: number;
@@ -20,7 +20,7 @@ export function getAvailableCreditors(data: DashboardData) {
     ...data.acessos.map((row) => row.credor || ''),
   ]
     .map((value) => value.trim())
-    .filter(Boolean);
+    .filter((value) => Boolean(value) && !isExcludedDashboardCreditor(value));
 
   return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b, 'pt-BR'));
 }
@@ -45,7 +45,10 @@ export function filterDashboardData(params: {
     return periods && periods.size > 0 ? periods.has(key) : !period || key === period;
   };
   const noCreditorSelected = isNoCreditorSelection(selectedCreditors);
-  const matchesCreditor = (creditor?: string | null) => !noCreditorSelected && (selectedCreditors.size === 0 || (creditor ? selectedCreditors.has(creditor) : false));
+  const matchesCreditor = (creditor?: string | null) =>
+    !noCreditorSelected &&
+    !isExcludedDashboardCreditor(creditor) &&
+    (selectedCreditors.size === 0 || (creditor ? selectedCreditors.has(creditor) : false));
   const matchesBusinessDay = (row: RowWithDate) => {
     if (!selectedBusinessDayLimit) return true;
     const dayIndex = businessDayMap.get(row.data);
@@ -56,20 +59,23 @@ export function filterDashboardData(params: {
     baixas: data.baixas.filter((row) => matchesSystem(row, system) && matchesPeriod(row) && matchesBusinessDay(row) && matchesCreditor(row.credor)),
     acordos: data.acordos.filter((row) => matchesSystem(row, system) && matchesPeriod(row) && matchesBusinessDay(row) && matchesCreditor(row.credor)),
     acessos: data.acessos.filter(
-      (row) => !noCreditorSelected && matchesSystem(row, system) && matchesPeriod(row) && matchesBusinessDay(row) && (selectedCreditors.size === 0 || !row.credor || selectedCreditors.has(row.credor))
+      (row) => !noCreditorSelected && matchesSystem(row, system) && matchesPeriod(row) && matchesBusinessDay(row) && !isExcludedDashboardCreditor(row.credor) && (selectedCreditors.size === 0 || !row.credor || selectedCreditors.has(row.credor))
     ),
   };
 }
 
 export function filterPreviousPeriodData(data: DashboardData, system: SystemFilter, period: string, selectedCreditors: Set<string>) {
   const noCreditorSelected = isNoCreditorSelection(selectedCreditors);
-  const matchesCreditor = (creditor?: string | null) => !noCreditorSelected && (selectedCreditors.size === 0 || (creditor ? selectedCreditors.has(creditor) : false));
+  const matchesCreditor = (creditor?: string | null) =>
+    !noCreditorSelected &&
+    !isExcludedDashboardCreditor(creditor) &&
+    (selectedCreditors.size === 0 || (creditor ? selectedCreditors.has(creditor) : false));
 
   return {
     baixas: data.baixas.filter((row) => matchesSystem(row, system) && monthKey(row.data) === period && matchesCreditor(row.credor)),
     acordos: data.acordos.filter((row) => matchesSystem(row, system) && monthKey(row.data) === period && matchesCreditor(row.credor)),
     acessos: data.acessos.filter(
-      (row) => !noCreditorSelected && matchesSystem(row, system) && monthKey(row.data) === period && (selectedCreditors.size === 0 || !row.credor || selectedCreditors.has(row.credor))
+      (row) => !noCreditorSelected && matchesSystem(row, system) && monthKey(row.data) === period && !isExcludedDashboardCreditor(row.credor) && (selectedCreditors.size === 0 || !row.credor || selectedCreditors.has(row.credor))
     ),
   };
 }

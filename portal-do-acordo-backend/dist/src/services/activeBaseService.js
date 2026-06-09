@@ -9,6 +9,7 @@ exports.startActiveBaseCacheScheduler = startActiveBaseCacheScheduler;
 const fs_1 = require("fs");
 const path_1 = __importDefault(require("path"));
 const prismaClients_1 = require("../db/prismaClients");
+const reportFilters_1 = require("../utils/reportFilters");
 const CACHE_FILE = process.env.ACTIVE_BASE_CACHE_FILE ?? path_1.default.resolve(process.cwd(), 'data', 'base_ativa_cache.json');
 const REFRESH_HOUR = Number(process.env.ACTIVE_BASE_REFRESH_HOUR ?? 5);
 const SUMMARY_TIMEOUT_MS = Number(process.env.ACTIVE_BASE_SUMMARY_TIMEOUT_MS ?? 60000);
@@ -318,8 +319,8 @@ async function getActiveBase(filter) {
     }
     const selectedSystems = filter.sistema === 'total' ? new Set(['consulth', 'sisth']) : new Set([filter.sistema]);
     const selectedCreditors = new Set((filter.credores ?? []).map((creditor) => creditor.trim()).filter(Boolean));
-    const creditorRows = cache.by_credor.filter((row) => selectedSystems.has(row.sistema) && (selectedCreditors.size === 0 || selectedCreditors.has(row.credor)));
-    const agingRows = cache.aging.filter((row) => selectedSystems.has(row.sistema) && (selectedCreditors.size === 0 || selectedCreditors.has(row.credor)));
+    const creditorRows = cache.by_credor.filter((row) => !(0, reportFilters_1.isExcludedDashboardCreditorName)(row.credor) && selectedSystems.has(row.sistema) && (selectedCreditors.size === 0 || selectedCreditors.has(row.credor)));
+    const agingRows = cache.aging.filter((row) => !(0, reportFilters_1.isExcludedDashboardCreditorName)(row.credor) && selectedSystems.has(row.sistema) && (selectedCreditors.size === 0 || selectedCreditors.has(row.credor)));
     const agingComplete = hasCompleteAging(creditorRows, agingRows);
     const pending = pendingAgingCreditors(creditorRows, agingRows);
     const byCreditor = new Map();

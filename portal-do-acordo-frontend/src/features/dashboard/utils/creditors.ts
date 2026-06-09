@@ -19,6 +19,11 @@ export function normalizeCreditorGroup(value: string) {
   return upper;
 }
 
+export function isExcludedDashboardCreditor(value?: string | null) {
+  const upper = normalizeCreditorGroup(value ?? '');
+  return upper.includes('LOJAS MM') || upper.includes('LOJAS M M') || upper.includes('LOJAS M.M');
+}
+
 export function groupBy<T>(items: T[], getKey: (item: T) => string) {
   return items.reduce<Record<string, T[]>>((acc, item) => {
     const key = getKey(item) || 'OUTROS';

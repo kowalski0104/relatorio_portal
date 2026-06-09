@@ -2509,7 +2509,7 @@ function DashboardPage() {
                   );
                 }}
               </Panel>
-              <Panel title="Últimos cliques" meta="WhatsApp e e-mail">
+              <Panel title="Últimos cliques de e-mail" meta="Atualiza a cada 30s">
                 {(expanded) => {
                   const rows = expanded ? recentClickRows : recentClickRows.slice(0, 5);
                   return (

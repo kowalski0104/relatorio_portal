@@ -256,6 +256,7 @@ webhookRouter.get('/cliques', async (req, res) => {
         return res.status(400).json({ error: 'Query inválida', issues: parseResult.error.format() });
     }
     const report = await getEmailClickReport(parseResult.data);
+    res.set('Cache-Control', 'no-store');
     res.json({ data: report });
 });
 // ROTA DE CLIQUE

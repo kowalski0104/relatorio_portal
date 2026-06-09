@@ -29,6 +29,7 @@ async function queryPaymentSummary(prisma, empresaId, filter) {
         AND b.negociador IN (${negociadores})
         AND b.totalpago > 0
         AND b.idcredor IS NOT NULL
+        ${(0, reportFilters_1.buildExcludedDashboardCreditorFilter)('b.idcredor')}
         AND TRIM(COALESCE(c.grupo, '')) != ''
         ${credorFilter}
     `, ...params);
@@ -78,14 +79,17 @@ async function queryAccessSummary(prisma, empresaId, filter) {
           AND tb_baixas.databaixa < $3
           AND tb_baixas.negociador IN (${negociadores})
           AND tb_baixas.idcredor IS NOT NULL
+          ${(0, reportFilters_1.buildExcludedDashboardCreditorFilter)('tb_baixas.idcredor')}
           AND TRIM(COALESCE(tb_credor.grupo, '')) != ''
       ) b ON b.processo = a.processo AND b.idempresa = a.idempresa
       LEFT JOIN tb_acordo ac ON ac.processo = a.processo
         AND ac.idempresa = a.idempresa
         AND ac.status = 'ANDAMENTO'
+        ${(0, reportFilters_1.buildExcludedDashboardCreditorFilter)('ac.idcredor')}
       WHERE a.idempresa = $1
         AND a.data_cad >= $2
         AND a.data_cad < $3
+        ${(0, reportFilters_1.buildExcludedDashboardAccessFilter)('a')}
         ${credorFilter}
     `, ...params);
     return rows[0];

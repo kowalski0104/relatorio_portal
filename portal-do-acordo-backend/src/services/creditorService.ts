@@ -1,6 +1,6 @@
 ﻿import { PrismaClient } from '@prisma/client';
 import { getLiveClients } from '../db/prismaClients';
-import { getPeriodRange, SystemFilter } from '../utils/reportFilters';
+import { buildExcludedDashboardCreditorFilter, getPeriodRange, SystemFilter } from '../utils/reportFilters';
 import { CACHE_TTL, cacheKey, getCached } from '../utils/cache';
 
 type CredorRow = {
@@ -22,6 +22,7 @@ async function queryCreditors(prisma: PrismaClient, empresaId: number, periodo?:
         AND b.databaixa < $3
         AND b.totalpago > 0
         AND b.idcredor IS NOT NULL
+        ${buildExcludedDashboardCreditorFilter('b.idcredor')}
         AND TRIM(COALESCE(c.grupo, '')) != ''
 
       UNION
@@ -47,6 +48,7 @@ async function queryCreditors(prisma: PrismaClient, empresaId: number, periodo?:
         AND a.data_cad >= $2
         AND a.data_cad < $3
         AND b.idcredor IS NOT NULL
+        ${buildExcludedDashboardCreditorFilter('b.idcredor')}
         AND TRIM(COALESCE(c.grupo, '')) != ''
     ) credores
     WHERE credor IS NOT NULL AND credor != ''

@@ -41,6 +41,7 @@ const EMPTY_BASE_SUMMARY_REPORT: BaseSummaryReport = {
   aging: [],
 };
 const DASHBOARD_RESPONSE_CACHE_TTL_MS = 10 * 60 * 1000;
+const EMAIL_CLICKS_REFRESH_MS = 30 * 1000;
 const dashboardResponseCache = new Map<string, { data: unknown; expiresAt: number }>();
 
 function responseCacheKey(prefix: string, period: string, system: SystemFilter, selectedCreditors: Set<string>) {
@@ -168,11 +169,22 @@ export function useDashboardSupplementalData(period: string, system: SystemFilte
   const [refreshing, setRefreshing] = useState(false);
   const [costsError, setCostsError] = useState('');
   const [costsRetryVersion, setCostsRetryVersion] = useState(0);
+  const [emailClicksRefreshVersion, setEmailClicksRefreshVersion] = useState(0);
   const costsEnabled = options.costs ?? true;
   const communicationEnabled = options.communication ?? true;
   const communicationDailyEnabled = options.communicationDaily ?? false;
   const emailClicksEnabled = options.emailClicks ?? true;
   const emailClicksEndDate = options.emailClicksEndDate ?? null;
+
+  useEffect(() => {
+    if (!emailClicksEnabled || !period || isDemoMode()) return undefined;
+
+    const interval = window.setInterval(() => {
+      setEmailClicksRefreshVersion((current) => current + 1);
+    }, EMAIL_CLICKS_REFRESH_MS);
+
+    return () => window.clearInterval(interval);
+  }, [emailClicksEnabled, emailClicksEndDate, period, selectedCreditors, system]);
 
   useEffect(() => {
     const hasEnabledRequest = costsEnabled || communicationEnabled || emailClicksEnabled;
@@ -196,7 +208,7 @@ export function useDashboardSupplementalData(period: string, system: SystemFilte
     const emailClicksKey = `${responseCacheKey('email-clicks', period, system, selectedCreditors)}:data-fim:${emailClicksEndDate ?? 'mes-completo'}`;
     const cachedCosts = costsEnabled ? getCachedResponse<CostsData>(costsKey) : undefined;
     const cachedCommunication = communicationEnabled ? getCachedResponse<CommunicationData>(communicationKey) : undefined;
-    const cachedEmailClicks = emailClicksEnabled ? getCachedResponse<EmailClickData>(emailClicksKey) : undefined;
+    const cachedEmailClicks = emailClicksEnabled && emailClicksRefreshVersion === 0 ? getCachedResponse<EmailClickData>(emailClicksKey) : undefined;
     const loadCosts = costsEnabled && !cachedCosts;
     const loadCommunication = communicationEnabled && !cachedCommunication;
     const loadEmailClicks = emailClicksEnabled && !cachedEmailClicks;
@@ -265,7 +277,7 @@ export function useDashboardSupplementalData(period: string, system: SystemFilte
       active = false;
       controller.abort();
     };
-  }, [communicationDailyEnabled, communicationEnabled, costsEnabled, costsRetryVersion, emailClicksEnabled, emailClicksEndDate, period, selectedCreditors, system]);
+  }, [communicationDailyEnabled, communicationEnabled, costsEnabled, costsRetryVersion, emailClicksEnabled, emailClicksEndDate, emailClicksRefreshVersion, period, selectedCreditors, system]);
 
   const retryCosts = useCallback(() => {
     setCostsError('');

@@ -31,6 +31,7 @@ async function queryCosts(prisma, empresaId, start, end) {
       AND b.negociador IN (${baixaNegociadores})
       AND b.totalpago > 0
       AND b.idcredor IS NOT NULL
+      ${(0, reportFilters_1.buildExcludedDashboardCreditorFilter)('b.idcredor')}
       AND TRIM(COALESCE(c.grupo, '')) != ''
     GROUP BY 1
   `;

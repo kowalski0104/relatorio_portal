@@ -1,17 +1,22 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.systemToCompanyIds = exports.NEGOTIATORS = exports.DEFAULT_YEAR = void 0;
+exports.systemToCompanyIds = exports.EXCLUDED_DASHBOARD_CREDITOR_IDS = exports.NEGOTIATORS = exports.DEFAULT_YEAR = void 0;
 exports.getSystemCompanyIds = getSystemCompanyIds;
 exports.parsePeriod = parsePeriod;
 exports.getPeriodRange = getPeriodRange;
 exports.getLivePeriodYearRange = getLivePeriodYearRange;
 exports.addSqlParam = addSqlParam;
 exports.buildSqlInFilter = buildSqlInFilter;
+exports.buildExcludedDashboardCreditorFilter = buildExcludedDashboardCreditorFilter;
+exports.buildNullableExcludedDashboardCreditorFilter = buildNullableExcludedDashboardCreditorFilter;
+exports.buildExcludedDashboardAccessFilter = buildExcludedDashboardAccessFilter;
+exports.isExcludedDashboardCreditorName = isExcludedDashboardCreditorName;
 exports.monthKey = monthKey;
 exports.formatMonthLabel = formatMonthLabel;
 exports.getLastThreeMonths = getLastThreeMonths;
 exports.DEFAULT_YEAR = 2026;
 exports.NEGOTIATORS = ['PORTALNEG', 'KETLEN.ATANAZIO', 'ZAQUEU.RITTER'];
+exports.EXCLUDED_DASHBOARD_CREDITOR_IDS = [31084];
 exports.systemToCompanyIds = {
     consulth: [401],
     sisth: [1007],
@@ -55,6 +60,34 @@ function buildSqlInFilter(expression, values, params) {
         return '';
     const placeholders = uniqueValues.map((value) => addSqlParam(params, value)).join(', ');
     return `AND ${expression} IN (${placeholders})`;
+}
+function buildExcludedDashboardCreditorFilter(expression) {
+    return `AND ${expression} NOT IN (${exports.EXCLUDED_DASHBOARD_CREDITOR_IDS.join(', ')})`;
+}
+function buildNullableExcludedDashboardCreditorFilter(expression) {
+    return `AND (${expression} IS NULL OR ${expression} NOT IN (${exports.EXCLUDED_DASHBOARD_CREDITOR_IDS.join(', ')}))`;
+}
+function buildExcludedDashboardAccessFilter(accessAlias = 'a') {
+    const ids = exports.EXCLUDED_DASHBOARD_CREDITOR_IDS.join(', ');
+    return `
+    AND NOT EXISTS (
+      SELECT 1
+      FROM tb_acordo ac_excluded_dashboard
+      WHERE ac_excluded_dashboard.idempresa = ${accessAlias}.idempresa
+        AND ac_excluded_dashboard.idcredor IN (${ids})
+        AND (
+          ac_excluded_dashboard.id = ${accessAlias}.idacordo
+          OR (
+            ${accessAlias}.idacordo IS NULL
+            AND ac_excluded_dashboard.processo = ${accessAlias}.processo
+          )
+        )
+    )
+  `;
+}
+function isExcludedDashboardCreditorName(value) {
+    const upper = String(value ?? '').trim().toUpperCase();
+    return upper.includes('LOJAS MM') || upper.includes('LOJAS M M') || upper.includes('LOJAS M.M');
 }
 function monthKey(date) {
     return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;

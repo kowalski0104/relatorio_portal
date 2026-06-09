@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { getLiveClients } from '../db/prismaClients';
 import type { BaseQuery } from '../routes/schemas';
-import { addSqlParam, buildSqlInFilter, getPeriodRange, NEGOTIATORS } from '../utils/reportFilters';
+import { addSqlParam, buildExcludedDashboardAccessFilter, buildExcludedDashboardCreditorFilter, buildSqlInFilter, getPeriodRange, NEGOTIATORS } from '../utils/reportFilters';
 import { CACHE_TTL, cacheKey, getCached } from '../utils/cache';
 
 type PaymentSummaryRow = {
@@ -61,6 +61,7 @@ async function queryPaymentSummary(prisma: PrismaClient, empresaId: number, filt
         AND b.negociador IN (${negociadores})
         AND b.totalpago > 0
         AND b.idcredor IS NOT NULL
+        ${buildExcludedDashboardCreditorFilter('b.idcredor')}
         AND TRIM(COALESCE(c.grupo, '')) != ''
         ${credorFilter}
     `,
@@ -122,14 +123,17 @@ async function queryAccessSummary(prisma: PrismaClient, empresaId: number, filte
           AND tb_baixas.databaixa < $3
           AND tb_baixas.negociador IN (${negociadores})
           AND tb_baixas.idcredor IS NOT NULL
+          ${buildExcludedDashboardCreditorFilter('tb_baixas.idcredor')}
           AND TRIM(COALESCE(tb_credor.grupo, '')) != ''
       ) b ON b.processo = a.processo AND b.idempresa = a.idempresa
       LEFT JOIN tb_acordo ac ON ac.processo = a.processo
         AND ac.idempresa = a.idempresa
         AND ac.status = 'ANDAMENTO'
+        ${buildExcludedDashboardCreditorFilter('ac.idcredor')}
       WHERE a.idempresa = $1
         AND a.data_cad >= $2
         AND a.data_cad < $3
+        ${buildExcludedDashboardAccessFilter('a')}
         ${credorFilter}
     `,
     ...params

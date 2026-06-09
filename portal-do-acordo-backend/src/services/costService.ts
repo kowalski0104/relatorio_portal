@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { getLiveClients } from '../db/prismaClients';
-import { addSqlParam, formatMonthLabel, getLastThreeMonths, NEGOTIATORS, SystemFilter } from '../utils/reportFilters';
+import { addSqlParam, buildExcludedDashboardCreditorFilter, formatMonthLabel, getLastThreeMonths, NEGOTIATORS, SystemFilter } from '../utils/reportFilters';
 import { CACHE_TTL, cacheKey, getCached } from '../utils/cache';
 
 type BaixaCustoRow = {
@@ -47,6 +47,7 @@ async function queryCosts(prisma: PrismaClient, empresaId: number, start: Date, 
       AND b.negociador IN (${baixaNegociadores})
       AND b.totalpago > 0
       AND b.idcredor IS NOT NULL
+      ${buildExcludedDashboardCreditorFilter('b.idcredor')}
       AND TRIM(COALESCE(c.grupo, '')) != ''
     GROUP BY 1
   `;

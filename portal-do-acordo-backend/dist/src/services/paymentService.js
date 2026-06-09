@@ -44,6 +44,7 @@ async function queryPaymentsByDate(prisma, empresaId, filter, dateSource) {
       AND b.negociador IN (${negociadores})
       AND b.totalpago > 0
       AND b.idcredor IS NOT NULL
+      ${(0, reportFilters_1.buildExcludedDashboardCreditorFilter)('b.idcredor')}
       AND TRIM(COALESCE(c.grupo, '')) != ''
       ${credorFilter}
     ORDER BY ${dateSource.expression} DESC, b.id DESC

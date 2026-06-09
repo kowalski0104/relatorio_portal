@@ -1,6 +1,6 @@
 ﻿import { PrismaClient } from '@prisma/client';
 import { getLiveClients } from '../db/prismaClients';
-import { addSqlParam, buildSqlInFilter, getPeriodRange, NEGOTIATORS, ReportFilter } from '../utils/reportFilters';
+import { addSqlParam, buildExcludedDashboardAccessFilter, buildExcludedDashboardCreditorFilter, buildNullableExcludedDashboardCreditorFilter, buildSqlInFilter, getPeriodRange, NEGOTIATORS, ReportFilter } from '../utils/reportFilters';
 
 type AcessoRow = {
   id: number | string;
@@ -42,6 +42,8 @@ async function queryAccesses(prisma: PrismaClient, empresaId: number, filter: Re
       WHERE a.idempresa = $1
         AND a.data_cad >= $2
         AND a.data_cad < $3
+        ${buildNullableExcludedDashboardCreditorFilter('ac_credor.idcredor')}
+        ${buildExcludedDashboardAccessFilter('a')}
       ORDER BY a.data_cad DESC
     `;
 
@@ -77,6 +79,7 @@ async function queryAccesses(prisma: PrismaClient, empresaId: number, filter: Re
           AND tb_baixas.databaixa < $3
           AND tb_baixas.negociador IN (${negociadores})
           AND tb_baixas.idcredor IS NOT NULL
+          ${buildExcludedDashboardCreditorFilter('tb_baixas.idcredor')}
           AND TRIM(COALESCE(tb_credor.grupo, '')) != ''
     ) b ON b.processo = a.processo AND b.idempresa = a.idempresa
     LEFT JOIN tb_acordo ac ON ac.processo = a.processo
@@ -85,6 +88,7 @@ async function queryAccesses(prisma: PrismaClient, empresaId: number, filter: Re
     WHERE a.idempresa = $1
       AND a.data_cad >= $2
       AND a.data_cad < $3
+      ${buildExcludedDashboardAccessFilter('a')}
       ${credorFilter}
     ORDER BY a.data_cad DESC
   `;

@@ -1,5 +1,6 @@
 import type { Payment } from '../types';
 import { monthKey } from './dates';
+import { isExcludedDashboardCreditor } from './creditors';
 
 type FinancialValues = {
   valorCobrado: number;
@@ -181,6 +182,7 @@ export function buildMonthlyFinancialWorkbook(payments: Payment[]) {
   const paymentsByPeriod = new Map<string, Payment[]>();
 
   payments.forEach((payment) => {
+    if (isExcludedDashboardCreditor(payment.credor)) return;
     const period = monthKey(payment.data);
     if (!period) return;
     const current = paymentsByPeriod.get(period) ?? [];

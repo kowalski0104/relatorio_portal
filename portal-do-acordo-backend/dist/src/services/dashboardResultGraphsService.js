@@ -39,6 +39,7 @@ async function queryDailyPayments(prisma, empresaId, filter) {
         AND b.negociador IN (${negociadores})
         AND b.totalpago > 0
         AND b.idcredor IS NOT NULL
+        ${(0, reportFilters_1.buildExcludedDashboardCreditorFilter)('b.idcredor')}
         AND TRIM(COALESCE(c.grupo, '')) != ''
         ${credorFilter}
       GROUP BY b.databaixa::date
@@ -88,10 +89,12 @@ async function queryDailyAccesses(prisma, empresaId, filter) {
       LEFT JOIN tb_acordo ac ON ac.processo = a.processo
         AND ac.idempresa = a.idempresa
         AND ac.status = 'ANDAMENTO'
+        ${(0, reportFilters_1.buildExcludedDashboardCreditorFilter)('ac.idcredor')}
       ${credorJoin}
       WHERE a.idempresa = $1
         AND a.data_cad >= $2
         AND a.data_cad < $3
+        ${(0, reportFilters_1.buildExcludedDashboardAccessFilter)('a')}
         ${credorFilter}
       GROUP BY a.data_cad::date
       ORDER BY dia
@@ -116,6 +119,7 @@ async function queryComponents(prisma, empresaId, filter) {
         AND b.negociador IN (${negociadores})
         AND b.totalpago > 0
         AND b.idcredor IS NOT NULL
+        ${(0, reportFilters_1.buildExcludedDashboardCreditorFilter)('b.idcredor')}
         AND TRIM(COALESCE(c.grupo, '')) != ''
         ${credorFilter}
     `, ...params);
@@ -139,6 +143,7 @@ async function queryPaymentsByCreditor(prisma, empresaId, filter) {
         AND b.negociador IN (${negociadores})
         AND b.totalpago > 0
         AND b.idcredor IS NOT NULL
+        ${(0, reportFilters_1.buildExcludedDashboardCreditorFilter)('b.idcredor')}
         AND TRIM(COALESCE(c.grupo, '')) != ''
         ${credorFilter}
       GROUP BY TRIM(COALESCE(c.grupo, 'OUTROS'))
@@ -185,6 +190,7 @@ async function queryPaymentsByNegotiator(prisma, empresaId, filter) {
         AND b.negociador IN (${negociadores})
         AND b.totalpago > 0
         AND b.idcredor IS NOT NULL
+        ${(0, reportFilters_1.buildExcludedDashboardCreditorFilter)('b.idcredor')}
         AND TRIM(COALESCE(c.grupo, '')) != ''
         ${credorFilter}
       GROUP BY TRIM(COALESCE(b.negociador, 'SEM NEGOCIADOR'))
@@ -260,10 +266,12 @@ async function queryAccessFunnel(prisma, empresaId, filter) {
       LEFT JOIN tb_acordo ac ON ac.processo = a.processo
         AND ac.idempresa = a.idempresa
         AND ac.status = 'ANDAMENTO'
+        ${(0, reportFilters_1.buildExcludedDashboardCreditorFilter)('ac.idcredor')}
       ${credorJoin}
       WHERE a.idempresa = $1
         AND a.data_cad >= $2
         AND a.data_cad < $3
+        ${(0, reportFilters_1.buildExcludedDashboardAccessFilter)('a')}
         ${credorFilter}
     `, ...params);
     return rows[0] ?? { acessos: 0, negociacoes: 0 };
@@ -283,6 +291,7 @@ async function queryPaidCount(prisma, empresaId, filter) {
         AND b.negociador IN (${negociadores})
         AND b.totalpago > 0
         AND b.idcredor IS NOT NULL
+        ${(0, reportFilters_1.buildExcludedDashboardCreditorFilter)('b.idcredor')}
         AND TRIM(COALESCE(c.grupo, '')) != ''
         ${credorFilter}
     `, ...params);

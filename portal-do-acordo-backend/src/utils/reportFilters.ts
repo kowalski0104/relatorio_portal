@@ -10,6 +10,7 @@ export type ReportFilter = {
 export const DEFAULT_YEAR = 2026;
 
 export const NEGOTIATORS = ['PORTALNEG', 'KETLEN.ATANAZIO', 'ZAQUEU.RITTER'];
+export const EXCLUDED_DASHBOARD_CREDITOR_IDS = [31084];
 
 export const systemToCompanyIds: Record<SystemFilter, CompanyId[]> = {
   consulth: [401],
@@ -58,6 +59,38 @@ export function buildSqlInFilter(expression: string, values: string[] | undefine
 
   const placeholders = uniqueValues.map((value) => addSqlParam(params, value)).join(', ');
   return `AND ${expression} IN (${placeholders})`;
+}
+
+export function buildExcludedDashboardCreditorFilter(expression: string) {
+  return `AND ${expression} NOT IN (${EXCLUDED_DASHBOARD_CREDITOR_IDS.join(', ')})`;
+}
+
+export function buildNullableExcludedDashboardCreditorFilter(expression: string) {
+  return `AND (${expression} IS NULL OR ${expression} NOT IN (${EXCLUDED_DASHBOARD_CREDITOR_IDS.join(', ')}))`;
+}
+
+export function buildExcludedDashboardAccessFilter(accessAlias = 'a') {
+  const ids = EXCLUDED_DASHBOARD_CREDITOR_IDS.join(', ');
+  return `
+    AND NOT EXISTS (
+      SELECT 1
+      FROM tb_acordo ac_excluded_dashboard
+      WHERE ac_excluded_dashboard.idempresa = ${accessAlias}.idempresa
+        AND ac_excluded_dashboard.idcredor IN (${ids})
+        AND (
+          ac_excluded_dashboard.id = ${accessAlias}.idacordo
+          OR (
+            ${accessAlias}.idacordo IS NULL
+            AND ac_excluded_dashboard.processo = ${accessAlias}.processo
+          )
+        )
+    )
+  `;
+}
+
+export function isExcludedDashboardCreditorName(value?: string | null) {
+  const upper = String(value ?? '').trim().toUpperCase();
+  return upper.includes('LOJAS MM') || upper.includes('LOJAS M M') || upper.includes('LOJAS M.M');
 }
 
 export function monthKey(date: Date) {
