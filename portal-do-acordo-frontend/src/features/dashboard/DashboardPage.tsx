@@ -27,7 +27,7 @@ import { WHATSAPP_CAMPAIGN_DATA, type WhatsappCampaignCredor } from './data/what
 import { useBaseSummaryData, useCreditorsData, useDashboardData, useDashboardPerformanceSummary, useDashboardResultGraphs, useDashboardResultSummary, useDashboardSupplementalData, usePortfolioData } from './hooks/useDashboardData';
 import { fetchActiveUsers, fetchMonthlyFinancialPayments, sendPresenceHeartbeat } from './services/dashboardApi';
 import type { Access, ActiveUsersReport, Agreement, CostsData, DashboardTab, PortfolioEntry, SystemFilter } from './types';
-import { groupBy, isNoCreditorSelection, NO_CREDITOR_SELECTION, normalizeCreditorGroup } from './utils/creditors';
+import { groupBy, isExcludedDashboardCreditor, isNoCreditorSelection, NO_CREDITOR_SELECTION, normalizeCreditorGroup } from './utils/creditors';
 import { businessDayIndexMap, businessDayLimitDate, businessDaysInPeriod, dayLabel, monthKey, periodLabel, periodRangeLabel, previousPeriod } from './utils/dates';
 import { countBusinessDaysWithData, filterDashboardData, matchesSystem, summarizeDashboardMetrics } from './utils/dashboardMetrics';
 import { downloadMonthlyFinancialExcel } from './utils/exportMonthlyFinancialExcel';
@@ -330,7 +330,7 @@ function DashboardPage() {
 
   const allCredores = useMemo(() => {
     const values = [...creditorOptions, ...baseSummary.processos_por_credor.map((row) => row.credor)];
-    return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    return Array.from(new Set(values.filter((value) => !isExcludedDashboardCreditor(value)))).sort((a, b) => a.localeCompare(b, 'pt-BR'));
   }, [baseSummary.processos_por_credor, creditorOptions]);
   const noCreditorSelected = isNoCreditorSelection(selectedCredores);
 

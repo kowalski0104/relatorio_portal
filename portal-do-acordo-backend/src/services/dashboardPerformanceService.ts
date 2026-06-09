@@ -175,7 +175,7 @@ async function queryAgreementMetrics(prisma: PrismaClient, empresaId: number, fi
       FROM tb_acordo ac
       LEFT JOIN tb_credor c ON c.id = ac.idcredor
       WHERE ac.idempresa = $1
-        AND ac.idcredor != 31084
+        ${buildExcludedDashboardCreditorFilter('ac.idcredor')}
         AND ac.data_acordo >= $2
         AND ac.data_acordo < $3
         AND ac.negociador IN (${negociadores})
@@ -282,7 +282,7 @@ async function queryAgreementsByNegotiator(prisma: PrismaClient, empresaId: numb
       FROM tb_acordo ac
       LEFT JOIN tb_credor c ON c.id = ac.idcredor
       WHERE ac.idempresa = $1
-        AND ac.idcredor != 31084
+        ${buildExcludedDashboardCreditorFilter('ac.idcredor')}
         AND ac.data_acordo >= $2
         AND ac.data_acordo < $3
         AND ac.negociador IN (${negociadores})
@@ -393,7 +393,7 @@ async function queryMonthlyAgreements(prisma: PrismaClient, empresaId: number, f
       FROM tb_acordo ac
       LEFT JOIN tb_credor c ON c.id = ac.idcredor
       WHERE ac.idempresa = $1
-        AND ac.idcredor != 31084
+        ${buildExcludedDashboardCreditorFilter('ac.idcredor')}
         AND ac.data_acordo >= $2
         AND ac.data_acordo < $3
         AND ac.negociador IN (${negociadores})
@@ -481,7 +481,7 @@ async function queryDailyAgreements(prisma: PrismaClient, empresaId: number, fil
       FROM tb_acordo ac
       LEFT JOIN tb_credor c ON c.id = ac.idcredor
       WHERE ac.idempresa = $1
-        AND ac.idcredor != 31084
+        ${buildExcludedDashboardCreditorFilter('ac.idcredor')}
         AND ac.data_acordo >= $2
         AND ac.data_acordo < $3
         AND ac.negociador IN (${negociadores})
@@ -544,7 +544,7 @@ async function queryHourlyAgreements(prisma: PrismaClient, empresaId: number, fi
       FROM tb_acordo ac
       LEFT JOIN tb_credor c ON c.id = ac.idcredor
       WHERE ac.idempresa = $1
-        AND ac.idcredor != 31084
+        ${buildExcludedDashboardCreditorFilter('ac.idcredor')}
         AND ac.data_acordo >= $2
         AND ac.data_acordo < $3
         AND ac.negociador IN (${negociadores})

@@ -10,7 +10,7 @@ export type ReportFilter = {
 export const DEFAULT_YEAR = 2026;
 
 export const NEGOTIATORS = ['PORTALNEG', 'KETLEN.ATANAZIO', 'ZAQUEU.RITTER'];
-export const EXCLUDED_DASHBOARD_CREDITOR_IDS = [31084];
+export const EXCLUDED_DASHBOARD_CREDITOR_IDS = [31084, 29033];
 
 export const systemToCompanyIds: Record<SystemFilter, CompanyId[]> = {
   consulth: [401],

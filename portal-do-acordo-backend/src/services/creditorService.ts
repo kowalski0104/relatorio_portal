@@ -31,7 +31,7 @@ async function queryCreditors(prisma: PrismaClient, empresaId: number, periodo?:
       FROM tb_acordo ac
       LEFT JOIN tb_credor c ON c.id = ac.idcredor
       WHERE ac.idempresa = $1
-        AND ac.idcredor != 31084
+        ${buildExcludedDashboardCreditorFilter('ac.idcredor')}
         AND ac.data_acordo >= $2
         AND ac.data_acordo < $3
         AND ac.status = 'ANDAMENTO'

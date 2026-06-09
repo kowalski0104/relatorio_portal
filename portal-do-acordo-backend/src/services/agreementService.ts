@@ -1,6 +1,6 @@
 ﻿import { PrismaClient } from '@prisma/client';
 import { getLiveClients } from '../db/prismaClients';
-import { addSqlParam, buildSqlInFilter, getPeriodRange, NEGOTIATORS, ReportFilter } from '../utils/reportFilters';
+import { addSqlParam, buildExcludedDashboardCreditorFilter, buildSqlInFilter, getPeriodRange, NEGOTIATORS, ReportFilter } from '../utils/reportFilters';
 
 type AcordoRow = {
   id: number | string;
@@ -38,7 +38,7 @@ async function queryAgreements(prisma: PrismaClient, empresaId: number, filter: 
     FROM tb_acordo ac
     LEFT JOIN tb_credor c ON c.id = ac.idcredor
     WHERE ac.idempresa = $1
-      AND ac.idcredor != 31084
+      ${buildExcludedDashboardCreditorFilter('ac.idcredor')}
       AND ac.data_acordo >= $2
       AND ac.data_acordo < $3
       AND ac.negociador IN (${negociadores})

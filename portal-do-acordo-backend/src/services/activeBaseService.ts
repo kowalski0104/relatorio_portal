@@ -3,7 +3,7 @@ import path from 'path';
 import { getLiveClients } from '../db/prismaClients';
 import type { ActiveBaseQuery } from '../routes/schemas';
 import type { PrismaClient } from '@prisma/client';
-import { isExcludedDashboardCreditorName } from '../utils/reportFilters';
+import { buildExcludedDashboardCreditorFilter, isExcludedDashboardCreditorName } from '../utils/reportFilters';
 
 type SystemName = 'consulth' | 'sisth';
 type AgingRange = '0-90' | '91-180' | '181-360' | '361+' | 'SEM VENCIMENTO';
@@ -149,8 +149,8 @@ async function withHardTimeout<T>(promise: Promise<T>, timeoutMs: number, label:
   }
 }
 
-function companyFilter(empresaId: number) {
-  return empresaId === 1007 ? 'AND c.id != 31084' : '';
+function companyFilter(_empresaId: number) {
+  return buildExcludedDashboardCreditorFilter('c.id');
 }
 
 function systemName(empresaId: number): SystemName {
