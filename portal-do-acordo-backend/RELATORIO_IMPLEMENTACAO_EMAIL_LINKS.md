@@ -521,7 +521,212 @@ Para concluir a validacao completa, e necessario liberar a conectividade SQL da 
 6. consultar `email_cliques` pelos tokens criados;
 7. repetir o POST para validar `reused`.
 
-## 18. Limitacoes atuais
+## 18. Validacao pelo Azure App Service em 2026-06-09
+
+Objetivo desta rodada:
+
+- publicar o backend no Azure App Service pelo caminho existente de deploy;
+- validar a API publica;
+- testar links antigos depois do deploy;
+- testar `POST /api/email-links/bulk-generate` no ambiente Azure, sem depender da conexao SQL local.
+
+### Pre-publicacao
+
+Build local:
+
+```text
+npm run build: OK
+```
+
+Checagens realizadas antes do push:
+
+- `git diff --cached --check`: OK;
+- `.env` nao foi staged;
+- `.env` esta ignorado pelo Git;
+- `.env.example` contem apenas placeholders;
+- busca por padroes de senha, token, API key e connection string em arquivos versionaveis: sem achados;
+- listmonk, editor e integrador nao foram alterados.
+
+### Deploy/publicacao
+
+O deploy do backend usa o workflow:
+
+```text
+.github/workflows/backend-azure-app-service.yml
+```
+
+Como a Azure CLI nao esta instalada nesta maquina, a publicacao foi feita pelo fluxo existente:
+
+1. commit em `main`;
+2. push para `origin/main`;
+3. GitHub Actions faz `npm ci`, `npm run build` e deploy para Azure App Service.
+
+Commit publicado:
+
+```text
+a58f04c Add bulk email tracking link endpoint
+```
+
+Resultado observado na API publica:
+
+- antes do deploy: `POST /api/email-links/bulk-generate` retornava `404 Cannot POST`;
+- depois do deploy: o endpoint passou a responder no App Service.
+
+### Health/status da API publica
+
+Base:
+
+```text
+https://portal-relatorio-api-aucpaha6dphdhegp.canadacentral-01.azurewebsites.net
+```
+
+Resultados:
+
+```text
+GET /       HTTP 200
+GET /health HTTP 200
+```
+
+### Links antigos depois do deploy
+
+Links testados, mascarados:
+
+```text
+/r/sisth-2B88...3CBEA
+/r/consulth-F7F8...CB87
+```
+
+Resultado:
+
+```text
+sisth-2B88...3CBEA    HTTP 302 -> https://portaldoacordo.com.br/
+consulth-F7F8...CB87  HTTP 302 -> https://portaldoacordo.com.br/
+```
+
+Conclusao: o deploy nao quebrou o comportamento dos links antigos.
+
+### Teste do endpoint novo no App Service
+
+Endpoint:
+
+```text
+POST https://portal-relatorio-api-aucpaha6dphdhegp.canadacentral-01.azurewebsites.net/api/email-links/bulk-generate
+```
+
+Payload usado:
+
+```json
+{
+  "origem": "listmonk",
+  "campanha": "teste_listmonk_tracking_100",
+  "url_destino": "https://portaldoacordo.com.br",
+  "items": [
+    {
+      "processo": "TESTE-SISTH-001",
+      "email": "matheus.kowalski@sisth.com.br",
+      "devedor_razao": "TESTE SISTH",
+      "devedor_cnpj": "00000000000",
+      "credor_fantasia": "SISTH",
+      "titulos_aberto_total": "R$ 2.158,31",
+      "payload": {
+        "origem_teste": "listmonk",
+        "ambiente": "azure_app_service"
+      }
+    },
+    {
+      "processo": "TESTE-CONSULTH-001",
+      "email": "matheus.kowalski@consulth.com.br",
+      "devedor_razao": "TESTE CONSULTH",
+      "devedor_cnpj": "00000000000",
+      "credor_fantasia": "CONSULTH",
+      "titulos_aberto_total": "R$ 2.158,31",
+      "payload": {
+        "origem_teste": "listmonk",
+        "ambiente": "azure_app_service"
+      }
+    }
+  ]
+}
+```
+
+Response observado:
+
+```json
+{
+  "success": false,
+  "error": "EMAIL_LINKS_API_KEY nao configurada para chamadas remotas."
+}
+```
+
+Status HTTP:
+
+```text
+503
+```
+
+Conclusao: o endpoint novo esta publicado, mas o App Service ainda nao tem `EMAIL_LINKS_API_KEY` configurada. Por seguranca, o endpoint bloqueia chamadas remotas quando essa variavel nao existe.
+
+Nenhum valor de API key foi impresso.
+
+### Variaveis do App Service
+
+Nao foi possivel listar App Settings diretamente desta maquina porque a Azure CLI nao esta instalada.
+
+Validacao indireta:
+
+- API publica esta online;
+- links antigos continuam redirecionando, o que indica que a API publica continua acessando a estrutura existente de tracking;
+- `EMAIL_LINKS_API_KEY` esta ausente no App Service, comprovado pelo response `503` do endpoint novo;
+- `PUBLIC_API_BASE_URL` ainda nao foi exercitada pelo endpoint, porque a chamada foi bloqueada antes de gerar links.
+
+Variaveis que devem ser conferidas no Azure Portal:
+
+```text
+AZURE_SQL_SERVER
+AZURE_SQL_DATABASE
+AZURE_SQL_USER ou AZURE_SQL_USERNAME
+AZURE_SQL_PASSWORD
+PUBLIC_API_BASE_URL
+EMAIL_LINKS_API_KEY
+TRACKING_FALLBACK_URL, se usada futuramente
+```
+
+Valor recomendado para `PUBLIC_API_BASE_URL`:
+
+```text
+https://portal-relatorio-api-aucpaha6dphdhegp.canadacentral-01.azurewebsites.net
+```
+
+Valor recomendado para fallback de tracking, se for criado/configurado:
+
+```text
+https://portaldoacordo.com.br
+```
+
+### O que nao foi possivel concluir nesta rodada
+
+Como o endpoint foi bloqueado pela ausencia de `EMAIL_LINKS_API_KEY`, ainda nao foi possivel validar:
+
+- criacao/reuso em `email_envios`;
+- retorno de `token`;
+- retorno de `link_tracking`;
+- abertura dos links novos;
+- registro de clique novo em `email_cliques`;
+- segundo POST retornando `reused` ou evidenciando duplicidade.
+
+### Proximo passo imediato
+
+Configurar `EMAIL_LINKS_API_KEY` no Azure App Service, sem gravar o valor no repositorio.
+
+Depois disso, repetir o POST enviando:
+
+```text
+x-api-key: valor_configurado_no_app_service
+```
+
+O valor nao deve ser impresso no terminal nem no relatorio.
+
+## 19. Limitacoes atuais
 
 1. Schema real nao confirmado ao vivo nesta maquina.
 
@@ -543,7 +748,7 @@ Para bases grandes, o `listmonk-integrator` deve chamar o endpoint em lotes.
 
 O app usa `express.json()` global. Se os lotes crescerem demais, pode ser necessario configurar limite de body explicitamente.
 
-## 19. Proximos passos para integrar com listmonk-integrator
+## 20. Proximos passos para integrar com listmonk-integrator
 
 1. Validar conectividade do backend com Azure SQL no ambiente onde ele roda.
 2. Executar consulta read-only do schema real de `email_envios`.
