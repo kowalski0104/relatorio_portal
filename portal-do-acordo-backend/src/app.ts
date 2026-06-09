@@ -14,6 +14,7 @@ import portfolioRouter from './routes/portfolioRoutes';
 import baseSummaryRouter from './routes/baseSummaryRoutes';
 import periodRouter from './routes/periodRoutes';
 import emailWebhookRouter, { clickRouter } from './routes/emailTrackingRoutes';
+import emailLinksRouter from './routes/emailLinksRoutes';
 import presenceRouter, { activeUsersAdminRouter } from './routes/activeUsersRoutes';
 import { authMiddleware } from './middleware/auth';
 import { errorHandler } from './middleware/errorHandler';
@@ -70,6 +71,7 @@ export function createApp() {
   app.use('/api/bases', baseSummaryRouter);
   app.use('/api/periodos', periodRouter);
   app.use('/api/mailgrid', emailWebhookRouter);
+  app.use('/api/email-links', emailLinksRouter);
   app.use('/api/presenca', presenceRouter);
   app.use('/api/admin', activeUsersAdminRouter);
 

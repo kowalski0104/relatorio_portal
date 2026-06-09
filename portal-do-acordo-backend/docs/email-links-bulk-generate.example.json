@@ -1,0 +1,29 @@
+{
+  "origem": "listmonk",
+  "campanha": "teste_email_links",
+  "url_destino": "https://portaldoacordo.com.br",
+  "items": [
+    {
+      "processo": "8/104274",
+      "email": "cliente.sisth@example.com",
+      "devedor_razao": "CLIENTE TESTE SISTH",
+      "devedor_cnpj": "00000000000",
+      "credor_fantasia": "SISTH",
+      "titulos_aberto_total": "R$ 2.158,31",
+      "payload": {
+        "qualquer_dado_extra": "valor_sisth"
+      }
+    },
+    {
+      "processo": "9/204875",
+      "email": "cliente.consulth@example.com",
+      "devedor_razao": "CLIENTE TESTE CONSULTH",
+      "devedor_cnpj": "11111111111",
+      "credor_fantasia": "CONSULTH",
+      "titulos_aberto_total": "R$ 950,00",
+      "payload": {
+        "qualquer_dado_extra": "valor_consulth"
+      }
+    }
+  ]
+}
