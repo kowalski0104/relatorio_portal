@@ -807,6 +807,15 @@ Observacoes:
 - links antigos nao foram alterados.
 - nenhuma migration foi criada ou executada.
 
+Validacao executada:
+
+- `POST /api/email-links/bulk-generate` com `grupo=GRUPO TESTE` e `credor_fantasia=CREDOR TESTE` retornou sucesso.
+- chamada repetida retornou `reused`.
+- abertura do `link_tracking` retornou `302 -> https://portaldoacordo.com.br/`.
+- `/api/mailgrid/cliques` retornou clique recente com `grupo=GRUPO TESTE`.
+- o clique recente retornou as chaves `id`, `token`, `processo`, `email_destinatario`, `grupo`, `campanha`, `template`, `data_clique`, `ip`, `user_agent`.
+- o clique recente nao retornou `credor`.
+
 7. Avaliar migration futura, com aprovacao previa, para:
    - adicionar `unique_key`;
    - adicionar `payload_json`;
