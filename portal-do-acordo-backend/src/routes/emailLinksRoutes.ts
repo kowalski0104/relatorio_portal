@@ -22,10 +22,13 @@ const optionalTextSchema = z.union([z.string(), z.number(), z.boolean()])
 const payloadItemSchema = z.object({
   processo: optionalTextSchema,
   email: z.string().trim().email('email invalido'),
+  grupo: optionalTextSchema,
   devedor_razao: optionalTextSchema,
   devedor_cnpj: optionalTextSchema,
   credor_fantasia: optionalTextSchema,
   titulos_aberto_total: optionalTextSchema,
+  campanha: optionalTextSchema,
+  template: optionalTextSchema,
   payload: z.record(z.unknown()).optional(),
 }).passthrough();
 

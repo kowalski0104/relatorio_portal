@@ -765,6 +765,48 @@ O app usa `express.json()` global. Se os lotes crescerem demais, pode ser necess
 {{ TrackLink .Subscriber.Attribs.link_tracking . }}
 ```
 
+## 21. Ajuste grupo x credor no tracking em 2026-06-10
+
+Problema corrigido:
+
+- `grupo` nao deve copiar automaticamente `credor_fantasia`.
+- `grupo` deve vir do campo real `grupo` enviado pelo integrador.
+- `credor`/`credor_fantasia` devem vir de `credor_fantasia`.
+
+Regra aplicada no endpoint `POST /api/email-links/bulk-generate`:
+
+- `email_envios.grupo` recebe `item.grupo`.
+- fallback permitido para `grupo`: `payload.grupo`, depois `payload.grupo_credor`.
+- se nao houver grupo real, o valor fica ausente/nulo conforme o schema permitir.
+- `email_envios.credor` e `email_envios.credor_fantasia` recebem `item.credor_fantasia`.
+- `grupo` nao usa `credor_fantasia` como fallback padrao.
+
+Relatorio de cliques:
+
+O endpoint de cliques passa a trabalhar com `grupo` como dimensao e nao retorna `credor` por enquanto.
+
+Campos mantidos nos cliques recentes:
+
+```text
+id
+token
+processo
+email_destinatario
+grupo
+campanha
+template
+data_clique
+ip
+user_agent
+```
+
+Observacoes:
+
+- `ip` e `user_agent` continuam preservados.
+- `credor` pode continuar existindo/gravar no banco por compatibilidade com estrutura atual, mas nao e exposto no relatorio de cliques.
+- links antigos nao foram alterados.
+- nenhuma migration foi criada ou executada.
+
 7. Avaliar migration futura, com aprovacao previa, para:
    - adicionar `unique_key`;
    - adicionar `payload_json`;

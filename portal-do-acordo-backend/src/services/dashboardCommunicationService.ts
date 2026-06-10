@@ -291,8 +291,8 @@ function buildCommunicationPayload(current: CommunicationSnapshot, clicks: Await
     item.enviados += row.qtde_emails + row.mensagens_wati;
   });
 
-  clicks.por_credor.forEach((row) => {
-    touch(row.credor).cliques += row.cliques;
+  clicks.por_grupo.forEach((row) => {
+    touch(row.grupo).cliques += row.cliques;
   });
 
   const daily = new Map<string, { dia: string; enviados: number; cliques: number }>();

@@ -47,10 +47,13 @@ type MatchCondition = {
 export type EmailLinkInputItem = {
   processo?: string;
   email: string;
+  grupo?: string;
   devedor_razao?: string;
   devedor_cnpj?: string;
   credor_fantasia?: string;
   titulos_aberto_total?: string;
+  campanha?: string;
+  template?: string;
   payload?: Record<string, unknown>;
   [key: string]: unknown;
 };
@@ -453,8 +456,10 @@ function buildColumnValues(
   const values = new Map<string, ColumnValue>();
   const now = new Date();
   const origem = cleanString(input.origem) ?? 'listmonk';
-  const campanha = cleanString(input.campanha);
+  const campanha = cleanString(item.campanha) ?? cleanString(input.campanha);
+  const template = cleanString(item.template);
   const credor = cleanString(item.credor_fantasia);
+  const grupo = resolveGrupo(item);
   const payloadJson = buildPayloadJson(input, item, rawUniqueKey, now);
 
   setValue(values, getColumn(schema, 'token'), token);
@@ -463,11 +468,12 @@ function buildColumnValues(
   setValue(values, getColumn(schema, 'processo'), cleanString(item.processo));
   setValue(values, getColumn(schema, 'credor_fantasia'), credor);
   setValue(values, getColumn(schema, 'credor'), credor);
-  setValue(values, getColumn(schema, 'grupo'), credor);
+  setValue(values, getColumn(schema, 'grupo'), grupo);
   setValue(values, getColumn(schema, 'devedor_razao', 'devedor_nome', 'nome_devedor'), cleanString(item.devedor_razao));
   setValue(values, getColumn(schema, 'devedor_cnpj', 'cpf_cnpj', 'cnpj', 'documento'), cleanString(item.devedor_cnpj));
   setValue(values, getColumn(schema, 'titulos_aberto_total', 'valor_total', 'valor_aberto'), cleanString(item.titulos_aberto_total));
   setValue(values, getColumn(schema, 'campanha', 'campaign'), campanha);
+  setValue(values, getColumn(schema, 'template'), template);
   setValue(values, getColumn(schema, 'origem', 'source'), origem);
   setValue(values, getColumn(schema, 'payload_json', 'payload'), payloadJson);
   setValue(values, getColumn(schema, 'unique_key'), persistedUniqueKey);
@@ -494,7 +500,7 @@ function buildFallbackMatchPlans(schema: EmailEnviosSchema, input: BulkGenerateE
   const campaignColumn = getColumn(schema, 'campanha', 'campaign');
   const processoColumn = getColumn(schema, 'processo');
   const emailColumn = getColumn(schema, 'email_destinatario', 'email');
-  const credorColumns = getColumns(schema, 'credor_fantasia', 'credor', 'grupo');
+  const credorColumns = getColumns(schema, 'credor_fantasia', 'credor');
   if (!emailColumn) return [];
 
   const originCondition = origem && originColumn ? normalizedEquals(originColumn, 'origem', origem) : undefined;
@@ -568,6 +574,13 @@ function buildLogicalUniqueKey(input: BulkGenerateEmailLinksInput, item: EmailLi
   }
 
   return joinKeyParts({ origem, email: email ?? '' });
+}
+
+function resolveGrupo(item: EmailLinkInputItem) {
+  const payload = item.payload && typeof item.payload === 'object' ? item.payload : undefined;
+  return cleanString(item.grupo)
+    ?? cleanString(payload?.grupo)
+    ?? cleanString(payload?.grupo_credor);
 }
 
 function joinKeyParts(parts: Record<string, string>) {
