@@ -5,7 +5,7 @@ import { addSqlParam, buildExcludedDashboardCreditorFilter, buildNullableExclude
 import { CACHE_TTL, cacheKey, getCached } from '../utils/cache';
 import { getActiveBase } from './activeBaseService';
 
-type AgingRange = '0-90' | '91-180' | '181-360' | '361+' | 'SEM VENCIMENTO';
+type AgingRange = '0-30' | '31-60' | '61-90' | '91-180' | '181-360' | '361+' | 'SEM VENCIMENTO';
 
 type PortfolioSummaryRow = {
   credor: string;
@@ -27,9 +27,11 @@ type AgreementSummaryRow = {
   acordos: number | string;
 };
 
-const VISIBLE_AGING_ORDER: AgingRange[] = ['0-90', '91-180', '181-360', '361+'];
+const VISIBLE_AGING_ORDER: AgingRange[] = ['0-30', '31-60', '61-90', '91-180', '181-360', '361+'];
 const AGING_LABELS: Record<AgingRange, string> = {
-  '0-90': '0 a 90 dias',
+  '0-30': '0 a 30 dias',
+  '31-60': '31 a 60 dias',
+  '61-90': '61 a 90 dias',
   '91-180': '91 a 180 dias',
   '181-360': '181 a 360 dias',
   '361+': '361+ dias',

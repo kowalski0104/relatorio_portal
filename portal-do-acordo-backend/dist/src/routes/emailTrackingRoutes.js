@@ -91,10 +91,10 @@ function toIso(value) {
     const date = value instanceof Date ? value : new Date(value);
     return Number.isNaN(date.getTime()) ? String(value) : date.toISOString();
 }
-function addCredorInputs(request, credores) {
-    const values = Array.from(new Set(credores?.map((item) => item.trim()).filter(Boolean) ?? []));
-    values.forEach((credor, index) => request.input(`credor${index}`, mssql_1.default.NVarChar(150), credor));
-    return values.length ? `AND credor IN (${values.map((_, index) => `@credor${index}`).join(', ')})` : '';
+function addGrupoInputs(request, grupos) {
+    const values = Array.from(new Set(grupos?.map((item) => item.trim()).filter(Boolean) ?? []));
+    values.forEach((grupo, index) => request.input(`grupo${index}`, mssql_1.default.NVarChar(150), grupo));
+    return values.length ? `AND grupo IN (${values.map((_, index) => `@grupo${index}`).join(', ')})` : '';
 }
 function createEmailClickBaseSql() {
     return `
@@ -102,11 +102,10 @@ function createEmailClickBaseSql() {
       SELECT
         COALESCE(
           NULLIF(LTRIM(RTRIM(c.grupo)), ''),
-          NULLIF(LTRIM(RTRIM(c.credor)), ''),
           NULLIF(LTRIM(RTRIM(e.grupo)), ''),
-          NULLIF(LTRIM(RTRIM(e.credor)), ''),
           'OUTROS'
-        ) AS credor,
+        ) AS grupo,
+        c.id AS id,
         NULLIF(NULLIF(LTRIM(RTRIM(c.token)), ''), 'null') AS token,
         COALESCE(
           NULLIF(NULLIF(LTRIM(RTRIM(c.processo)), ''), 'null'),
@@ -152,11 +151,11 @@ async function getEmailClickReport(filter) {
         .request()
         .input('start', mssql_1.default.DateTime2, range.start)
         .input('end', mssql_1.default.DateTime2, range.end);
-    const summaryCredorFilter = addCredorInputs(summaryRequest, filter.credores);
+    const summaryGrupoFilter = addGrupoInputs(summaryRequest, filter.credores);
     const summaryResult = await summaryRequest.query(`
     ${createEmailClickBaseSql()}
     SELECT
-      credor,
+      grupo,
       COUNT(*) AS cliques,
       COUNT(DISTINCT token) AS links_unicos,
       COUNT(DISTINCT processo) AS processos,
@@ -169,22 +168,23 @@ async function getEmailClickReport(filter) {
       MAX(data_clique) AS ultimo_clique
     FROM cliques
     WHERE 1 = 1
-      ${summaryCredorFilter}
-    GROUP BY credor
-    ORDER BY cliques DESC, credor
+      ${summaryGrupoFilter}
+    GROUP BY grupo
+    ORDER BY cliques DESC, grupo
   `);
     const recentRequest = connection
         .request()
         .input('start', mssql_1.default.DateTime2, range.start)
         .input('end', mssql_1.default.DateTime2, range.end);
-    const recentCredorFilter = addCredorInputs(recentRequest, filter.credores);
+    const recentGrupoFilter = addGrupoInputs(recentRequest, filter.credores);
     const recentResult = await recentRequest.query(`
     ${createEmailClickBaseSql()}
     SELECT TOP 25
+      id,
       token,
       processo,
       email_destinatario,
-      credor,
+      grupo,
       campanha,
       template,
       ip,
@@ -192,11 +192,11 @@ async function getEmailClickReport(filter) {
       data_clique
     FROM cliques
     WHERE 1 = 1
-      ${recentCredorFilter}
+      ${recentGrupoFilter}
     ORDER BY data_clique DESC
   `);
-    const porCredor = summaryResult.recordset.map((row) => ({
-        credor: row.credor || 'OUTROS',
+    const porGrupo = summaryResult.recordset.map((row) => ({
+        grupo: row.grupo || 'OUTROS',
         cliques: Number(row.cliques ?? 0),
         links_unicos: Number(row.links_unicos ?? 0),
         processos: Number(row.processos ?? 0),
@@ -210,22 +210,23 @@ async function getEmailClickReport(filter) {
     }));
     return {
         total: {
-            cliques: porCredor.reduce((sum, row) => sum + row.cliques, 0),
-            links_unicos: porCredor.reduce((sum, row) => sum + row.links_unicos, 0),
-            processos: porCredor.reduce((sum, row) => sum + row.processos, 0),
-            destinatarios: porCredor.reduce((sum, row) => sum + row.destinatarios, 0),
+            cliques: porGrupo.reduce((sum, row) => sum + row.cliques, 0),
+            links_unicos: porGrupo.reduce((sum, row) => sum + row.links_unicos, 0),
+            processos: porGrupo.reduce((sum, row) => sum + row.processos, 0),
+            destinatarios: porGrupo.reduce((sum, row) => sum + row.destinatarios, 0),
         },
-        por_credor: porCredor,
+        por_grupo: porGrupo,
         recentes: recentResult.recordset.map((row) => ({
+            id: row.id,
             token: row.token,
             processo: row.processo,
             email_destinatario: row.email_destinatario,
-            credor: row.credor || 'OUTROS',
+            grupo: row.grupo || 'OUTROS',
             campanha: row.campanha,
             template: row.template,
+            data_clique: toIso(row.data_clique),
             ip: row.ip,
             user_agent: row.user_agent,
-            data_clique: toIso(row.data_clique),
         })),
     };
 }

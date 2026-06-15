@@ -53,6 +53,7 @@ const portfolioRoutes_1 = __importDefault(require("./routes/portfolioRoutes"));
 const baseSummaryRoutes_1 = __importDefault(require("./routes/baseSummaryRoutes"));
 const periodRoutes_1 = __importDefault(require("./routes/periodRoutes"));
 const emailTrackingRoutes_1 = __importStar(require("./routes/emailTrackingRoutes"));
+const emailLinksRoutes_1 = __importDefault(require("./routes/emailLinksRoutes"));
 const activeUsersRoutes_1 = __importStar(require("./routes/activeUsersRoutes"));
 const auth_1 = require("./middleware/auth");
 const errorHandler_1 = require("./middleware/errorHandler");
@@ -101,6 +102,7 @@ function createApp() {
     app.use('/api/bases', baseSummaryRoutes_1.default);
     app.use('/api/periodos', periodRoutes_1.default);
     app.use('/api/mailgrid', emailTrackingRoutes_1.default);
+    app.use('/api/email-links', emailLinksRoutes_1.default);
     app.use('/api/presenca', activeUsersRoutes_1.default);
     app.use('/api/admin', activeUsersRoutes_1.activeUsersAdminRouter);
     app.use(errorHandler_1.errorHandler);

@@ -46,7 +46,9 @@ const TAB_LABELS: Record<DashboardTab, string> = {
   'base-ativa': 'Bases',
 };
 const AGING_LABELS: Record<string, string> = {
-  '0-90': '0 a 90 dias',
+  '0-30': '0 a 30 dias',
+  '31-60': '31 a 60 dias',
+  '61-90': '61 a 90 dias',
   '91-180': '91 a 180 dias',
   '181-360': '181 a 360 dias',
   '361+': '361+ dias',

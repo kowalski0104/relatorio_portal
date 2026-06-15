@@ -18,6 +18,9 @@ const AGING_CREDITOR_TIMEOUT_MS = Number(process.env.ACTIVE_BASE_AGING_CREDITOR_
 const AGING_BATCH_SIZE = Number(process.env.ACTIVE_BASE_AGING_BATCH_SIZE ?? 1000);
 const REFRESHING_STALE_MS = Number(process.env.ACTIVE_BASE_REFRESHING_STALE_MS ?? 5 * 60 * 1000);
 const AUTO_REFRESH_ON_START = process.env.ACTIVE_BASE_AUTO_REFRESH_ON_START === 'true';
+const AGING_ORDER = ['0-30', '31-60', '61-90', '91-180', '181-360', '361+', 'SEM VENCIMENTO'];
+const AGING_ORDER_INDEX = new Map(AGING_ORDER.map((faixa, index) => [faixa, index]));
+const LEGACY_AGING_RANGES = new Set(['0-90']);
 let refreshPromise = null;
 let schedulerStarted = false;
 function emptyCache() {
@@ -34,6 +37,8 @@ function creditorKey(row) {
 }
 function hasCompleteAging(creditors, aging) {
     if (creditors.length === 0)
+        return false;
+    if (aging.some((row) => LEGACY_AGING_RANGES.has(row.faixa)))
         return false;
     const agingKeys = new Set(aging.map(creditorKey));
     return creditors.every((row) => agingKeys.has(creditorKey(row))) && aging.every((row) => Number.isFinite(row.valor_total));
@@ -209,7 +214,9 @@ async function queryActiveBaseAgingBatch(prisma, empresaId, credor, creditorIds,
             $5::text AS credor,
             CASE
               WHEN vencimento_min IS NULL THEN 'SEM VENCIMENTO'
-              WHEN CURRENT_DATE - vencimento_min <= 90 THEN '0-90'
+              WHEN CURRENT_DATE - vencimento_min <= 30 THEN '0-30'
+              WHEN CURRENT_DATE - vencimento_min <= 60 THEN '31-60'
+              WHEN CURRENT_DATE - vencimento_min <= 90 THEN '61-90'
               WHEN CURRENT_DATE - vencimento_min <= 180 THEN '91-180'
               WHEN CURRENT_DATE - vencimento_min <= 360 THEN '181-360'
               ELSE '361+'
@@ -320,12 +327,18 @@ async function getActiveBase(filter) {
     const selectedSystems = filter.sistema === 'total' ? new Set(['consulth', 'sisth']) : new Set([filter.sistema]);
     const selectedCreditors = new Set((filter.credores ?? []).map((creditor) => creditor.trim()).filter(Boolean));
     const creditorRows = cache.by_credor.filter((row) => !(0, reportFilters_1.isExcludedDashboardCreditorName)(row.credor) && selectedSystems.has(row.sistema) && (selectedCreditors.size === 0 || selectedCreditors.has(row.credor)));
-    const agingRows = cache.aging.filter((row) => !(0, reportFilters_1.isExcludedDashboardCreditorName)(row.credor) && selectedSystems.has(row.sistema) && (selectedCreditors.size === 0 || selectedCreditors.has(row.credor)));
+    const agingRows = cache.aging.filter((row) => AGING_ORDER_INDEX.has(row.faixa)
+        && !LEGACY_AGING_RANGES.has(row.faixa)
+        && !(0, reportFilters_1.isExcludedDashboardCreditorName)(row.credor)
+        && selectedSystems.has(row.sistema)
+        && (selectedCreditors.size === 0 || selectedCreditors.has(row.credor)));
     const agingComplete = hasCompleteAging(creditorRows, agingRows);
     const pending = pendingAgingCreditors(creditorRows, agingRows);
     const byCreditor = new Map();
     const aging = new Map([
-        ['0-90', { processos: 0, valor_total: 0 }],
+        ['0-30', { processos: 0, valor_total: 0 }],
+        ['31-60', { processos: 0, valor_total: 0 }],
+        ['61-90', { processos: 0, valor_total: 0 }],
         ['91-180', { processos: 0, valor_total: 0 }],
         ['181-360', { processos: 0, valor_total: 0 }],
         ['361+', { processos: 0, valor_total: 0 }],
@@ -359,7 +372,7 @@ async function getActiveBase(filter) {
                 .map(([credor, processos]) => ({ credor, processos }))
                 .sort((a, b) => b.processos - a.processos || a.credor.localeCompare(b.credor, 'pt-BR')),
             aging: Array.from(aging.entries()).map(([faixa, totals]) => ({ faixa, ...totals })),
-            aging_by_credor: Array.from(agingByCreditor.values()).sort((a, b) => a.credor.localeCompare(b.credor, 'pt-BR') || a.faixa.localeCompare(b.faixa)),
+            aging_by_credor: Array.from(agingByCreditor.values()).sort((a, b) => a.credor.localeCompare(b.credor, 'pt-BR') || (AGING_ORDER_INDEX.get(a.faixa) ?? 99) - (AGING_ORDER_INDEX.get(b.faixa) ?? 99)),
         },
     };
 }

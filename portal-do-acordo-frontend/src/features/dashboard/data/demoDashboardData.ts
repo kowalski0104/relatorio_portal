@@ -203,7 +203,9 @@ export function getDemoActiveBase(sistema: SystemFilter, selectedCreditors: Set<
   }));
   const total = byCredor.reduce((sum, row) => sum + row.processos, 0);
   const agingFactors = [
-    { faixa: '0-90', factor: 0.36 },
+    { faixa: '0-30', factor: 0.12 },
+    { faixa: '31-60', factor: 0.12 },
+    { faixa: '61-90', factor: 0.12 },
     { faixa: '91-180', factor: 0.27 },
     { faixa: '181-360', factor: 0.22 },
     { faixa: '361+', factor: 0.15 },
@@ -310,9 +312,11 @@ export function getDemoBaseSummary(sistema: SystemFilter, selectedPeriods: Set<s
     totalAgingByCreditor.set(row.credor, (totalAgingByCreditor.get(row.credor) ?? 0) + row.processos);
   });
 
-  const agingOrder = ['0-90', '91-180', '181-360', '361+'];
+  const agingOrder = ['0-30', '31-60', '61-90', '91-180', '181-360', '361+'];
   const agingLabels: Record<string, string> = {
-    '0-90': '0 a 90 dias',
+    '0-30': '0 a 30 dias',
+    '31-60': '31 a 60 dias',
+    '61-90': '61 a 90 dias',
     '91-180': '91 a 180 dias',
     '181-360': '181 a 360 dias',
     '361+': '361+ dias',

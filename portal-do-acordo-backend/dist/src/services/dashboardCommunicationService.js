@@ -229,8 +229,8 @@ function buildCommunicationPayload(current, clicks, clickDailyRows, events, prev
         const item = touch(row.credor);
         item.enviados += row.qtde_emails + row.mensagens_wati;
     });
-    clicks.por_credor.forEach((row) => {
-        touch(row.credor).cliques += row.cliques;
+    clicks.por_grupo.forEach((row) => {
+        touch(row.grupo).cliques += row.cliques;
     });
     const daily = new Map();
     current.diario.forEach((row) => {
