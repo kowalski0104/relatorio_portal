@@ -51,7 +51,8 @@ const AGING_LABELS: Record<string, string> = {
   '61-90': '61 a 90 dias',
   '91-180': '91 a 180 dias',
   '181-360': '181 a 360 dias',
-  '361+': '361+ dias',
+  '361-730': '361 a 730 dias',
+  '730+': '730+ dias',
 };
 const MONTHLY_TARGETS: Record<string, { recuperado: number; faturamento: number }> = {
   '2026-02': { recuperado: 250000, faturamento: 35000 },
@@ -1889,16 +1890,16 @@ function DashboardPage() {
                     <col span={5} />
                   </colgroup>
                   <thead>
-                    <tr><th>Indicador</th><th className="right">Realizado</th><th className="right">Projeção final</th><th className="right">Meta mensal</th><th className="right">Falta para meta</th><th className="right">% projetada</th></tr>
+                    <tr><th>Indicador</th><th className="right">Meta</th><th className="right">Realizado</th><th className="right">Falta</th><th className="right">Projeção</th><th className="right">%</th></tr>
                   </thead>
                   <tbody>
                     {projectionRows.map((row) => (
                       <tr key={row.name}>
                         <td className="bold">{row.name}</td>
-                        <td className="right">{money(row.atual)}</td>
-                        <td className="right">{money(row.projetado)}</td>
                         <td className="right">{row.meta === null ? '-' : money(row.meta)}</td>
+                        <td className="right">{money(row.atual)}</td>
                         <td className="right muted">{row.meta === null ? '-' : money(Math.max(row.meta - row.atual, 0))}</td>
+                        <td className="right">{money(row.projetado)}</td>
                         <td className="right">{row.meta === null ? '-' : percent(row.projetado, row.meta)}</td>
                       </tr>
                     ))}

@@ -208,7 +208,8 @@ export function getDemoActiveBase(sistema: SystemFilter, selectedCreditors: Set<
     { faixa: '61-90', factor: 0.12 },
     { faixa: '91-180', factor: 0.27 },
     { faixa: '181-360', factor: 0.22 },
-    { faixa: '361+', factor: 0.15 },
+    { faixa: '361-730', factor: 0.10 },
+    { faixa: '730+', factor: 0.05 },
     { faixa: 'SEM VENCIMENTO', factor: 0 },
   ];
 
@@ -312,14 +313,15 @@ export function getDemoBaseSummary(sistema: SystemFilter, selectedPeriods: Set<s
     totalAgingByCreditor.set(row.credor, (totalAgingByCreditor.get(row.credor) ?? 0) + row.processos);
   });
 
-  const agingOrder = ['0-30', '31-60', '61-90', '91-180', '181-360', '361+'];
+  const agingOrder = ['0-30', '31-60', '61-90', '91-180', '181-360', '361-730', '730+'];
   const agingLabels: Record<string, string> = {
     '0-30': '0 a 30 dias',
     '31-60': '31 a 60 dias',
     '61-90': '61 a 90 dias',
     '91-180': '91 a 180 dias',
     '181-360': '181 a 360 dias',
-    '361+': '361+ dias',
+    '361-730': '361 a 730 dias',
+    '730+': '730+ dias',
   };
   const agingMap = new Map(agingOrder.map((faixa) => [faixa, { faixa, name: agingLabels[faixa], processos: 0, valorCarteira: 0, valorMedio: 0, recuperado: 0, recuperacao: 0, acordos: 0, conversao: 0 }]));
 

@@ -18,9 +18,9 @@ const AGING_CREDITOR_TIMEOUT_MS = Number(process.env.ACTIVE_BASE_AGING_CREDITOR_
 const AGING_BATCH_SIZE = Number(process.env.ACTIVE_BASE_AGING_BATCH_SIZE ?? 1000);
 const REFRESHING_STALE_MS = Number(process.env.ACTIVE_BASE_REFRESHING_STALE_MS ?? 5 * 60 * 1000);
 const AUTO_REFRESH_ON_START = process.env.ACTIVE_BASE_AUTO_REFRESH_ON_START === 'true';
-const AGING_ORDER = ['0-30', '31-60', '61-90', '91-180', '181-360', '361+', 'SEM VENCIMENTO'];
+const AGING_ORDER = ['0-30', '31-60', '61-90', '91-180', '181-360', '361-730', '730+', 'SEM VENCIMENTO'];
 const AGING_ORDER_INDEX = new Map(AGING_ORDER.map((faixa, index) => [faixa, index]));
-const LEGACY_AGING_RANGES = new Set(['0-90']);
+const LEGACY_AGING_RANGES = new Set(['0-90', '361+']);
 let refreshPromise = null;
 let schedulerStarted = false;
 function emptyCache() {
@@ -219,7 +219,8 @@ async function queryActiveBaseAgingBatch(prisma, empresaId, credor, creditorIds,
               WHEN CURRENT_DATE - vencimento_min <= 90 THEN '61-90'
               WHEN CURRENT_DATE - vencimento_min <= 180 THEN '91-180'
               WHEN CURRENT_DATE - vencimento_min <= 360 THEN '181-360'
-              ELSE '361+'
+              WHEN CURRENT_DATE - vencimento_min <= 730 THEN '361-730'
+              ELSE '730+'
             END AS faixa,
             COUNT(*)::bigint AS processos,
             COALESCE(SUM(valor_total), 0) AS valor_total
@@ -341,7 +342,8 @@ async function getActiveBase(filter) {
         ['61-90', { processos: 0, valor_total: 0 }],
         ['91-180', { processos: 0, valor_total: 0 }],
         ['181-360', { processos: 0, valor_total: 0 }],
-        ['361+', { processos: 0, valor_total: 0 }],
+        ['361-730', { processos: 0, valor_total: 0 }],
+        ['730+', { processos: 0, valor_total: 0 }],
         ['SEM VENCIMENTO', { processos: 0, valor_total: 0 }],
     ]);
     const agingByCreditor = new Map();
