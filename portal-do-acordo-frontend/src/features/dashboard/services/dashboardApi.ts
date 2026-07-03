@@ -1,5 +1,22 @@
 import type { Access, ActiveBaseReport, ActiveUsersReport, Agreement, BaseSummaryReport, CommunicationData, CostsData, DashboardData, DashboardPerformanceSummary, DashboardResultGraphs, DashboardResultSummary, EmailClickData, Payment, PortfolioEntry, SystemFilter } from '../types';
 
+type RawEmailClickGroupRow = Partial<EmailClickData['por_credor'][number]> & {
+  grupo?: string | null;
+};
+
+type RawEmailClickRecentRow = Partial<EmailClickData['recentes'][number]> & {
+  id?: string | number | null;
+  grupo?: string | null;
+  credor?: string | null;
+};
+
+type RawEmailClickData = {
+  total?: Partial<Record<keyof EmailClickData['total'], unknown>> | null;
+  por_credor?: RawEmailClickGroupRow[] | null;
+  por_grupo?: RawEmailClickGroupRow[] | null;
+  recentes?: RawEmailClickRecentRow[] | null;
+};
+
 export type PresenceHeartbeatPayload = {
   sessionId: string;
   path: string;
@@ -13,6 +30,63 @@ export type PresenceHeartbeatPayload = {
   viewport: { width: number; height: number };
   screen: { width: number; height: number };
 };
+
+function toNumber(value: unknown) {
+  const numeric = Number(value ?? 0);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function toNullableString(value: unknown) {
+  if (value === null || value === undefined) return null;
+  return String(value);
+}
+
+function normalizeEmailClickData(data: RawEmailClickData): EmailClickData {
+  const total = data.total ?? {};
+  const groupedRows = Array.isArray(data.por_credor)
+    ? data.por_credor
+    : Array.isArray(data.por_grupo)
+      ? data.por_grupo
+      : [];
+
+  return {
+    total: {
+      cliques: toNumber(total.cliques),
+      links_unicos: toNumber(total.links_unicos),
+      processos: toNumber(total.processos),
+      destinatarios: toNumber(total.destinatarios),
+    },
+    por_credor: groupedRows.map((row) => ({
+      credor: toNullableString(row.credor ?? row.grupo) ?? 'OUTROS',
+      cliques: toNumber(row.cliques),
+      links_unicos: toNumber(row.links_unicos),
+      processos: toNumber(row.processos),
+      destinatarios: toNumber(row.destinatarios),
+      campanhas: toNumber(row.campanhas),
+      templates: toNumber(row.templates),
+      ips: toNumber(row.ips),
+      user_agents: toNumber(row.user_agents),
+      primeiro_clique: toNullableString(row.primeiro_clique),
+      ultimo_clique: toNullableString(row.ultimo_clique),
+    })),
+    recentes: Array.isArray(data.recentes)
+      ? data.recentes.map((row) => ({
+        token: toNullableString(row.token ?? row.id),
+        canal: toNullableString(row.canal),
+        processo: toNullableString(row.processo),
+        destinatario: toNullableString(row.destinatario),
+        email_destinatario: toNullableString(row.email_destinatario),
+        telefone: toNullableString(row.telefone),
+        credor: toNullableString(row.credor ?? row.grupo) ?? 'OUTROS',
+        campanha: toNullableString(row.campanha),
+        template: toNullableString(row.template),
+        ip: toNullableString(row.ip),
+        user_agent: toNullableString(row.user_agent),
+        data_clique: toNullableString(row.data_clique),
+      }))
+      : [],
+  };
+}
 
 export async function fetchDataset<T>(url: string, signal?: AbortSignal): Promise<T[]> {
   const response = await fetch(apiUrl(url), { signal });
@@ -106,7 +180,7 @@ export async function fetchEmailClicks(periodo: string, sistema: SystemFilter, c
   const response = await fetch(apiUrl(`/api/mailgrid/cliques?${params.toString()}`), { signal, cache: 'no-store' });
   if (!response.ok) return null;
   const payload = await response.json();
-  return payload.data ?? null;
+  return payload.data ? normalizeEmailClickData(payload.data) : null;
 }
 
 export async function fetchActiveBase(sistema: SystemFilter, credores: Set<string>, signal?: AbortSignal): Promise<ActiveBaseReport> {
