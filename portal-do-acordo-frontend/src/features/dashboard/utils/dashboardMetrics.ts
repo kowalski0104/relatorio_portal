@@ -112,7 +112,7 @@ export function summarizeDashboardMetrics(rows: DashboardData) {
     totalAcordos,
     credores: creditors.size,
     acordos: rows.acordos.length,
-    acordosPagos,
+    acordosPagos, 
     acessos: rows.acessos.length,
     acessosComAcordo,
     acessosSemAcordo: rows.acessos.length - acessosComAcordo,
