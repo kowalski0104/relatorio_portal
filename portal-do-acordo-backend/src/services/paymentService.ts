@@ -11,7 +11,6 @@ type BaixaRow = {
   processo: number | string;
   capital_pago: number | string;
   protesto_pago: number | string;
-  juros_pago: number | string;
   juros_mora_pago: number | string;
   multa_pago: number | string;
   honorarios_pago_portal: number | string;
@@ -23,18 +22,24 @@ type BaixaRow = {
   juros_retido_pago: number | string;
 };
 
+// Separamos a expressão de select e a de filtro
 type PaymentDateSource = {
-  expression: string;
+  selectExpression: string;
+  filterExpression: string;
   join: string;
 };
 
+// Filtra por data da baixa, mas exibe a data do recebimento
 const BAIXA_DATE_SOURCE: PaymentDateSource = {
-  expression: 'b.databaixa',
-  join: '',
+  selectExpression: 'r.data_cad', // <-- Data que vai aparecer na coluna 'data' (ajuste para 'r.data' se este for o nome exato da coluna)
+  filterExpression: 'b.databaixa', // <-- Data usada no WHERE do período
+  join: 'LEFT JOIN tb_recebimentos r ON r.id = b.idrecebimento', // <-- Fazemos o join usando o idrecebimento
 };
 
+// Filtra e exibe pela data do recebimento
 const RECEIPT_DATE_SOURCE: PaymentDateSource = {
-  expression: 'r.data_cad',
+  selectExpression: 'r.data_cad',
+  filterExpression: 'r.data_cad',
   join: 'INNER JOIN tb_recebimentos r ON r.id = b.idrecebimento',
 };
 
@@ -46,13 +51,12 @@ async function queryPaymentsByDate(prisma: PrismaClient, empresaId: number, filt
 
   const query = `
     SELECT
-        b.id, b.idempresa, ${dateSource.expression}::date AS data,
+        b.id, b.idempresa, ${dateSource.selectExpression}::date AS data,
         TRIM(COALESCE(c.grupo, 'OUTROS')) AS credor,
         TRIM(COALESCE(b.negociador, 'SEM NEGOCIADOR')) AS negociador,
         b.processo,
         COALESCE(b.capitalpago, 0) AS capital_pago,
         COALESCE(b.protestopago, 0) AS protesto_pago,
-        COALESCE(b.jurospago, 0) AS juros_pago,
         COALESCE(b.jurosmorapago, 0) AS juros_mora_pago,
         COALESCE(b.multapago, 0) AS multa_pago,
         COALESCE(b.honorariospago, 0) AS honorarios_pago_portal,
@@ -66,15 +70,15 @@ async function queryPaymentsByDate(prisma: PrismaClient, empresaId: number, filt
     ${dateSource.join}
     LEFT JOIN tb_credor c ON c.id = b.idcredor
     WHERE b.idempresa = $1
-      AND ${dateSource.expression} >= $2
-      AND ${dateSource.expression} < $3
+      AND ${dateSource.filterExpression} >= $2
+      AND ${dateSource.filterExpression} < $3
       AND b.negociador IN (${negociadores})
       AND b.totalpago > 0
       AND b.idcredor IS NOT NULL
       ${buildExcludedDashboardCreditorFilter('b.idcredor')}
       AND TRIM(COALESCE(c.grupo, '')) != ''
       ${credorFilter}
-    ORDER BY ${dateSource.expression} DESC, b.id DESC
+    ORDER BY ${dateSource.filterExpression} DESC, b.id DESC
   `;
 
   return prisma.$queryRawUnsafe<BaixaRow[]>(query, ...params);
@@ -99,7 +103,6 @@ function mapPayments(rows: BaixaRow[]) {
     negociador: String(row.negociador),
     capital_pago: Number(row.capital_pago),
     protesto_pago: Number(row.protesto_pago),
-    juros_pago: Number(row.juros_pago),
     juros_mora_pago: Number(row.juros_mora_pago),
     multa_pago: Number(row.multa_pago),
     honorarios_pago_portal: Number(row.honorarios_pago_portal),
@@ -129,5 +132,3 @@ export function getPayments(filter: ReportFilter) {
 export function getMonthlyFinancialPayments(filter: ReportFilter) {
   return getPaymentsByQuery(filter, queryMonthlyFinancialPayments);
 }
-
-

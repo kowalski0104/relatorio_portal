@@ -1,4 +1,103 @@
-﻿import { PrismaClient } from '@prisma/client';
+﻿Você tem acesso ao caminho:
+
+C:\Users\matheus.kowalski\Desktop\relatorio\portal-do-acordo-backend\src
+
+Não altere nada nesse projeto. Use apenas como referência/leitura.
+
+Objetivo:
+Mapear as queries e services existentes do Portal do Acordo para ajudar a construir a nova tela "Banco / Operação > Processos" no projeto:
+
+C:\Users\matheus.kowalski\Desktop\Disparador\mautic-poc\plugins\KowalskiBundle
+
+Quero que você analise principalmente:
+- src/routes/
+- src/services/
+- src/db/
+- src/utils/
+- qualquer arquivo que contenha SQL bruto
+- qualquer uso de Prisma, $queryRawUnsafe, mssql ou conexão com bancos
+- queries relacionadas a processos, devedores, credores, títulos, acordos, baixas, acessos, e-mails, telefones, faixas de atraso, valor em aberto, negociador, fase, situação e grupo
+
+Não altere nenhum arquivo.
+
+Me entregue:
+
+1. Lista dos arquivos mais importantes encontrados no Portal do Acordo
+   - caminho do arquivo
+   - o que ele faz
+   - quais tabelas usa
+   - quais campos importantes aparecem
+
+2. Mapeamento das tabelas do CRM/Cubo
+   Quero uma tabela com:
+   - tabela
+   - finalidade
+   - campos úteis
+   - onde apareceu no código
+
+3. Queries que podem ser reaproveitadas
+   Especialmente para:
+   - listar processos ativos
+   - filtrar por grupo/credor
+   - calcular valor em aberto
+   - calcular faixa de atraso
+   - buscar e-mail
+   - buscar telefone, se existir
+   - buscar status/fase/situação do processo
+   - buscar negociador/equipe
+   - filtrar títulos em aberto
+   - buscar processos distribuídos ou não distribuídos
+
+4. Recomende uma query base para a tela:
+   "Banco / Operação > Processos"
+
+Essa query deve retornar, se possível:
+- processo
+- idempresa
+- idcredor
+- grupo
+- credor
+- devedor_nome
+- documento
+- email_principal
+- telefone_principal, se existir
+- valor_aberto_total
+- vencimento_mais_antigo
+- faixa_atraso
+- status_processo
+- fase
+- negociador
+- equipe, se existir
+- possui_titulo_aberto
+- data_cadastro
+- data_ultima_atualizacao
+
+5. Compare essa query com a staging atual do mautic-poc:
+- cubo_processos_ativos_snapshot
+- regua_processos_trabalho
+- regua_envios_controle
+- regua_bloqueios
+
+Diga:
+- quais campos já existem na staging;
+- quais campos estão faltando;
+- quais campos deveriam ser adicionados no sync futuramente;
+- se a tela deve consultar a staging ou o banco original do Portal.
+
+6. Recomende a melhor arquitetura:
+- plugin Mautic lendo staging PostgreSQL;
+- plugin Mautic lendo Cubo direto;
+- serviço intermediário;
+- reaproveitar sync para enriquecer staging.
+
+7. Próximo passo técnico recomendado.
+
+Importante:
+- Não copiar senhas, tokens ou dados sensíveis.
+- Não exibir valores reais de clientes se aparecerem.
+- Não alterar arquivos.
+- Não criar código ainda.
+- Apenas analisar e explicar.import { PrismaClient } from '@prisma/client';
 import { getLiveClients } from '../db/prismaClients';
 import { addSqlParam, buildExcludedDashboardAccessFilter, buildExcludedDashboardCreditorFilter, buildNullableExcludedDashboardCreditorFilter, buildSqlInFilter, getPeriodRange, NEGOTIATORS, ReportFilter } from '../utils/reportFilters';
 
