@@ -46,26 +46,27 @@ async function queryPaymentSummary(prisma: PrismaClient, empresaId: number, filt
   const negociadores = NEGOTIATORS.map((negociador) => addSqlParam(params, negociador)).join(', ');
   const credorFilter = buildSqlInFilter("TRIM(COALESCE(c.grupo, 'OUTROS'))", filter.credores, params);
 
-  const rows = await prisma.$queryRawUnsafe<PaymentSummaryRow[]>(
+const rows = await prisma.$queryRawUnsafe<PaymentSummaryRow[]>(
     `
       SELECT
-  COALESCE(SUM(
-    COALESCE(b.capitalpago, 0) + 
-    COALESCE(b.honorariospago, 0) + 
-    COALESCE(b.taxapago, 0) + 
-    COALESCE(b.taxaadmpago, 0) + 
-    COALESCE(b.taxaoutpago, 0) + 
-    COALESCE(b.pdpago, 0) + 
-    COALESCE(b.protestopago, 0) + 
-    COALESCE(b.multapago, 0) + 
-    COALESCE(b.jurospago, 0) + 
-    COALESCE(b.jurosmorapago, 0)
-  ), 0) AS total_recuperado,
+        -- O Total Real (Sem invenção de moda, o que veio da Cubo)
+        COALESCE(SUM(COALESCE(b.totalpago, 0)), 0) AS total_recuperado,
+
         COALESCE(SUM(COALESCE(b.capitalpago, 0)), 0) AS capital_recuperado,
-        COALESCE(SUM(COALESCE(b.honorariospago, 0) + COALESCE(b.taxapago, 0) + COALESCE(b.taxaadmpago, 0) + COALESCE(b.taxaoutpago, 0) + COALESCE(b.pdpago, 0) + COALESCE(b.protestopago, 0) + COALESCE(b.multapago, 0) + COALESCE(b.jurosmorapago, 0)), 0) AS faturamento,
+
+        -- Faturamento (Soma exata das taxas)
+        COALESCE(SUM(
+          COALESCE(b.honorariospago, 0) + 
+          COALESCE(b.taxapago, 0) + 
+          COALESCE(b.taxaadmpago, 0) + 
+          COALESCE(b.taxaoutpago, 0) + 
+          COALESCE(b.pdpago, 0) + 
+          COALESCE(b.protestopago, 0)
+        ), 0) AS faturamento,
+
         COUNT(DISTINCT b.processo)::bigint AS acordos_pagos
       FROM tb_baixas b
-      LEFT JOIN tb_recebimentos r ON r.id = b.idrecebimento
+      INNER JOIN tb_recebimentos r ON r.id = b.idrecebimento
       LEFT JOIN tb_credor c ON c.id = b.idcredor
       WHERE b.idempresa = $1
         AND r.data_cad >= $2
