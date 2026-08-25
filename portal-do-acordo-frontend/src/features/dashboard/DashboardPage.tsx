@@ -18,7 +18,7 @@ import {
 import { Building2, Check, ChevronDown, FileSpreadsheet, Pause, Play, Presentation, Printer, X } from 'lucide-react';
 import logoUrl from '../../assets/portal-agreement-logo.png';
 import { BarRows } from './components/BarRows';
-import { MetricCard } from './components/MetricCard';d
+import { MetricCard } from './components/MetricCard';
 import { Panel } from './components/Panel';
 import { Section } from './components/Section';
 import { CHART_PALETTE, COLORS, FIXED_EMAIL_COST } from './config/constants';
