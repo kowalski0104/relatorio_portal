@@ -52,7 +52,7 @@ function emptyValues(): FinancialValues {
 
 function valuesFromPayment(payment: Payment): FinancialValues {
   const values = {
-    valorCobrado: safe(payment.total_pago_portal),
+    valorCobrado: safe(payment.capital_pago), // <-- CORRIGIDO: Agora pega apenas o valor principal
     honorarios: safe(payment.honorarios_pago_portal),
     taxaContrato: safe(payment.taxa_pago),
     juros: safe(payment.juros_pago),
@@ -66,7 +66,9 @@ function valuesFromPayment(payment: Payment): FinancialValues {
 
   return {
     ...values,
-    total: values.honorarios
+    // CORRIGIDO: Agora o total soma o capital cobrado + todas as taxas
+    total: values.valorCobrado 
+      + values.honorarios
       + values.taxaContrato
       + values.juros
       + values.jurosMora
