@@ -81,9 +81,13 @@ export function filterPreviousPeriodData(data: DashboardData, system: SystemFilt
 }
 
 export function summarizeDashboardMetrics(rows: DashboardData) {
-  const totalPago = rows.baixas.reduce((sum, row) => sum + safeNumber(row.capital_pago) + safeNumber(row.juros_pago) + safeNumber(row.multa_pago) + safeNumber(row.honorarios_pago_portal), 0);
+  // CORRIGIDO: Puxa o Total Pago direto, sem somar manualmente
+  const totalPago = rows.baixas.reduce((sum, row) => sum + safeNumber(row.total_pago_portal), 0);
+  
   const capital = rows.baixas.reduce((sum, row) => sum + safeNumber(row.capital_pago), 0);
   const honorarios = rows.baixas.reduce((sum, row) => sum + safeNumber(row.honorarios_pago_portal), 0);
+  
+  // CORRIGIDO: Faturamento agora ignora Juros e Multas, igual no backend
   const faturamento = rows.baixas.reduce(
     (sum, row) => sum
       + safeNumber(row.honorarios_pago_portal)
@@ -91,12 +95,10 @@ export function summarizeDashboardMetrics(rows: DashboardData) {
       + safeNumber(row.taxa_adm_pago)
       + safeNumber(row.outras_taxas_pago)
       + safeNumber(row.taxa_pd_pago)
-      + safeNumber(row.protesto_pago)
-      + safeNumber(row.multa_pago)
-      + safeNumber(row.juros_pago)
-      + safeNumber(row.juros_mora_pago),
+      + safeNumber(row.protesto_pago),
     0
   );
+  
   const totalAcordos = rows.acordos.reduce((sum, row) => sum + safeNumber(row.tot_sub_total), 0);
   const acordosPagos = new Set(rows.baixas.map((row) => row.processo).filter(Boolean)).size;
   const creditors = new Set([...rows.baixas.map((row) => row.credor), ...rows.acordos.map((row) => row.credor)].filter(Boolean));
@@ -116,7 +118,7 @@ export function summarizeDashboardMetrics(rows: DashboardData) {
     acessosSemAcordo: rows.acessos.length - acessosComAcordo,
     conversao: rows.acessos.length > 0 ? (rows.acordos.length / rows.acessos.length) * 100 : 0,
     ticketPorAcordo: rows.acordos.length > 0 ? totalPago / rows.acordos.length : 0,
-    ticketPorPagamento: rows.baixas.length > 0 ? rows.baixas.reduce((sum, row) => sum + safeNumber(row.total_pago_portal), 0) / rows.baixas.length : 0,
+    ticketPorPagamento: rows.baixas.length > 0 ? totalPago / rows.baixas.length : 0,
   };
 }
 
