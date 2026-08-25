@@ -11,6 +11,7 @@ type BaixaRow = {
   processo: number | string;
   capital_pago: number | string;
   protesto_pago: number | string;
+  juros_pago: number | string;
   juros_mora_pago: number | string;
   multa_pago: number | string;
   honorarios_pago_portal: number | string;
@@ -57,6 +58,7 @@ async function queryPaymentsByDate(prisma: PrismaClient, empresaId: number, filt
         b.processo,
         COALESCE(b.capitalpago, 0) AS capital_pago,
         COALESCE(b.protestopago, 0) AS protesto_pago,
+        COALESCE(b.jurospago, 0) AS juros_pago,
         COALESCE(b.jurosmorapago, 0) AS juros_mora_pago,
         COALESCE(b.multapago, 0) AS multa_pago,
         COALESCE(b.honorariospago, 0) AS honorarios_pago_portal,
@@ -103,6 +105,7 @@ function mapPayments(rows: BaixaRow[]) {
     negociador: String(row.negociador),
     capital_pago: Number(row.capital_pago),
     protesto_pago: Number(row.protesto_pago),
+    juros_pago: Number(row.juros_pago),
     juros_mora_pago: Number(row.juros_mora_pago),
     multa_pago: Number(row.multa_pago),
     honorarios_pago_portal: Number(row.honorarios_pago_portal),
