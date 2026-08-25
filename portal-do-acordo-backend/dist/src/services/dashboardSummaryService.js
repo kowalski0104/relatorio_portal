@@ -22,10 +22,11 @@ async function queryPaymentSummary(prisma, empresaId, filter) {
         COALESCE(SUM(COALESCE(b.honorariospago, 0) + COALESCE(b.taxapago, 0) + COALESCE(b.taxaadmpago, 0) + COALESCE(b.taxaoutpago, 0) + COALESCE(b.pdpago, 0) + COALESCE(b.protestopago, 0) + COALESCE(b.multapago, 0) + COALESCE(b.jurospago, 0) + COALESCE(b.jurosmorapago, 0)), 0) AS faturamento,
         COUNT(DISTINCT b.processo)::bigint AS acordos_pagos
       FROM tb_baixas b
+      LEFT JOIN tb_recebimentos r ON r.id = b.idrecebimento
       LEFT JOIN tb_credor c ON c.id = b.idcredor
       WHERE b.idempresa = $1
-        AND b.databaixa >= $2
-        AND b.databaixa < $3
+        AND r.data_cad >= $2
+        AND r.data_cad < $3
         AND b.negociador IN (${negociadores})
         AND b.totalpago > 0
         AND b.idcredor IS NOT NULL
@@ -72,11 +73,12 @@ async function queryAccessSummary(prisma, empresaId, filter) {
         SELECT DISTINCT tb_baixas.processo, tb_baixas.idempresa,
                TRIM(COALESCE(tb_credor.grupo, 'OUTROS')) AS credor
         FROM tb_baixas
+        LEFT JOIN tb_recebimentos r ON r.id = tb_baixas.idrecebimento
         LEFT JOIN tb_credor ON tb_credor.id = tb_baixas.idcredor
         WHERE tb_baixas.idempresa = $1
           AND tb_baixas.totalpago > 0
-          AND tb_baixas.databaixa >= $2
-          AND tb_baixas.databaixa < $3
+          AND r.data_cad >= $2
+          AND r.data_cad < $3
           AND tb_baixas.negociador IN (${negociadores})
           AND tb_baixas.idcredor IS NOT NULL
           ${(0, reportFilters_1.buildExcludedDashboardCreditorFilter)('tb_baixas.idcredor')}

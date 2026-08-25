@@ -105,16 +105,18 @@ async function queryPaymentSummary(prisma, empresaId, filter) {
     const range = monthRange(months, filter.periodo);
     const params = [empresaId, range.start, range.end];
     const negociadores = reportFilters_1.NEGOTIATORS.map((negociador) => (0, reportFilters_1.addSqlParam)(params, negociador)).join(', ');
-    const monthFilter = buildMonthFilter('b.databaixa', months, params);
+    // Alterado para filtrar pelo data_cad do recebimento
+    const monthFilter = buildMonthFilter('r.data_cad', months, params);
     return prisma.$queryRawUnsafe(`
       SELECT
         TRIM(COALESCE(c.grupo, 'OUTROS')) AS credor,
         COALESCE(SUM(COALESCE(b.totalpago, 0)), 0) AS recuperado
       FROM tb_baixas b
+      LEFT JOIN tb_recebimentos r ON r.id = b.idrecebimento
       LEFT JOIN tb_credor c ON c.id = b.idcredor
       WHERE b.idempresa = $1
-        AND b.databaixa >= $2
-        AND b.databaixa < $3
+        AND r.data_cad >= $2
+        AND r.data_cad < $3
         AND b.negociador IN (${negociadores})
         AND b.totalpago > 0
         AND b.idcredor IS NOT NULL
