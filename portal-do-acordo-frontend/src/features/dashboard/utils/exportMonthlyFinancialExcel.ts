@@ -51,8 +51,8 @@ function emptyValues(): FinancialValues {
 }
 
 function valuesFromPayment(payment: Payment): FinancialValues {
-  const values = {
-    valorCobrado: safe(payment.capital_pago), // <-- CORRIGIDO: Agora pega apenas o valor principal
+  return {
+    valorCobrado: safe(payment.capital_pago),
     honorarios: safe(payment.honorarios_pago_portal),
     taxaContrato: safe(payment.taxa_pago),
     juros: safe(payment.juros_pago),
@@ -62,21 +62,7 @@ function valuesFromPayment(payment: Payment): FinancialValues {
     taxaAdm: safe(payment.taxa_adm_pago),
     outrasTaxas: safe(payment.outras_taxas_pago),
     taxaPd: safe(payment.taxa_pd_pago),
-  };
-
-  return {
-    ...values,
-    // CORRIGIDO: Agora o total soma o capital cobrado + todas as taxas
-    total: values.valorCobrado 
-      + values.honorarios
-      + values.taxaContrato
-      + values.juros
-      + values.jurosMora
-      + values.multa
-      + values.protesto
-      + values.taxaAdm
-      + values.outrasTaxas
-      + values.taxaPd,
+    total: safe(payment.total_pago_portal),
   };
 }
 
